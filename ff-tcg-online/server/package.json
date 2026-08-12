@@ -1,0 +1,23 @@
+{
+  "name": "ff-tcg-server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Authoritative game server for the two-player Final-Fantasy-themed card game.",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.14.2",
+    "tsx": "^4.15.6",
+    "typescript": "^5.4.5"
+  }
+}
