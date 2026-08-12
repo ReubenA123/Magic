@@ -359,151 +359,331 @@ export const CARD_POOL: CardDefinition[] = [
   'Create a 2/2 green Bird creature token with “Whenever a land you control enters, this token gets +1/+0 until end of turn.”' +
   "Flashback {5}{R} (You may cast this card from your graveyard for its flashback cost. Then exile it.)",
   imagePath: '/assets/cards/call-the-mountain-chocobo.webp',
-}
-
-  {
-    id: 'tifa-lockhart',
-    name: 'Tifa Lockhart',
-    type: 'creature',
-    costLabel: '1W',
-    power: 2,
-    toughness: 3,
-    text: 'First strike.',
-    imagePath: '/assets/cards/tifa-lockhart.jpg',
-  },
-  {
-    id: 'squall-leonhart',
-    name: 'Squall Leonhart',
-    type: 'creature',
-    costLabel: '2U',
-    power: 3,
-    toughness: 2,
-    text: 'Whenever Squall Leonhart deals combat damage to a player, draw a card, then discard a card.',
-    imagePath: '/assets/cards/squall-leonhart.jpg',
-  },
-  {
-    id: 'yuna',
-    name: 'Yuna',
-    type: 'creature',
-    costLabel: '1W',
-    power: 1,
-    toughness: 3,
-    text: 'Lifelink. 1W, Tap: put a +1/+1 counter on target creature.',
-    imagePath: '/assets/cards/yuna.jpg',
-  },
-  {
-    id: 'vivi-ornitier',
-    name: 'Vivi Ornitier',
-    type: 'creature',
-    costLabel: '1R',
-    power: 1,
-    toughness: 1,
-    text: '1R, Tap, Sacrifice Vivi Ornitier: deal 3 damage to any target.',
-    imagePath: '/assets/cards/vivi-ornitier.jpg',
-  },
-  {
-    id: 'auron',
-    name: 'Auron',
-    type: 'creature',
-    costLabel: '3B',
-    power: 4,
-    toughness: 4,
-    text: 'Trample. Auron cannot block creatures with power 2 or less.',
-    imagePath: '/assets/cards/auron.jpg',
-  },
-  {
-    id: 'terra-branford',
-    name: 'Terra Branford',
-    type: 'creature',
-    costLabel: '2U',
-    power: 2,
-    toughness: 4,
-    text: 'Flying. When Terra Branford enters the battlefield, you may draw a card, then discard a card.',
-    imagePath: '/assets/cards/terra-branford.jpg',
-  },
-  {
-    id: 'kefka-palazzo',
-    name: 'Kefka Palazzo',
-    type: 'creature',
-    costLabel: '3B',
-    power: 3,
-    toughness: 3,
-    text: 'At the beginning of your upkeep, each player discards a card at random.',
-    imagePath: '/assets/cards/kefka-palazzo.jpg',
-  },
-  {
-    id: 'sephiroth',
-    name: 'Sephiroth',
-    type: 'creature',
-    costLabel: '4BB',
-    power: 6,
-    toughness: 5,
-    text: 'Flying, deathtouch. Sephiroth cannot be blocked by more than one creature.',
-    imagePath: '/assets/cards/sephiroth.jpg',
-  },
-  {
-    id: 'red-xiii',
-    name: 'Red XIII',
-    type: 'creature',
-    costLabel: '2G',
-    power: 3,
-    toughness: 3,
-    text: 'Haste. Whenever another creature you control enters the battlefield, Red XIII gets +1/+0 until end of turn.',
-    imagePath: '/assets/cards/red-xiii.jpg',
-  },
-  {
-    id: 'shantotto',
-    name: 'Shantotto',
-    type: 'creature',
-    costLabel: '1U',
-    power: 1,
-    toughness: 2,
-    text: 'Whenever you cast an instant or sorcery spell, scry 1 (look at the top card of your library, then decide whether to keep it there or put it on the bottom).',
-    imagePath: '/assets/cards/shantotto.jpg',
-  },
-
-  // --- Instants / Sorceries -------------------------------------------------
-  {
-    id: 'firaga',
-    name: 'Firaga',
-    type: 'sorcery',
-    costLabel: '2R',
-    text: 'Deal 4 damage to any target.',
-    imagePath: '/assets/cards/firaga.jpg',
-  },
-  {
-    id: 'blizzaga',
-    name: 'Blizzaga',
-    type: 'instant',
-    costLabel: '1U',
-    text: 'Tap target creature. It does not untap during its controller\u2019s next untap step.',
-    imagePath: '/assets/cards/blizzaga.jpg',
-  },
-  {
-    id: 'cure',
-    name: 'Cure',
-    type: 'instant',
-    costLabel: '1W',
-    text: 'Restore 4 life to target player. If that player controls a creature named Yuna, restore 6 life instead.',
-    imagePath: '/assets/cards/cure.jpg',
-  },
-  {
-    id: 'meteor',
-    name: 'Meteor',
-    type: 'sorcery',
-    costLabel: '4RR',
-    text: 'Deal 6 damage divided as you choose among any number of target creatures and/or players.',
-    imagePath: '/assets/cards/meteor.jpg',
-  },
-  {
-    id: 'phoenix-down',
-    name: 'Phoenix Down',
-    type: 'instant',
-    costLabel: 'W',
-    text: 'Return target creature card from your graveyard to your hand.',
-    imagePath: '/assets/cards/phoenix-down.jpg',
-  },
-  {
+},
+{
+  id: 'capital-city',
+  name: 'Capital City',
+  type: 'land',
+  costLabel: '-',
+  text: "Add Mana \n 1 Tap: Add one mana of any colour. \nCycling 2 (2, Discard this card: Draw a card.)",
+  imagePath: '/assets/cards/capital-city.webp',
+},
+{
+  id: 'cargo-ship',
+  name: 'Cargo Ship',
+  type: 'artifact',
+  subtype: 'Vehicle',
+  costLabel: '1U',
+  power: 2,
+  toughness: 3,
+  text: "Flying, vigilance \n Tap: Add Mana. Spend this mana only to cast an artifact spell or activate an ability of an artifact source. \n Crew 1",
+  imagePath: '/assets/cards/cargo-ship.webp',
+},
+{
+  id: 'cecil,dark-knight',
+  name: 'Cecil, Dark Knight',
+  type: 'creature',
+  subtype: 'Legendary Creature \u2014 Human Knight',
+  costLabel: 'B',
+  power: 2,
+  toughness: 3,
+  text: "Deathtouch \n Darkness \u2014 Whenever Cecil deals damage, you lose that much life. Then if your life total is less than or equal to half your starting life " +
+  "toal, untap Cecil and transform it.",
+  imagePath: '/assets/cards/cecil-dark-knight.webp',
+  transformsInto: 'Cecil, Redeemed Paladin'
+},
+{
+  id: 'cecil-redeemed-paladin',
+  name: 'Cecil, Redeemed Paladin',
+  type: 'creature',
+  subtype: 'Legendary Creature \u2014 Human Knight',
+  costLabel: '-',
+  power: 4,
+  toughness: 4,
+  text: "Lifelink \n Protect \u2014 Whenever Cecil attacks, other attacking creatures gain indestructible until end of turn.",
+  imagePath: '/assets/cards/cecil-redeemed-paladin.webp',
+},
+{
+  id: 'chocobo-kick',
+  name: 'Chocobo Kick',
+  type: 'sorcery',
+  costLabel: '1G',
+  text: "Kicker \u2014 Return a land you control to its owner’s hand. " +
+  "(You may return a land you control to its owner’s hand in addition to any other costs as you cast this spell.)\n " +
+  "Target creature you control deals damage equal to its power to target creature an opponent controls. If this spell was kicked, \n" +
+  "the creature you control deals twice that much damage instead.",
+  imagePath: '/assets/cards/chocobo-kick.webp',
+},
+{
+  id: 'chocobo-racetrack',
+  name: 'Chocobo Racetrack',
+  type: 'artifact',
+  costLabel: '3GG',
+  text: "Landfall — Whenever a land you control enters, create a 2/2 green Bird creature token with “Whenever a land you control enters, this token gets +1/+0 until end of turn.",
+  imagePath: '/assets/cards/chocobo-racetrack.webp',
+},
+{
+  id: 'choco-comet',
+  name: 'Choco\u2014Comet',
+  type: 'sorcery',
+  costLabel: 'XRR',
+  text: "Choco\u2014Comet deals X damage to any target.\nCreate a 2/2 green Bird creature token with 'Whenever a land you control enters, this token gets +1/+0 until end of turn.'",
+  imagePath: '/assets/cards/choco-comet.webp',
+},
+{
+  id: 'choco-seeker-of-paradise',
+  name: 'Choco, Seeker of Paradise',
+  type: 'creature',
+  subtype: 'Legendary Creature \u2014 Bird',
+  costLabel: '1GWU',
+  power: 3,
+  toughness: 5,
+  text: "Whenever one or more Birds you control attack, look at that many cards from the top of your library. " +
+  "You may put one of them into your hand. Then put any number of land cards from among them onto the battlefield tapped and the rest into your graveyard." +
+  "\nLandfall — Whenever a land you control enters, Choco gets +1/+0 until end of turn.",
+  imagePath: '/assets/cards/choco-seeker-of-paradise.webp',
+},
+// --- Cid put in later, he has multiple cards all with the same text but different images -------------------------------------------------------
+{
+  id: 'circle-of-power',
+  name: 'Circle of Power',
+  type: 'sorcery',
+  costLabel: '3B',
+  text: "You draw two cards and you lose 2 life. Create a 0/1 black Wizard creature token with " +
+  "'Whenever you cast a noncreature spell, this token deals 1 damage to each opponent.'" +
+  "\nWizards you control get +1/+0 and gain lifelink until end of turn.",
+  imagePath:'/assets/cards/circle-of-power.webp',
+},
+{
+  id: 'clash-of-the-eikons',
+  name: 'Clash of the Eikons',
+  type: 'sorcery',
+  costLabel: 'G',
+  text: "Choose one or more \u2014 " +
+  "\n• Target creature you control fights target creature an opponent controls." +
+  "\n• Remove a lore counter from target Saga you control. (Removing lore counters doesn’t cause chapter abilities to trigger.)" +
+  "\n• Put a lore counter on target Saga you control.",
+  imagePath: '/assets/cards/clash-of-the-eikons',
+},
+{
+  id: 'clive-ifrits-dominant',
+  name: "Clive, Ifrit's Dominant",
+  type: 'creature',
+  subtype: 'Legendary Creature \u2014 Human Noble Warrior',
+  costLabel: "4RR",
+  power: 5,
+  toughness: 5,
+  text: 'When Clive enters, you may discard your hand, then draw cards equal to your devotion to red. (Each R in the mana costs of permanents you control counts toward your devotion to red.)' +
+  "4RR, T: Exile Clive, then return it to the battlefield transformed under its owner’s control. Activate only as a sorcery.",
+  imagePath: '/assets/cards/clive-ifrit-s-dominant',
+  transformsInto: "Ifrit, Warden of Inferno",
+},
+{
+  id: 'ifrit-warden-of-inferno',
+  name: 'Ifrit, Warden of Inferno',
+  type: 'creature',
+  subtype: 'Legendary Enchantment Creature \u2014 Saga Demon',
+  costLabel: '-',
+  power: 9,
+  toughness: 9,
+  text: "I — Lunge — Ifrit fights up to one other target creature. " +
+  "\nII, III — Brimstone — Add RRRR. If Ifrit has three or more lore counters on it, exile it, then return it to the battlefield (front face up).",
+  imagePath:'/assets/cards/ifrit-warden-of-inferno',
+},
+{
+  id: 'clives-hideaway',
+  name: "Clive's Hideaway",
+  type: 'land',
+  costLabel: '-',
+  text: "Hideaway 4 (When this land enters, look at the top four cards of your library, exile one face down, then put the rest on the bottom in a random order.)" +
+  "\nT: Add mana." +
+  "\n2, T: You may play the exiled card without paying its mana cost if you control four or more legendary creatures.",
+  imagePath: '/assets/cards/clive-s-hideaway',
+},
+{
+  id: 'cloudbound-moogle',
+  name: 'Cloudbound Moogle',
+  type: 'creature',
+  costLabel: '3WW',
+  text: "Flying \n When this creature enters, put a +1/+1 counter on target creature. \n" +
+  "Plainscycling 2 (2, Discard this card: Search your library for a Plains card, reveal it, put it into your hand, then shuffle.)",
+  imagePath: '/assets/cards/cloudbound-moogle'
+},
+{
+  id: 'cloud-midgar-mercenary',
+  name:'Cloud, Midgar Mercenary',
+  type: 'creature',
+  subtype: 'Legendary Creature \u2014 Human Soldier Mercenary',
+  costLabel: "WW",
+  power: 2,
+  toughness: 1,
+  text: "When Cloud enters, search your library for an Equipment card, reveal it, put it into your hand, then shuffle." +
+  "\nAs long as Cloud is equipped, if a triggered ability of Cloud or an Equipment attached to it triggers, that ability triggers an additional time.",
+  imagePath: '/assets/cards/cloud-midgar-mercenary'
+},
+{
+  id: 'cloud-of-darkness',
+  name: 'Cloud of Darkness',
+  type: 'creature',
+  subtype: 'Legendary Creature \u2014 Avatar',
+  costLabel: "2BGG",
+  power: 3,
+  toughness: 3,
+  text: 'Flying \nParticle Beam — When Cloud of Darkness enters, target creature an opponent controls gets -X/-X ' +
+  "until end of turn, where X is the number of permanent cards in your graveyard.",
+  imagePath: '/assets/cards/cloud-of-darkness'
+},
+{
+  id: 'cloud-planets-champion',
+  name: "Cloud, Planet's Champion",
+  type: 'creature',
+  subtype: 'Legendary Creature \u2014 Human Soldier Mercenary',
+  costLabel: '3RW',
+  power: 4,
+  toughness: 4,
+  text: "During your turn, as long as Cloud is equipped, it has double strike and indestructible. " +
+  "(This creature deals both first-strike and regular combat damage. Damage and effects that say “destroy” don’t destroy this creature.)" +
+  "Equip abilities you activate that target Cloud cost 2 less to activate.",
+  imagePath: '/assets/cards/cloud-planet-s-champion',
+},
+{
+  id: 'coeurl',
+  name: 'Coeurl',
+  type: 'creature',
+  costLabel: '1W',
+  power: 2,
+  toughness: 2,
+  text: "1W Tap target nonenchantment creature",
+  imagePath: '/assets/cards/coeurl',
+},
+{
+  id: 'coliseum-behemoth',
+  name: 'Coliseum Behemoth',
+  type: 'creature',
+  costLabel: '5GG',
+  power: 7,
+  toughness: 7,
+  text: "Trample \nWhen this creature enters, choose one \u2014 \n Destroy target artifact or enchantment \nDraw a card",
+  imagePath: '/assets/cards/coliseum-behemoth',
+},
+{
+  id: 'combat-tutorial',
+  name: 'Combat Tutorial',
+  type: 'sorcery',
+  costLabel: '2U',
+  text: "Target player draws two cards. Put a +1/+1 counter on up to one target creature you control.",
+  imagePath: '/assets/cards/combat-tutorial'
+},
+{
+  id:'commune-with-beavers',
+  name: 'Commune with Beavers',
+  type: 'sorcery',
+  costLabel: 'G',
+  text: 'Look at the top three cards of your library. You may reveal an artifact, creature, ' +
+  "or land card from among them and put it into your hand. Put the rest on the bottom of your library in any order.",
+  imagePath: '/assets/cards/commune-with-beavers',
+},
+{
+  id: 'coral-sword',
+  name: 'Coral Sword',
+  type: 'artifact',
+  subtype: 'equipment',
+  costLabel: 'R',
+  text: 'Flash \nWhen this Equipment enters, attach it to target creature you control. That creature gains first strike until end of turn.\n Equipped creature gets +1/+0.\nEquip 1',
+  imagePath:'/assets/cards/coral-sword',
+},
+{
+  id: 'cornered-by-black-mages',
+  name: 'Cornered by Black Mages',
+  type: 'sorcery',
+  costLabel: '1BB',
+  text: 'Target opponent sacrifices a creature of their choice. \nCreate a 0/1 black Wizard creature token with “Whenever you cast a noncreature spell, ' +
+  ' this token deals 1 damage to each opponent.”',
+  imagePath:'/assets/cards/cornered-by-black-mages'
+},
+{
+  id:'crossroad-village',
+  name:'Crossroads Village',
+  type: 'land',
+  costLabel: '-',
+  text: "This land enters tapped. As it enters, choose a color. \nTap: Add one mana of the chosen color.",
+  imagePath:'/assets/cards/crossroads-village'
+},
+{
+  id: 'crystal-fragments',
+  name: 'Crystal Fragments',
+  type: 'artifact',
+  subtype: 'equipment',
+  costLabel: 'W',
+  text: "Equipped creature gets +1/+1. \n5WW: Exile this Equipment, then return it to the battlefield transformed under its owner’s control. Activate only as a sorcery. \nEquip 1",
+  imagePath:'/assets/cards/crystal-fragments'
+},
+{
+  id:'dark-confidant',
+  name: 'Dark Confidant',
+  type: 'creature',
+  subtype: 'Human Wizard',
+  costLabel: '1B',
+  power: 2,
+  toughness: 1,
+  text: "At the beginning of your upkeep, reveal the top card of your library and put that card into your hand. You lose life equal to its mana value.",
+  imagePath: '/assets/cards/dark-confidant'
+},
+{
+  id: 'dark-knights-greatsword',
+  name: "Dark Knight's Greatsword",
+  type: 'artifact',
+  subtype: 'equipment',
+  costLabel: '2B',
+  text: 'Job select (When this Equipment enters, create a 1/1 colorless Hero creature token, then attach this to it.) \n' +
+  "Equipped creature gets +3/+0 and is a Knight in addition to its other types. \nChaosbringer — Equip—Pay 3 life. Activate only once each turn.",
+  imagePath:'/assets/cards/dark-knight-s-greatsword'
+},
+{
+  id: 'deadly-embrace',
+  name: 'Deadly Embrace',
+  type: 'sorcery',
+  costLabel: '3BB',
+  text: 'Destroy target creature an opponent controls. Then draw a card for each creature that died this turn.',
+  imagePath:'/assets/cards/deadly-embrace'
+},
+{
+  id:'delivery-moogle',
+  name:'Delivery Moogle',
+  type: 'creature',
+  subtype: 'Moogle',
+  costLabel: '3W',
+  power: 3,
+  toughness: 2,
+  text: 'Flying \nWhen this creature enters, search your library and/or graveyard for an artifact card with mana value 2 or less, ' +
+  "\n reveal it, and put it into your hand. If you search your library this way, shuffle.",
+  imagePath:'/assets/cards/delivery-moogle'
+},
+{
+  id:'demon-wall',
+  name: 'Demon Wall',
+  type: 'creature',
+  subtype: 'Artifact Creature \u2014 Demon Wall',
+  costLabel: '1B',
+  power: 3,
+  toughness: 3,
+  text: 'Defender \nMenace (This creature can’t be blocked except by two or more creatures.) ' +
+  "As long as this creature has a counter on it, it can attack as though it didn’t have defender. " +
+  "\n5B: Put two +1/+1 counters on this creature.",
+  imagePath:'/assets/cards/demon-wall'
+},
+{
+  id: 'diamond-weapon',
+  name: 'Diamond Weapon',
+  type: 'creature',
+  subtype: 'Legendary Artifact Creature \u2014 Elemental',
+  costLabel: '7GG',
+  power: 8,
+  toughness: 8,
+  text: "This spell costs 1 less to cast for each permanent card in your graveyard. \nReach \n Immune — Prevent all combat damage that would be dealt to Diamond Weapon.",
+  imagePath: '/assets/cards/diamond-weapon'
+},
+{
   id: 'ultima',
   name: 'Ultima',
   type: 'sorcery',
@@ -512,16 +692,6 @@ export const CARD_POOL: CardDefinition[] = [
   imagePath: '/assets/cards/ultima.jpg',
 },
 
-  // --- Artifacts --------------------------------------------------------
-  {
-    id: 'materia-shard',
-    name: 'Materia Shard',
-    type: 'artifact',
-    costLabel: '1',
-    text: 'Tap: add one mana of any color. 3, Tap, Sacrifice Materia Shard: draw a card.',
-    imagePath: '/assets/cards/materia-shard.jpg',
-  },
-  
 ];
 
 export function getCardDefinition(defId: string): CardDefinition {
