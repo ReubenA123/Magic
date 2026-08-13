@@ -1018,9 +1018,307 @@ export const CARD_POOL: CardDefinition[] = [
   text: "As long as you control seven or more lands, this creature gets +2/+2.",
   imagePath:'/assets/cards/gigantoad'
 },{
+  id: "gilgamesh-master-at-arms",
+  name: "Gilgamesh, Master-at-Arms",
+  costLabel:"4RR",
+  type: 'creature',
+  power: 6,
+  toughness: 6,
+  text:"Whenever Gilgamesh enters or attacks, look at the top six cards of your library. \n" +
+  "You may put any number of Equipment cards from among them onto the battlefield. Put the rest on the bottom of your library \n" +
+  "in a random order. When you put one or more Equipment onto the battlefield this way, you may attach one of them to a Samurai you control.",
+  imagePath:'/assets/cards/gilgamesh-master-at-arms'
+},
+{
+  id: "giott-king-of-the-dwarves",
+  name: "Giott, King of the Dwarves",
+  costLabel: "RW",
+  type: 'creature',
+  subtype: 'Legendary Creature \u2014 Dwarf Noble',
+  power: 1,
+  toughness: 1,
+  text: "Double strike \n " +
+  "Whenever Giott or another Dwarf you control enters and whenever an Equipment you control enters, you may discard a card. If you do, draw a card.",
+  imagePath:'/assets/cards/giott-king-of-the-dwarves'
+},{
+  id: 'gladiolus-amicitia',
+  name: "Gladiolus Amicita",
+  costLabel: "4RG",
+  type: 'creature',
+  subtype: 'Legendary Creature \u2014 Human Warrior',
+  power: 6,
+  toughness: 6,
+  text: "When Gladiolus Amicitia enters, search your library for a land card, put it onto the battlefield tapped, then shuffle. \n" +
+  "Landfall — Whenever a land you control enters, another target creature you control gets +2/+2 and gains trample until end of turn.",
+  imagePath:'/assets/cards/gladiolus-amicitia'
+},
+{
+  id: "gogo-master-of-mimicry",
+  name: "Gogo, Master of Mimicry",
+  costLabel: '2U',
+  type: 'creature',
+  subtype: 'Legendary Creature \u2014 Wizard',
+  power: 2,
+  toughness: 4,
+  text: "XX Tap:Copy target activated or triggered ability you control X times. You may choose new targets for the copies. " +
+  "This ability can’t be copied and X can’t be 0. (Mana abilities can’t be targeted.)",
+  imagePath:'/assets/cards/gogo-master-of-mimicry'
+},
+{
+  id: 'gohn-town-of-ruin',
+  name: "Gohn, Town of Ruin",
+  costLabel: '-',
+  type: 'land',
+  text: "This land enters tapped. Tap: Add B or G.",
+  imagePath:'/assets/cards/gohn-town-of-ruin'
+},
+{
+  id: 'golbez-crystal-collector',
+  name: 'Golbez, Crystal Collector',
+  costLabel: 'UB',
+  type: 'creature',
+  subtype: 'Legendary Creature \u2014 Human Wizard',
+  power: 1,
+  toughness: 4,
+  text: 'Whenever an artifact you control enters, surveil 1. \n' +
+  "At the beginning of your end step, if you control four or more artifacts, return target creature card from your graveyard to your hand. " +
+  'Then if you control eight or more artifacts, each opponent loses life equal to that card’s power.',
+  imagePath:'/assets/cards/golbez-crystal-collector'
+},
+{
+  id: 'gongaga-reactor-town',
+  name: 'Gongaga, Reactor Town',
+  costLabel: '-',
+  type: 'land',
+  text: 'This land enters tapped. \nTap: Add R or G.',
+  imagePath:'/assets/cards/gongaga-reactor-town'
+},
+{
+  id: 'goobbue-gardener',
+  name: 'Goobbue Gardener',
+  costLabel: '1G',
+  type: 'creature',
+  power: 1,
+  toughness: 3,
+  text: 'Tap: Add G.',
+  imagePath:'/assets/cards/goobbue-gardener'
+},
+{
+  id: 'g-raha-tia',
+  name: "G'raha Tia",
+  costLabel: '4W',
+  type: 'creature',
+  subtype: 'Legendary Creature \u2014 Cat Archer',
+  power: 3,
+  toughness: 5,
+  text: 'Reach \n The Allagan Eye — Whenever one or more other creatures and/or artifacts you control die, draw a card. This ability triggers only once each turn.',
+  imagePath:'/assets/cards/g-raha-tia'
+},
+{
+  id: 'gran-pulse-ochu',
+  name: 'Gran Pulse Ochu',
+  costLabel: 'G',
+  type: 'creature',
+  power: 1,
+  toughness: 1,
+  text: 'Deathtouch \n8: Until end of turn, this creature gets +1/+1 for each permanent card in your graveyard.',
+  imagePath:'/assets/cards/gran-pulse-ochu'
+},
+{
+  id: 'guadosalam-farplane-gateway',
+  name: 'Guadosalam, Farplane Gateway',
+  costLabel: '-',
+  type: 'land',
+  text: 'This land enters tapped. \nTap: Add G or U.',
+  imagePath:'/assets/cards/guadosalam-farplane-gateway'
+},
+{
+  id: 'gysahl-greens',
+  name: 'Gysahl Greens',
+  costLabel: '1G',
+  type: 'sorcery',
+  text: 'Create a 2/2 green Bird creature token with “Whenever a land you control enters, this token gets +1/+0 until end of turn.”' +
+  "\nFlashback {6}",
+  imagePath:'/assets/cards/gysahl-greens'
+},{
+  id: 'haste-magic',
+  name: 'Haste Magic',
+  costLabel: '1R',
+  type: 'instant',
+  text: 'Target creature gets +3/+1 and gains haste until end of turn. Exile the top card of your library. You may play it until your next end step.',
+  imagePath:'/assets/cards/haste-magic'
+},
+{
+  id: 'hecteyes',
+  name:'Hecteyes',
+  costLabel: '1B',
+  type: 'creature',
+  power: 1,
+  toughness: 1,
+  text: 'When this creature enters, each opponent discards a card.',
+  imagePath:'/assets/cards/hecteyes'
+},{
+  id: 'hill-gigas',
+  name: 'Hill Gigas',
+  costLabel: '4RR',
+  type: 'creature',
+  power: 5,
+  toughness: 4,
+  text: 'Trample, haste \n' +
+  'Mountaincycling 2(2, Discard this card: Search your library for a Mountain card, reveal it, put it into your hand, then shuffle.)',
+  imagePath:'/assets/cards/hill-gigas'
+},
+{
+  id: 'hope-estheim',
+  name: 'Hope Estheim',
+  costLabel: "WU",
+  type: 'creature',
+  subtype: 'Legendary Creatue \u2014 Human Wizard',
+  power: 2,
+  toughness: 2,
+  text: 'Lifelink \n' +
+  'At the beginning of your end step, each opponent mills X cards, where X is the amount of life you gained this turn.',
+  imagePath:'/assets/cards/hope-estheim'
+},
+{
+  id: 'ice-flan',
+  name: 'Ice Flan',
+  costLabel: '4UU',
+  type: 'creature',
+  power: 5,
+  toughness: 4,
+  text: 'When this creature enters, tap target artifact or creature an opponent controls. Put a stun counter on it. ' +
+  '(If a permanent with a stun counter would become untapped, remove one from it instead.)\n' +
+  'Islandcycling 2 (2, Discard this card: Search your library for an Island card, reveal it, put it into your hand, then shuffle.)',
+  imagePath:'/assets/cards/ice-flan'
+},{
+  id: 'ice-magic',
+  name: 'Ice Magic',
+  costLabel: '1U',
+  type: 'instant',
+  text: 'Tiered (Choose one additional cost.) \n' +
+  '• Blizzard — {0} — Return target creature to its owner’s hand. \n' +
+  '• Blizzara — {2} — Target creature’s owner puts it on their choice of the top or bottom of their library. \n' +
+  '• Blizzaga — {5}{U} — Target creature’s owner shuffles it into their library.',
+  imagePath:'/assets/cards/ice-magic'
+},
+{
+  id: 'ignis-scientia',
+  name: 'Ignis Scientia',
+  costLabel: '1GU',
+  type: 'creature',
+  subtype: 'Legendary Creature \u2014 Human Advisor',
+  power: 2,
+  toughness: 2,
+  text: 'When Ignis Scientia enters, look at the top six cards of your library. You may put a land card from among them onto the battlefield tapped. ' +
+  'Put the rest on the bottom of your library in a random order. \n' +
+  'I’ve Come Up with a New Recipe! — 1GU, Tap: Exile target card from a graveyard. If a creature card was exiled this way, create a Food token.',
+  imagePath:'/assets/cards/ignis-scientia'
+},
+{
+  id: 'il-mheg-pixie',
+  name: 'Il Mheg Pixie',
+  costLabel: '1U',
+  type: 'creature',
+  power: 2,
+  toughness: 1,
+  text: 'Flying \n Whenever this creature attacks, surveil 1.',
+  imagePath:'/assets/cards/il-mheg-pixie'
+},
+{
+  id: 'insomnia-crown-city',
+  name: 'Insomnia, Crown City',
+  costLabel: '-',
+  type: 'land',
+  text:'This land enters tapped. \nTap: Add W or B.',
+  imagePath:'/assets/cards/insomnia-crown-city'
+},
+{
+  id: 'instant-ramen',
+  name: 'Instant Ramen',
+  costLabel: '2',
+  type: 'instant',
+  text:'Flash \n When this artifact enters, draw a card. \n2, Tap, Sacrifice this artifact: You gain 3 life.',
+  imagePath:'/assets/cards/instant-ramen'
+},
+{
+  id: 'iron-giant',
+  name: 'Iron Giant',
+  costLabel: '7',
+  type: 'creature',
+  subtype: 'Artifact Demon',
+  power: 6,
+  toughness: 6,
+  text: 'Reach, vigilance, trample',
+  imagePath:'/assets/cards/iron-giant'
+},
+{
+  id: 'ishgard-the-holy-see',
+  name: 'Ishgard, the Holy See',
+  costLabel:'-',
+  type: 'land',
+  text: 'This land enters tapped. Tap: Add W.' +
+  '\nFaith & Grief 3WW \nSorcery — Adventure\n' +
+  'Return up to two target artifact and/or enchantment cards from your graveyard to your hand. (Then exile this card. You may play the land later from exile.)',
+  imagePath:'/assets/cards/ishgard-the-holy-see'
+},
+{
+  id: 'island',
+  name: 'Island',
+  costLabel: '-',
+  type: 'land',
+  text: 'Basic Land — Island \n(Tap: Add U.)',
+  imagePath:'/assets/cards/island'
+},
+{
+  id: 'item-shopkeep',
+  name: 'Item Shopkeep',
+  costLabel: '1R',
+  type: 'creature',
+  power: 2,
+  toughness: 2,
+  text: 'Whenever you attack, target attacking equipped creature gains menace until end of turn. (It can’t be blocked except by two or more creatures.)',
+  imagePath:'/assets/cards/item-shopkeep'
+},
+{
+  id: 'jecht-reluctant-guardian',
+  name: 'Jecht, Reluctant Guardian',
+  costLabel: '3B',
+  type: 'creature',
+  subtype: 'Legendary Creature \u2014 Human Warrior',
+  power: 4,
+  toughness: 3,
+  text: 'Menace \n Whenever Jecht deals combat damage to a player, you may exile it, then return it to the battlefield transformed under its owner’s control.',
+  imagePath:'/assets/cards/jecht-reluctant-guardian',
+  transformsInto: "Braska's Final Aeon"
+},{
+  id: 'braska-s-final-aeon',
+  name: "Braska's Final Aeon",
+  costLabel: '-',
+  type:'creature',
+  power: 7,
+  toughness: 7,
+  text: 'I, II — Jecht Beam — Each opponent discards a card and you draw a card. \n' +
+  'III — Ultimate Jecht Shot — Each opponent sacrifices two creatures of their choice. \n' +
+  'Menace',
+  imagePath:'/assets/cards/braska-s-final-aeon'
+},
+{
+  id: 'jenova-ancient-calamity',
+  name: 'Jenova, Ancient Calamity',
+  costLabel: '2BG',
+  type: 'creature',
+  subtype: 'Legendary Creature \u2014 Alien',
+  power: 1,
+  toughness: 5,
+  text: "At the beginning of combat on your turn, put a number of +1/+1 counters equal to Jenova’s power on up to one other target creature. " +
+  "That creature becomes a Mutant in addition to its other types. Whenever a Mutant you control dies during your turn, you draw cards equal to its power.",
+  imagePath:'/assets/cards/jenova-ancient-calamity'
+},{
   id:
   name:
   costLabel:
+  type:
   power:
   toughness:
   text:
@@ -1029,6 +1327,7 @@ export const CARD_POOL: CardDefinition[] = [
   id:
   name:
   costLabel:
+  type:
   power:
   toughness:
   text:
@@ -1037,6 +1336,7 @@ export const CARD_POOL: CardDefinition[] = [
   id:
   name:
   costLabel:
+  type:
   power:
   toughness:
   text:
@@ -1045,6 +1345,7 @@ export const CARD_POOL: CardDefinition[] = [
   id:
   name:
   costLabel:
+  type:
   power:
   toughness:
   text:
@@ -1053,6 +1354,7 @@ export const CARD_POOL: CardDefinition[] = [
   id:
   name:
   costLabel:
+  type:
   power:
   toughness:
   text:
@@ -1061,138 +1363,218 @@ export const CARD_POOL: CardDefinition[] = [
   id:
   name:
   costLabel:
+  type:
   power:
   toughness:
   text:
-  imagePath:
+  imagePath:'/assets/cards/'
 },{
   id:
   name:
   costLabel:
+  type:
   power:
   toughness:
   text:
-  imagePath:
+  imagePath:'/assets/cards/'
 },{
   id:
   name:
   costLabel:
+  type:
   power:
   toughness:
   text:
-  imagePath:
+  imagePath:'/assets/cards/'
 },{
   id:
   name:
   costLabel:
+  type:
   power:
   toughness:
   text:
-  imagePath:
+  imagePath:'/assets/cards/'
 },{
   id:
   name:
   costLabel:
+  type:
   power:
   toughness:
   text:
-  imagePath:
+  imagePath:'/assets/cards/'
 },{
   id:
   name:
   costLabel:
+  type:
   power:
   toughness:
   text:
-  imagePath:
+  imagePath:'/assets/cards/'
 },{
   id:
   name:
   costLabel:
+  type:
   power:
   toughness:
   text:
-  imagePath:
+  imagePath:'/assets/cards/'
 },{
   id:
   name:
   costLabel:
+  type:
   power:
   toughness:
   text:
-  imagePath:
+  imagePath:'/assets/cards/'
 },{
   id:
   name:
   costLabel:
+  type:
   power:
   toughness:
   text:
-  imagePath:
+  imagePath:'/assets/cards/'
 },{
   id:
   name:
   costLabel:
+  type:
   power:
   toughness:
   text:
-  imagePath:
+  imagePath:'/assets/cards/'
 },{
   id:
   name:
   costLabel:
+  type:
   power:
   toughness:
   text:
-  imagePath:
+  imagePath:'/assets/cards/'
 },{
   id:
   name:
   costLabel:
+  type:
   power:
   toughness:
   text:
-  imagePath:
+  imagePath:'/assets/cards/'
 },{
   id:
   name:
   costLabel:
+  type:
   power:
   toughness:
   text:
-  imagePath:
+  imagePath:'/assets/cards/'
 },{
   id:
   name:
   costLabel:
+  type:
   power:
   toughness:
   text:
-  imagePath:
+  imagePath:'/assets/cards/'
 },{
   id:
   name:
   costLabel:
+  type:
   power:
   toughness:
   text:
-  imagePath:
+  imagePath:'/assets/cards/'
 },{
   id:
   name:
   costLabel:
+  type:
   power:
   toughness:
   text:
-  imagePath:
+  imagePath:'/assets/cards/'
 },{
   id:
   name:
   costLabel:
+  type:
   power:
   toughness:
   text:
-  imagePath:
+  imagePath:'/assets/cards/'
+},{
+  id:
+  name:
+  costLabel:
+  type:
+  power:
+  toughness:
+  text:
+  imagePath:'/assets/cards/'
+},{
+  id:
+  name:
+  costLabel:
+  type:
+  power:
+  toughness:
+  text:
+  imagePath:'/assets/cards/'
+},{
+  id:
+  name:
+  costLabel:
+  type:
+  power:
+  toughness:
+  text:
+  imagePath:'/assets/cards/'
+},{
+  id:
+  name:
+  costLabel:
+  type:
+  power:
+  toughness:
+  text:
+  imagePath:'/assets/cards/'
+},{
+  id:
+  name:
+  costLabel:
+  type:
+  power:
+  toughness:
+  text:
+  imagePath:'/assets/cards/'
+},{
+  id:
+  name:
+  costLabel:
+  type:
+  power:
+  toughness:
+  text:
+  imagePath:'/assets/cards/'
+},{
+  id:
+  name:
+  costLabel:
+  type:
+  power:
+  toughness:
+  text:
+  imagePath:'/assets/cards/'
 },
 {
   id: 'ultima',
