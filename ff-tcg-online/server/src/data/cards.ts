@@ -13,6 +13,7 @@
 // would be printed on a physical card.
 // ============================================================================
 
+import { create } from 'domain';
 import { CardDefinition } from '../types';
 
 export const CARD_POOL: CardDefinition[] = [
@@ -682,6 +683,516 @@ export const CARD_POOL: CardDefinition[] = [
   toughness: 8,
   text: "This spell costs 1 less to cast for each permanent card in your graveyard. \nReach \n Immune — Prevent all combat damage that would be dealt to Diamond Weapon.",
   imagePath: '/assets/cards/diamond-weapon'
+},
+{
+  id: 'dion-bahamut-dominant',
+  name: "Dion Bahamut's Dominant",
+  type: 'creature',
+  subtype: "Legendary Creature \u2014 Human Noble Knight",
+  costLabel: '3W',
+  power: 3,
+  toughness: 3,
+  text: 'Dragonfire Dive — During your turn, Dion and other Knights you control have flying.\nWhen Dion enters, create a 2/2 white Knight creature token.' +
+  "4WW, Tap: Exile Dion, then return it to the battlefield transformed under its owner’s control. Activate only as a sorcery.",
+  imagePath:'/assets/cards/dion-bahamut-s-dominant',
+  transformsInto:'Bahamut, Warden of Light'
+},
+{
+  id: 'bahamut-warden-of-light',
+  name: 'Bahamut, Warden of Light',
+  type: 'creature',
+  subtype: 'Legendary Enhancement Creature \u2014 Saga Dragon',
+  costLabel: '-',
+  power: 5,
+  toughness: 5,
+  text: "I, II — Wings of Light — Put a +1/+1 counter on each other creature you control. Those creatures gain flying until end of turn." +
+  "\nIII — Gigaflare — Destroy target permanent. Exile Bahamut, then return it to the battlefield (front face up). \nFlying",
+  imagePath: '/assets/cards/bahamut-warden-of-light'
+},
+{
+  id: "dragoons-lance",
+  name: "Dragoon's Lance",
+  type: 'artifact',
+  subtype: 'equipment',
+  costLabel: '1W',
+  text: 'Job select (When this Equipment enters, create a 1/1 colorless Hero creature token, then attach this to it.)' +
+  "\nEquipped creature gets +1/+0 and is a Knight in addition to its other types."+
+  "\nDuring your turn, equipped creature has flying.\nGae Bolg — Equip 4",
+  imagePath:'/assets/cards/dragoon-s-lance'
+},
+{
+  id: 'dragoons-wyvern',
+  name: "Dragoon's Wyvern",
+  type: 'creature',
+  costLabel: '2U',
+  power: 2,
+  toughness: 1,
+  text:"Flying\n When this creature enters, create a 1/1 colorless Hero creature token.",
+  imagePath:'/assets/cards/dragoon-s-wyvern'
+},
+{
+  id: 'dreams-of-laguna',
+  name:'Dreams of Laguna',
+  type: 'instant',
+  costLabel: '1U',
+  text: "Surveil 1, then draw a card. (To surveil 1, look at the top card of your library. You may put it into your graveyard.) " +
+  "\nFlashback 3U (You may cast this card from your graveyard for its flashback cost. Then exile it.)",
+  imagePath:'/assets/cards/dreams-of-laguna'
+},
+{
+  id: 'dwarven-castel-guard',
+  name: 'Dwarven Castle Guard',
+  type: 'creature',
+  costLabel: '1W',
+  power: 2,
+  toughness: 1,
+  text:"When this creature dies, create a 1/1 colorless Hero creature token.",
+  imagePath:'/assets/cards/dwarven-castle-guard'
+},
+{
+  id:'eden-seat-of-the-sanctum',
+  name:'Eden, Seat of the Sanctum',
+  type: 'land',
+  costLabel: '-',
+  text: "T: Add C.\n 5, T: Mill two cards. Then you may sacrifice this land. When you do, return another target permanent card from your graveyard to your hand.",
+  imagePath:'/assets/cards/eden-seat-of-the-sanctum'
+},
+{
+  id: 'edgar-king-of-figaro',
+  name: 'Edgar, King of Figaro',
+  type: 'creature',
+  subtype: 'Legendary Creatures \u2014 Human Artificer Noble',
+  costLabel: '4UU',
+  power: 4,
+  toughness: 5,
+  text: "When Edgar enters, draw a card for each artifact you control. " +
+  "Two-Headed Coin — The first time you flip one or more coins each turn, those coins come up heads and you win those flips.",
+  imagePath:'/assets/cards/edgar-king-of-figaro'
+},
+{
+  id:'eject',
+  name:'Eject',
+  type: 'instant',
+  costLabel: '3U',
+  text: "This spell can’t be countered.\n Return target nonland permanent to its owner’s hand.\n Draw a card.",
+  imagePath:'/assets/cards/eject'
+},
+{
+  id:'elixir',
+  name: 'Elixir',
+  type: 'artifact',
+  costLabel: '1',
+  text: "This artifact enters tapped.\n5, T, Exile this artifact: Shuffle all nonland cards from your graveyard into your library. "+
+  "You gain life equal to the number of cards shuffled into your library this way.",
+  imagePath:'/assets/cards/elixir'
+},
+{
+  id: 'emet-selch-unsundered',
+  name: "Emet\u2014Selch, Unsundered",
+  type: 'creature',
+  subtype: 'Legendary Creature \u2014 Elder Wizard',
+  costLabel: '1UB',
+  power: 2,
+  toughness: 4,
+  text: "Vigilance \nWhenever Emet-Selch enters or attacks, draw a card, then discard a card.\n"+
+  "At the beginning of your upkeep, if there are fourteen or more cards in your graveyard, you may transform Emet-Selch.",
+  imagePath:'/assets/cards/emet-selch-unsundered',
+  transformsInto:'Hades, Sorcerer of Eld'
+},
+{
+  id:'hades-sorcerer-of-eld',
+  name:'Hades, Sorcerer of Eld',
+  type:'creature',
+  costLabel:'-',
+  power: 6,
+  toughness: 6,
+  text: "Vigilance \nEcho of the Lost — During your turn, you may play cards from your graveyard. \n"+
+  "If a card or token would be put into your graveyard from anywhere, exile it instead.",
+  imagePath:'/assets/cards/hades-sorcerer-of-eld'
+},
+{
+  id: 'esper-origins',
+  name:'Esper Origins',
+  type: 'sorcery',
+  costLabel:'1G',
+  text:"Surveil 2. You gain 2 life. If this spell was cast from a graveyard, exile it, then put it onto the battlefield transformed under its owner’s control " +
+  "with a finality counter on it. (If a creature with a finality counter on it would die, exile it instead.)\nFlashback 3G",
+  imagePath:'/assets/cards/esper-origins'
+},
+{
+  id: 'ether',
+  name: "Ether",
+  type: 'artifact',
+  costLabel: '3U',
+  text: "Tap, Exile this artifact: Add {U}. When you next cast an instant or sorcery spell this turn, copy that spell. You may choose new targets for the copy.",
+  imagePath:"/assets/cards/ether"
+},
+{
+  id:'evil-reawakened',
+  name: "Evil Reawakened",
+  type: "sorcery",
+  costLabel: "4B",
+  text: "Return target creature card from your graveyard to the battlefield with two additional +1/+1 counters on it.",
+  imagePath:"/assets/cards/etherevil-reawakened"
+},
+{
+  id:"excalibur-ii",
+  name: "Excalibur II",
+  type: 'artifact',
+  subtype: 'equipment',
+  costLabel: '1',
+  text: "Whenever you gain life, put a charge counter on Excalibur II.\nEquipped creature gets +1/+1 for each charge counter on Excalibur II.\nEquip 3",
+  imagePath:"/assets/cards/excalibur-ii"
+},
+{
+  id:"exdeath-void-warlock",
+  name: "Exdeath, Void Warlock",
+  type: "creature",
+  subtype: "Legendary Creature \u2014 Spirit Warlock",
+  costLabel:"1BG",
+  power: 3,
+  toughness: 3,
+  text:"When Exdeath enters, you gain 3 life.\nAt the beginning of your end step, if there are six or more permanent cards in your graveyard, transform Exdeath.",
+  imagePath:"/assets/cards/exdeath-void-warlock",
+  transformsInto:"Neo Exdeath, Dimension's End"
+},
+{
+  id:"neo-exdeath-dimension-s-end",
+  name: "Neo Exdeath, Dimension's End",
+  type:'creature',
+  costLabel:'-',
+  power: x,
+  toughness: 3,
+  text:"When Exdeath enters, you gain 3 life.\nAt the beginning of your end step, if there are six or more permanent cards in your graveyard, transform Exdeath.",
+  imagePath:'/assets/cards/neo-exdeath-dimension-s-end'
+},
+{
+  id:'fang-fearless-l-cie',
+  name:"Fang, Fearless I'Cie",
+  type: 'creature',
+  costLabel: '2B',
+  subtype:'Legendary Creature \u2014 Human Warrior',
+  power: 2,
+  toughness: 3,
+  text: "Whenever one or more cards leave your graveyard, you draw a card and you lose 1 life. This ability triggers only once each turn.",
+  imagePath:'/assets/cards/fang-fearless-l-cie'
+},
+{
+  id: 'fate-of-the-sun-cryst',
+  name:"Fate of the Sun-Cryst",
+  type: 'instant',
+  costLabel: '4W',
+  text: 'This spell costs 2 less to cast if it targets a tapped creature.\nDestroy target nonland permanent.',
+  imagePath:'/assets/cards/fate-of-the-sun-cryst'
+},
+{
+  id:"fight-on",
+  name:"Fight On!",
+  type:'instant',
+  costLabel:'2B',
+  text:"Return up to two target creature cards from your graveyard to your hand.",
+  imagePath:'/assets/cards/fight-on'
+},
+{
+  id:'fire-magic',
+  name: "Fire Magic",
+  type: 'instant',
+  costLabel: "R",
+  text:"Tiered (Choose one additional cost.) \n" +
+  "• Fire — {0} — Fire Magic deals 1 damage to each creature. \n" +
+  "• Fira — {2} — Fire Magic deals 2 damage to each creature. \n" +
+  "• Firaga — {5} — Fire Magic deals 3 damage to each creature.",
+  imagePath:'/assets/cards/fire-magic'
+},
+{
+  id: 'firion-wild-rose-warrior',
+  name: "Firion, Wild Rose Warrior",
+  type: 'creature',
+  subtype: "Legendary Creature \u2014 Human Rebel Warrior",
+  costLabel: '2R',
+  power: 3,
+  toughness: 3,
+  text: "Equipped creatures you control have haste.\nWhenever a nontoken Equipment you control enters, create a token that’s a copy of it, " +
+  "except it has “This Equipment’s equip abilities cost {2} less to activate.” Sacrifice that token at the beginning of the next upkeep.",
+  imagePath:'/assets/cardsfirion-wild-rose-warrior'
+},{
+  id: "forest",
+  name: "Forest",
+  type: "land",
+  costLabel: "-",
+  text:"(T: Add G.)",
+  imagePath:'/assets/cards/forest'
+},{
+  id: "freya-crescent",
+  name: "Freya Crescent",
+  type: "creature",
+  subtype:'Legendary Creature \u2014 Rat Knight',
+  costLabel: "R",
+  text: "Jump — During your turn, Freya Crescent has flying.\nT: Add R. Spend this mana only to cast an Equipment spell or activate an equip ability",
+  imagePath:'/assets/cards/freya-crescent '
+},{
+  id: 'from-father-to-son',
+  name: 'From Father to Son',
+  type: 'sorcery',
+  costLabel: '1W',
+  text: "Search your library for a Vehicle card, reveal it, and put it into your hand. If this spell was cast from a graveyard, put that card onto the battlefield instead. " +
+  "Then shuffle. \nFlashback 4WWW",
+  imagePath:'/assets/cards/from-father-to-son'
+},{
+  id: "gaelicat",
+  name: 'Gaelicat',
+  type: 'creature',
+  costLabel: '2W',
+  text: "Flying, vigilance \nAs long as you control two or more artifacts, this creature gets +2/+0.",
+  imagePath:'/assets/cards/gaelicat '
+},{
+  id: "gaius-van-baelsar",
+  name: "Gaius van Baelsar",
+  type:'creature',
+  subtype:"Legendary Creature \u2014 Human Soldier",
+  costLabel:'2BB',
+  text:"When Gaius van Baelsar enters, choose one — " +
+  "\n• Each player sacrifices a creature token of their choice. " +
+  "\n• Each player sacrifices a nontoken creature of their choice. " +
+  "\n• Each player sacrifices an enchantment of their choice.",
+  imagePath:'/assets/cards/gaius-van-baelsar'
+},{
+  id: "galuf-s-final-act",
+  name: "Galuf's Final Act",
+  type: 'instant',
+  costLabel: '1G',
+  text:'Until end of turn, target creature gets +1/+0 and gains “When this creature dies, put a number of +1/+1 counters equal to its power on up to one target creature.”',
+  imagePath:'/assets/cards/galuf-s-final-act'
+},{
+  id: 'garland-knight-of-cornelia',
+  name: "Garland, Knight of Cornelia",
+  type:"creature",
+  subtype:'Legendary Creature \u2014 Human Knight',
+  costLabel:'BR',
+  power: 3,
+  toughness: 2,
+  text: "Whenever you cast a noncreature spell, surveil 1. (Look at the top card of your library. You may put it into your graveyard.)" +
+  "\n3BBRR: Return this card from your graveyard to the battlefield transformed. Activate only as a sorcery.",
+  imagePath:'/assets/cards/garland-knight-of-cornelia',
+  transformsInto:'Chaos, the Endless'
+},
+{
+  id: 'chaos-the-endless',
+  name: 'Chaos, the Endless',
+  type: 'creature',
+  costLabel:'-',
+  power: 5,
+  toughness: 5,
+  text: "Flying \nWhen Chaos dies, put it on the bottom of its owner’s library.",
+  imagePath: '/assets/cards/chaos-the-endless'
+},
+{
+  id: 'garnet-princess-of-alexandria',
+  name: 'Garnet, Princess of Alexandria',
+  type: 'creature',
+  subtype:' Legendary Creature \u2014 Human Noble Cleric',
+  costLabel: 'GW',
+  power: 2,
+  toughness: 2,
+  text: "Lifelink \n Whenever Garnet attacks, you may remove a lore counter from each of any number of Sagas you control. "+
+  "Put a +1/+1 counter on Garnet for each lore counter removed this way.",
+  imagePath:'/assets/cards/garnet-princess-of-alexandria'
+},{
+  id: 'genji-glove',
+  name: 'Genji Glove',
+  costLabel: '5',
+  type: 'artifact',
+  subtype: 'equipment',
+  text:"Equipped creature has double strike. \n" +
+  "Whenever equipped creature attacks, if it’s the first combat phase of the turn, untap it. After this phase, there is an additional combat phase. " +
+  "Equip 3",
+  imagePath:'/assets/cards/genji-glove'
+},{
+  id: 'gigantoad',
+  name: "Gigantoad",
+  costLabel: '3G',
+  type: 'creature',
+  subtype: 'Frog',
+  power: 4,
+  toughness: 4,
+  text: "As long as you control seven or more lands, this creature gets +2/+2.",
+  imagePath:'/assets/cards/gigantoad'
+},{
+  id:
+  name:
+  costLabel:
+  power:
+  toughness:
+  text:
+  imagePath:'/assets/cards/'
+},{
+  id:
+  name:
+  costLabel:
+  power:
+  toughness:
+  text:
+  imagePath:'/assets/cards/'
+},{
+  id:
+  name:
+  costLabel:
+  power:
+  toughness:
+  text:
+  imagePath:'/assets/cards/'
+},{
+  id:
+  name:
+  costLabel:
+  power:
+  toughness:
+  text:
+  imagePath:'/assets/cards/'
+},{
+  id:
+  name:
+  costLabel:
+  power:
+  toughness:
+  text:
+  imagePath:'/assets/cards/'
+},{
+  id:
+  name:
+  costLabel:
+  power:
+  toughness:
+  text:
+  imagePath:
+},{
+  id:
+  name:
+  costLabel:
+  power:
+  toughness:
+  text:
+  imagePath:
+},{
+  id:
+  name:
+  costLabel:
+  power:
+  toughness:
+  text:
+  imagePath:
+},{
+  id:
+  name:
+  costLabel:
+  power:
+  toughness:
+  text:
+  imagePath:
+},{
+  id:
+  name:
+  costLabel:
+  power:
+  toughness:
+  text:
+  imagePath:
+},{
+  id:
+  name:
+  costLabel:
+  power:
+  toughness:
+  text:
+  imagePath:
+},{
+  id:
+  name:
+  costLabel:
+  power:
+  toughness:
+  text:
+  imagePath:
+},{
+  id:
+  name:
+  costLabel:
+  power:
+  toughness:
+  text:
+  imagePath:
+},{
+  id:
+  name:
+  costLabel:
+  power:
+  toughness:
+  text:
+  imagePath:
+},{
+  id:
+  name:
+  costLabel:
+  power:
+  toughness:
+  text:
+  imagePath:
+},{
+  id:
+  name:
+  costLabel:
+  power:
+  toughness:
+  text:
+  imagePath:
+},{
+  id:
+  name:
+  costLabel:
+  power:
+  toughness:
+  text:
+  imagePath:
+},{
+  id:
+  name:
+  costLabel:
+  power:
+  toughness:
+  text:
+  imagePath:
+},{
+  id:
+  name:
+  costLabel:
+  power:
+  toughness:
+  text:
+  imagePath:
+},{
+  id:
+  name:
+  costLabel:
+  power:
+  toughness:
+  text:
+  imagePath:
+},{
+  id:
+  name:
+  costLabel:
+  power:
+  toughness:
+  text:
+  imagePath:
+},{
+  id:
+  name:
+  costLabel:
+  power:
+  toughness:
+  text:
+  imagePath:
 },
 {
   id: 'ultima',
