@@ -1315,240 +1315,688 @@ export const CARD_POOL: CardDefinition[] = [
   "That creature becomes a Mutant in addition to its other types. Whenever a Mutant you control dies during your turn, you draw cards equal to its power.",
   imagePath:'/assets/cards/jenova-ancient-calamity'
 },{
-  id:
-  name:
-  costLabel:
-  type:
-  power:
-  toughness:
-  text:
-  imagePath:'/assets/cards/'
+  id: 'jidoor-aristocratic-capital',
+  name: 'Jidoor, Aristocratic Capital',
+  costLabel:'-',
+  type: 'land',
+  text:"This land enters tapped. \nTap: Add U.\nOverture 4UU\n" +
+  "Sorcery — Adventure\n Target opponent mills half their library, rounded down. (Then exile this card. You may play the land later from exile.)",
+  imagePath:'/assets/cards/jidoor-aristocratic-capital'
+},
+{
+  id: 'jill-shiva-s-dominant',
+  name: "Jill, Shiva's Dominant",
+  costLabel: '2U',
+  type: 'creature',
+  subtype: 'Legendary Creature \u2014 Human Noble Warrior',
+  power: 2,
+  toughness: 2,
+  text: "When Jill enters, return up to one other target nonland permanent to its owner’s hand.\n" +
+  "3UU, Tap: Exile Jill, then return it to the battlefield transformed under its owner’s control. Activate only as a sorcery.",
+  imagePath:'/assets/cards/jill-shiva-s-dominant',
+  transformsInto: 'Shiva, Warden of Ice'
+},
+{
+  id: 'shiva-warden-of-ice',
+  name:'Shiva, Warden of Ice',
+  costLabel: '-',
+  type: 'creature',
+  power: 4,
+  toughness: 5,
+  text: "I, II — Mesmerize — Target creature can’t be blocked this turn. \n" +
+  "III — Cold Snap — Tap all lands your opponents control. Exile Shiva, then return it to the battlefield (front face up).",
+  imagePath:'/assets/cards/shiva-warden-of-ice'
+},
+{
+  id:'joshua-phoenix-s-dominant',
+  name: "Joshua, Phoenix's Dominant",
+  costLabel:'1RW',
+  type: 'creature',
+  subtype: 'Legendary Creature \u2014 Human Noble Wizard',
+  power:3,
+  toughness: 4,
+  text: "When Joshua enters, discard up to two cards, then draw that many cards. \n" +
+  "3RW, Tap: Exile Joshua, then return it to the battlefield transformed under its owner’s control. Activate only as a sorcery.",
+  imagePath:'/assets/cards/joshua-phoenix-s-dominant',
+  transformsInto:'Phoenix, Warden of Fire'
+},
+{
+  id: 'phoenix-warden-of-fire',
+  name: 'Phoenix, Warden of Fire',
+  costLabel:'-',
+  type: 'creature',
+  power: 4,
+  toughness: 4,
+  text: 'I, II — Rising Flames — Phoenix deals 2 damage to each opponent. \n' +
+  "III — Flames of Rebirth — Return any number of target creature cards with total mana value 6 or less from your graveyard to the battlefield. \n" +
+  "Exile Phoenix, then return it to the battlefield (front face up). \nFlying, lifelink",
+  imagePath:'/assets/cards/phoenix-warden-of-fire'
+},
+{
+  id: 'judge-magister-gabranth',
+  name: 'Judge Magister Gabranth',
+  costLabel: 'WB',
+  type: 'creature',
+  subtype: 'Legendary Creature \u2014 Human Advisor Knight',
+  power: 2,
+  toughness: 2,
+  text: "Menace \n(This creature can’t be blocked except by two or more creatures.) \n" +
+  "Whenever another creature or artifact you control dies, put a +1/+1 counter on Judge Magister Gabranth.",
+  imagePath:'/assets/cards/judge-magister-gabranth'
+},
+{
+  id: 'judgment-bolt',
+  name: 'Judgment Bolt',
+  costLabel: '3R',
+  type: 'instant',
+  text: "Judgment Bolt deals 5 damage to target creature and X damage to that creature’s controller, where X is the number of Equipment you control.",
+  imagePath:'/assets/cards/judgment-bolt'
 },{
-  id:
-  name:
-  costLabel:
-  type:
-  power:
-  toughness:
-  text:
-  imagePath:'/assets/cards/'
-},{
-  id:
-  name:
-  costLabel:
-  type:
-  power:
-  toughness:
-  text:
-  imagePath:'/assets/cards/'
-},{
-  id:
-  name:
-  costLabel:
-  type:
-  power:
-  toughness:
-  text:
-  imagePath:'/assets/cards/'
-},{
-  id:
-  name:
-  costLabel:
-  type:
-  power:
-  toughness:
-  text:
-  imagePath:'/assets/cards/'
-},{
-  id:
-  name:
-  costLabel:
-  type:
-  power:
-  toughness:
-  text:
-  imagePath:'/assets/cards/'
-},{
-  id:
-  name:
-  costLabel:
-  type:
-  power:
-  toughness:
-  text:
-  imagePath:'/assets/cards/'
-},{
-  id:
-  name:
-  costLabel:
-  type:
-  power:
-  toughness:
-  text:
-  imagePath:'/assets/cards/'
-},{
-  id:
-  name:
-  costLabel:
-  type:
-  power:
-  toughness:
-  text:
-  imagePath:'/assets/cards/'
-},{
-  id:
-  name:
-  costLabel:
-  type:
-  power:
-  toughness:
-  text:
-  imagePath:'/assets/cards/'
-},{
-  id:
-  name:
-  costLabel:
-  type:
-  power:
-  toughness:
-  text:
-  imagePath:'/assets/cards/'
-},{
-  id:
-  name:
-  costLabel:
-  type:
-  power:
-  toughness:
-  text:
-  imagePath:'/assets/cards/'
-},{
-  id:
-  name:
-  costLabel:
-  type:
-  power:
-  toughness:
-  text:
-  imagePath:'/assets/cards/'
-},{
-  id:
-  name:
-  costLabel:
-  type:
-  power:
-  toughness:
-  text:
-  imagePath:'/assets/cards/'
-},{
-  id:
-  name:
-  costLabel:
-  type:
-  power:
-  toughness:
-  text:
-  imagePath:'/assets/cards/'
-},{
-  id:
-  name:
-  costLabel:
-  type:
-  power:
-  toughness:
-  text:
-  imagePath:'/assets/cards/'
-},{
-  id:
-  name:
-  costLabel:
-  type:
-  power:
-  toughness:
-  text:
-  imagePath:'/assets/cards/'
-},{
-  id:
-  name:
-  costLabel:
-  type:
-  power:
-  toughness:
-  text:
-  imagePath:'/assets/cards/'
-},{
-  id:
-  name:
-  costLabel:
-  type:
-  power:
-  toughness:
-  text:
-  imagePath:'/assets/cards/'
-},{
-  id:
-  name:
-  costLabel:
-  type:
-  power:
-  toughness:
-  text:
-  imagePath:'/assets/cards/'
-},{
-  id:
-  name:
-  costLabel:
-  type:
-  power:
-  toughness:
-  text:
-  imagePath:'/assets/cards/'
-},{
-  id:
-  name:
-  costLabel:
-  type:
-  power:
-  toughness:
-  text:
-  imagePath:'/assets/cards/'
-},{
-  id:
-  name:
-  costLabel:
-  type:
-  power:
-  toughness:
-  text:
-  imagePath:'/assets/cards/'
-},{
-  id:
-  name:
-  costLabel:
-  type:
-  power:
-  toughness:
-  text:
-  imagePath:'/assets/cards/'
-},{
-  id:
-  name:
-  costLabel:
-  type:
-  power:
-  toughness:
-  text:
-  imagePath:'/assets/cards/'
-},{
-  id:
-  name:
-  costLabel:
-  type:
-  power:
-  toughness:
-  text:
-  imagePath:'/assets/cards/'
-},{
+  id: 'jumbo-cactuar',
+  name: 'Jumbo Cactuar',
+  costLabel: '5GG',
+  type: 'creature',
+  power: 1,
+  toughness: 7,
+  text: "10,000 Needles — Whenever this creature attacks, it gets +9999/+0 until end of turn.",
+  imagePath:'/assets/cards/jumbo-cactuar'
+},
+{
+  id: 'kain-traitorous-dragoon',
+  name: 'Kain, Traitorous Dragoon',
+  costLabel: '2B',
+  type: 'creature',
+  subtype: 'Legendary Creature \u2014 Human Knight',
+  power: 2,
+  toughness: 4,
+  text: 'Jump — During your turn, Kain has flying. \n' +
+  "Whenever Kain deals combat damage to a player, that player gains control of Kain. If they do, you draw that many cards, " +
+  "create that many tapped Treasure tokens, then lose that much life.",
+  imagePath:'/assets/cards/kain-traitorous-dragoon'
+},
+{
+  id: 'kefka-court-mage',
+  name: 'Kefka, Court Mage',
+  costLabel: '2UBR',
+  type: 'creature',
+  subtype: 'Legendary Creature \u2014 Human Wizard',
+  power: 4,
+  toughness: 5,
+  text: "Whenever Kefka enters or attacks, each player discards a card. Then you draw a card for each card type among cards discarded this way.\n" +
+  "8: Each opponent sacrifices a permanent of their choice. Transform Kefka. Activate only as a sorcery.",
+  imagePath:'/assets/cards/kefka-court-mage',
+  transformsInto:"Kefka, Court Mage"
+},
+{
+  id: 'kefka-ruler-of-ruin',
+  name: 'Kefka, Court Mage',
+  costLabel: '-',
+  type: 'creature',
+  power: 5,
+  toughness: 7,
+  text: 'Flying \n Whenever an opponent loses life during your turn, you draw that many cards.',
+  imagePath:'/assets/cards/kefka-ruler-of-ruin'
+},
+{
+  id: 'kuja-genome-sorcerer',
+  name: 'Kuja, Genome Sorcerer',
+  costLabel: '2BR',
+  type: 'creature',
+  subtype: 'Legendary Creature \u2014 Human Mutant Wizard',
+  power: 3,
+  toughness: 4,
+  text: 'At the beginning of your end step, create a tapped 0/1 black Wizard creature token with ' +
+  '“Whenever you cast a noncreature spell, this token deals 1 damage to each opponent.” Then if you control four or more Wizards, transform Kuja.',
+  imagePath:'/assets/cards/kuja-genome-sorcerer',
+  transformsInto: 'Trance Kuja, Fate Defied'
+},
+{
+  id:'trance-kuja-fate-defied',
+  name: 'Trance Kuja, Fate Defied',
+  costLabel: '-',
+  type: 'creature',
+  power: 4,
+  toughness: 6,
+  text: 'Flare Star — If a Wizard you control would deal damage to a permanent or player, it deals double that damage instead.',
+  imagePath:'/assets/cards/trance-kuja-fate-defied'
+},
+{
+  id: 'laughing-mad',
+  name: 'Laughing Mad',
+  costLabel: '2R',
+  type: 'instant',
+  text: 'As an additional cost to cast this spell, discard a card.\nDraw two cards.\nFlashback 3R',
+  imagePath:'/assets/cards/laughing-mad'
+},
+{
+  id: 'lightning-army-of-one',
+  name: 'Lightning, Army of One',
+  costLabel: '1RW',
+  type: 'creature',
+  subtype: 'Legendary Creature \u2014 Human Soldier',
+  power: 3,
+  toughness: 2,
+  text: "First strike, trample, lifelink\n Stagger — Whenever Lightning deals combat damage to a player," +
+  "until your next turn, if a source would deal damage to that player or a permanent that player controls, it deals double that damage instead.",
+  imagePath:'/assets/cards/lightning-army-of-one'
+},
+{
+  id: 'lightning-security-sergeant',
+  name: 'Lightning, Security Sergeant',
+  costLabel: '2R',
+  type: 'creature',
+  subtype: 'Legendary Creature \u2014 Human Soldier',
+  power: 2,
+  toughness: 3,
+  text: "Menace \n" +
+  "Whenever Lightning deals combat damage to a player, exile the top card of your library. You may play that card for as long as you control Lightning.",
+  imagePath:'/assets/cards/lightning-security-sergeant'
+},
+{
+  id: 'light-of-judgment',
+  name: 'Light of Judgment',
+  costLabel: '4R',
+  type: 'instant',
+  text: 'Light of Judgment deals 6 damage to target creature. Destroy up to one Equipment attached to that creature.',
+  imagePath:'/assets/cards/light-of-judgment'
+},
+{
+  id: 'lindblum-industrial-regency',
+  name: 'Lindblum, Industrial Regency',
+  costLabel: '-',
+  type: 'land',
+  text:'This land enters tapped.\nTap: Add R. \nA city encircled by the ramparts of a massive castle.' +
+  "\nMage Siege 2R \nInstant — Adventure\n " +
+  'Create a 0/1 black Wizard creature token with “Whenever you cast a noncreature spell, this token deals 1 damage to each opponent.”',
+  imagePath:'/assets/cards/lindblum-industrial-regency'
+},
+{
+  id: 'lion-heart',
+  name: 'Lion Heart',
+  costLabel: '4',
+  type: 'artifact',
+  subtype: 'Equipment',
+  text: 'When this Equipment enters, it deals 2 damage to any target.\n Equipped creature gets +2/+1.\n Equip 2',
+  imagePath:'/assets/cards/lion-heart'
+},
+{
+  id: 'locke-cole',
+  name: 'Locke Cole',
+  costLabel: '1UB',
+  type: 'creature',
+  subtype: 'Legendary Creature \u2014 Human Rogue',
+  power: 2,
+  toughness: 3,
+  text: "Deathtouch, lifelink \n Whenever Locke Cole deals combat damage to a player, draw a card, then discard a card.",
+  imagePath:'/assets/cards/locke-cole'
+},
+{
+  id: 'loporrit-scout',
+  name: 'Loporrit Scout',
+  costLabel:'2G',
+  type: 'creature',
+  power: 3,
+  toughness: 2,
+  text: 'Whenever another creature you control enters, this creature gets +1/+1 until end of turn.',
+  imagePath:'/assets/cards/loporrit-scout'
+},
+{
+  id: 'louisoix-s-sacrifice',
+  name: "Louisoix's Sacrifice",
+  costLabel: 'U',
+  type: 'instant',
+  text: 'As an additional cost to cast this spell, sacrifice a legendary creature or pay 2. Counter target activated ability, triggered ability, or noncreature spell.',
+  imagePath:'/assets/cards/louisoix-s-sacrifice'
+},
+{
+  id: 'lunatic-pandora',
+  name:'Lunatic Pandora',
+  costLabel: '1',
+  type: 'artifact',
+  text:"2, Tap: Surveil 1. (Look at the top card of your library. You may put it into your graveyard.) \n" +
+  "6, Tap, Sacrifice Lunatic Pandora: Destroy target nonland permanent.",
+  imagePath:'/assets/cards/lunatic-pandora'
+},
+{
+  id: 'machinist-s-arsenal',
+  name: "Machinist's Arsenal",
+  costLabel: '4W',
+  type: 'artifact',
+  subtype: 'Equipment',
+  text: "Job select (When this Equipment enters, create a 1/1 colorless Hero creature token, then attach this to it.)" +
+  "Equipped creature gets +2/+2 for each artifact you control and is an Artificer in addition to its other types." +
+  "Machina — Equip 4 (4: Attach to target creature you control. Equip only as a sorcery.)",
+  imagePath:'/assets/cards/machinist-s-arsenal'
+},
+{
+  id: 'magic-damper',
+  name: 'Magic Damper',
+  costLabel: 'U',
+  type: 'instant',
+  text: 'Target creature you control gets +1/+1 and gains hexproof until end of turn. Untap it.',
+  imagePath:'/assets/cards/magic-damper'
+},
+{
+  id: 'magic-pot',
+  name: 'Magic Pot',
+  costLabel: '3',
+  type: 'creature',
+  subtype: 'artifact',
+  power: 1,
+  toughness: 4,
+  text: 'When this creature dies, create a Treasure token. (It’s an artifact with “{T}, Sacrifice this token: Add one mana of any color.”)\n' +
+  "2, Tap: Exile target card from a graveyard.",
+  imagePath:'/assets/cards/magic-pot'
+},
+{
+  id:  'magitek-armor',
+  name: 'Magitek Armor',
+  costLabel: '3W',
+  type: 'artifact',
+  power: 4,
+  toughness: 4,
+  text: 'When this Vehicle enters, create a 1/1 colorless Hero creature token. \nCrew 1',
+  imagePath:'/assets/cards/magitek-armor'
+},
+{
+  id: 'magitek-infantry',
+  name: 'Magitek Infantry',
+  costLabel: 'W',
+  type: 'creature',
+  subtype: 'Artifact Robot Soldier',
+  power: 1,
+  toughness: 1,
+  text: "This creature gets +1/+0 as long as you control another artifact. \n" +
+  "2W: Search your library for a card named Magitek Infantry, put it onto the battlefield tapped, then shuffle.",
+  imagePath:'/assets/cards/magitek-infantry'
+},
+{
+  id: 'magitek-scythe',
+  name: 'Magitek Scythe',
+  costLabel: '4',
+  type: 'artifact',
+  subtype: 'Equipment',
+  text: 'A Test of Your Reflexes! — When this Equipment enters, you may attach it to target creature you control. ' +
+  "If you do, that creature gains first strike until end of turn and must be blocked this turn if able." +
+  "Equipped creature gets +2/+1. \nEquip 2",
+  imagePath:'/assets/cards/magitek-scythe'
+},
+{
+  id: 'malboro',
+  name: 'Malboro',
+  costLabel: '4BB',
+  type: 'creature',
+  power: 4,
+  toughness: 4,
+  text: "Bad Breath — When this creature enters, each opponent discards a card, loses 2 life, and exiles the top three cards of their library.\n" +
+  "Swampcycling 2 (2, Discard this card: Search your library for a Swamp card, reveal it, put it into your hand, then shuffle.)",
+  imagePath:'/assets/cards/malboro'
+},
+{
+  id: 'matoya-archon-elder',
+  name: 'Matoya, Archon Elder',
+  costLabel: '2U',
+  type: 'creature',
+  subtype: 'Legendary Creature \u2014 Human Warlock',
+  power: 1,
+  toughness: 4,
+  text: "Whenever you scry or surveil, draw a card. (Draw after you scry or surveil.)",
+  imagePath:'/assets/cards/matoya-archon-elder'
+},
+{
+  id: 'memories-returning',
+  name: 'Memories Returning',
+  costLabel: '2UU',
+  type: 'sorcery',
+  text: 'Reveal the top five cards of your library. Put one of them into your hand. Then choose an opponent. '+
+  "They put one on the bottom of your library. Then you put one into your hand. Then they put one on the bottom of your library. Put the other into your hand.\n"+
+  "Flashback 7UU",
+  imagePath:'/assets/cards/memories-returning'
+},
+{
+  id:'midgar-city-of-mako',
+  name: 'Midgar, City of Mako',
+  costLabel: '-',
+  type: 'land',
+  text: "This land enters tapped. \nTap: Add B. \nA triumph of technology and testament to man’s potential.\n" +
+  "Reactor Raid 2B \nSorcery — Adventure\n "+
+  "You may sacrifice an artifact or creature. If you do, draw two cards. (Then exile this card. You may play the land later from exile.)",
+  imagePath:'/assets/cards/midgar-city-of-mako'
+},
+{
+  id: 'minwu-white-mage',
+  name: 'Minwu, White Mage',
+  costLabel: '3WW',
+  type: 'creature',
+  subtype: "Legendary Ceature \u2014 Human Cleric",
+  power: 3,
+  toughness: 3,
+  text: "Vigilance, lifelink \nWhenever you gain life, put a +1/+1 counter on each Cleric you control.",
+  imagePath:'/assets/cards/minwu-white-mage'
+},
+{
+  id: 'monk-s-fist',
+  name: "Monk's Fist",
+  costLabel: '2',
+  type: 'artifact',
+  subtype: 'Equipment',
+  text:"Job select (When this Equipment enters, create a 1/1 colorless Hero creature token, then attach this to it.)\n" +
+  "Equipped creature gets +1/+0 and is a Monk in addition to its other types.\n" +
+  "Equip 2 (2: Attach to target creature you control. Equip only as a sorcery.)",
+  imagePath:'/assets/cards/monk-s-fist'
+},
+{
+  id: 'moogles-valor',
+  name: "Moogles' Valor",
+  costLabel: '3WW',
+  type:'instant',
+  text: 'For each creature you control, create a 1/2 white Moogle creature token with lifelink. Then creatures you control gain indestructible until end of turn.',
+  imagePath:'/assets/cards/moogles-valor'
+},
+{
+  id: 'mountain',
+  name: 'Mountain',
+  costLabel: '-',
+  type: 'land',
+  text: "(Tap: Add R.)",
+  imagePath:'/assets/cards/mountain'
+},
+{
+  id: 'mysidian-elder',
+  name: 'Mysidian Elde',
+  costLabel: '2R',
+  type: 'creature',
+  power: 1,
+  toughness: 3,
+  text: "When this creature enters, create a 0/1 black Wizard creature token with “Whenever you cast a noncreature spell, this token deals 1 damage to each opponent.”",
+  imagePath:'/assets/cards/mysidian-elder'
+},
+{
+  id: 'namazu-trader',
+  name: 'Namazu Trader',
+  costLabel: '3B',
+  type: 'creature',
+  power: 3,
+  toughness: 4,
+  text: "When this creature enters, you lose 1 life and create a Treasure token. \n"+
+  "Whenever this creature attacks, you may sacrifice another creature or artifact. If you do, surveil 2. ",
+  imagePath:'/assets/cards/namazu-trader'
+},
+{
+  id: 'nibelheim-aflame',
+  name: 'Nibelheim Aflame',
+  costLabel: '2RR',
+  type: 'sorcery',
+  text: 'Choose target creature you control. It deals damage equal to its power to each other creature. If this spell was cast from a graveyard, ' +
+  'discard your hand and draw four cards. \n Flashback 5RR (You may cast this card from your graveyard for its flashback cost. Then exile it.)',
+  imagePath:'/assets/cards/nibelheim-aflame'
+},
+{
+  id: 'ninja-s-blades',
+  name: "Ninja's Blades",
+  costLabel: '2B',
+  type: 'artifact',
+  subtype: 'Equipment',
+  text: "Job select \n Equipped creature gets +1/+1, is a Ninja in addition to its other types, and has " +
+  "“Whenever this creature deals combat damage to a player, draw a card, then discard a card. That player loses life equal to the discarded card’s mana value.”\n" +
+  "Mutsunokami — Equip 2",
+  imagePath:'/assets/cards/ninja-s-blades'
+},
+{
+  id: 'noctis-prince-of-lucis',
+  name: 'Noctis, Prince of Lucis',
+  costLabel: '1WUB',
+  type: 'creature',
+  subtype: 'Legendary Creature \u2014 Human Noble',
+  power: 4,
+  toughness: 3,
+  text: "Lifelink\n You may cast artifact spells from your graveyard by paying 3 life in addition to paying their other costs. " +
+  "If you cast a spell this way, that artifact enters with a finality counter on it.",
+  imagePath:'/assets/cards/noctis-prince-of-lucis'
+},
+{
+  id: 'omega-heartless-evolution',
+  name: 'Omega, Heartless Evolution',
+  costLabel: '5GU',
+  type: 'creature',
+  subtype:'Legendary Artifact Creature \u2014  Robot',
+  power: 8,
+  toughness: 8,
+  text: "Wave Cannon — When Omega enters, for each opponent, tap up to one target nonland permanent that opponent controls. " +
+  "Put X stun counters on each of those permanents and you gain X life, where X is the number of nonbasic lands you control. " +
+  "(If a permanent with a stun counter would become untapped, remove one from it instead.)",
+  imagePath:'/assets/cards/omega-heartless-evolution'
+},
+{
+  id: 'opera-love-song',
+  name: 'Opera Love Song',
+  costLabel: '1R',
+  type: 'instant',
+  text: "Choose one — \n• Exile the top two cards of your library. You may play those cards until your next end step.\n" +
+  "• One or two target creatures each get +2/+0 until end of turn",
+  imagePath:'/assets/cards/opera-love-song'
+},
+{
+  id: 'overkill',
+  name: 'Overkill',
+  costLabel: '2B',
+  type: 'instant',
+  text:'Target creature gets -0/-9999 until end of turn.',
+  imagePath:'/assets/cards/overkill'
+},
+{
+  id: 'paladin-s-arms',
+  name: "Paladin's Arms",
+  costLabel: '2W',
+  type: 'artifact',
+  subtype: 'Equipment',
+  text:"Job select (When this Equipment enters, create a 1/1 colorless Hero creature token, then attach this to it.) \n" +
+  "Equipped creature gets +2/+1, has ward {1}, and is a Knight in addition to its other types. \n" +
+  "Lightbringer and Hero’s Shield — Equip 4 (4: Attach to target creature you control. Equip only as a sorcery.)",
+  imagePath:'/assets/cards/paladin-s-arms'
+},
+{
+  id: 'phantom-train',
+  name: "Phantom Train",
+  costLabel: '3B',
+  type: 'artifact',
+  power: 4,
+  toughness: 4,
+  text: "Trample \n Sacrifice another artifact or creature: Put a +1/+1 counter on this Vehicle." +
+  "It becomes a Spirit artifact creature in addition to its other types until end of turn.",
+  imagePath:'/assets/cards/phantom-train'
+},
+{
+  id: 'phoenix-down',
+  name: 'Phoenix Down',
+  costLabel: 'W',
+  type: 'artifact',
+  text:"1W, Tap, Exile this artifact: Choose one — \n" +
+  "• Return target creature card with mana value 4 or less from your graveyard to the battlefield tapped. \n" +
+  "• Exile target Skeleton, Spirit, or Zombie.",
+  imagePath:'/assets/cards/phoenix-down'
+},
+{
+  id: 'plains',
+  name: "Plains",
+  costLabel: '-',
+  type: 'land',
+  text: '(T: Add W.)',
+  imagePath:'/assets/cards/plains'
+},
+{
+  id: 'poison-the-waters',
+  name: 'Poison the Waters',
+  costLabel: '1B',
+  type: 'sorcery',
+  text: "Choose one — \n• All creatures get -1/-1 until end of turn.\n " +
+  "• Target player reveals their hand. You choose an artifact or creature card from it. That player discards that card.",
+  imagePath:'/assets/cards/poison-the-waters'
+},
+{
+  id: 'prishe-s-wanderings',
+  name: "Prishe's Wanderings",
+  costLabel: '2G',
+  type:'instant',
+  text: 'Search your library for a basic land card or Town card, put it onto the battlefield tapped, then shuffle. '+
+  'When you search your library this way, put a +1/+1 counter on target creature you control.',
+  imagePath:'/assets/cards/prishe-s-wanderings'
+},
+{
+  id: 'prompto-argentum',
+  name: 'Prompto Argentum',
+  costLabel: '1R',
+  type: 'creature',
+  subtype: 'Legendary Creature \u2014 Human Scout',
+  power: 2,
+  toughness: 2,
+  text: "Haste \n Selfie Shot — Whenever you cast a noncreature spell, if at least four mana was spent to cast it, create a Treasure token.",
+  imagePath:'/assets/cards/prompto-argentum'
+},
+{
+  id: 'pupu-ufo',
+  name: "PuPu UFO",
+  costLabel: '2',
+  type: 'creature',
+  subtype: 'Artifact Construct Alien',
+  power: 0,
+  toughness: 4,
+  text: "Flying \n Tap: You may put a land card from your hand onto the battlefield.\n" +
+  "3: Until end of turn, this creature’s base power becomes equal to the number of Towns you control.",
+  imagePath:'/assets/cards/pupu-ufo'
+},
+{
+  id: 'qiqirn-merchant',
+  name: 'Qiqirn Merchant',
+  costLabel: '2U',
+  type: 'creature',
+  power: 1,
+  toughness: 4,
+  text:"1, Tap: Draw a card, then discard a card. \n" +
+  "7, Tap, Sacrifice this creature: Draw three cards. This ability costs 1 less to activate for each Town you control.",
+  imagePath:'/assets/cards/qiqirn-merchant'
+},
+{
+  id: 'queen-brahne',
+  name: 'Queen Brahne',
+  costLabel: '2R',
+  type: 'creature',
+  subtype: 'Legendary Creature Human Noble',
+  power: 2,
+  toughness: 1,
+  text: "Prowess (Whenever you cast a noncreature spell, this creature gets +1/+1 until end of turn.) \n " +
+  "Whenever Queen Brahne attacks, create a 0/1 black Wizard creature token with “Whenever you cast a noncreature spell, this token deals 1 damage to each opponent.”",
+  imagePath:'/assets/cards/queen-brahne'
+},
+{
+  id: 'quina-qu-gourmet',
+  name: 'Quina, Qu Gourmet',
+  costLabel: '2G',
+  type: 'creature',
+  subtype: 'Legendary Creature Qu',
+  power: 2,
+  toughness: 3,
+  text: 'If one or more tokens would be created under your control, those tokens plus a 1/1 green Frog creature token are created instead. \n' +
+  "2, Sacrifice a Frog: Put a +1/+1 counter on Quina.",
+  imagePath:'/assets/cards/quina-qu-gourmet'
+},
+{
+  id: 'quistis-trepe',
+  name: 'Quistis Trepe',
+  costLabel: '2U',
+  type: 'creature',
+  subtype: 'Legendary Creature \u2014 Human Wizard',
+  power: 2,
+  toughness: 2,
+  text: "Blue Magic — When Quistis Trepe enters, you may cast target instant or sorcery card from a graveyard, " +
+  "and mana of any type can be spent to cast that spell. If that spell would be put into a graveyard, exile it instead.",
+  imagePath:'/assets/cards/quistis-trepe'
+},
+{
+  id: 'qutrub-forayer',
+  name: 'Qutrub Forayer',
+  costLabel: '2B',
+  type: 'creature',
+  power: 3,
+  toughness: 2,
+  text: 'When this creature enters, choose one — \n' +
+  '• Destroy target creature that was dealt damage this turn. \n' +
+  '• Exile up to two target cards from a single graveyard.',
+  imagePath:'/assets/cards/qutrub-forayer'
+},
+{
+  id: 'rabanastre-royal-city',
+  name: 'Rabanastre, Royal City',
+  costLabel: '-',
+  type: 'land',
+  text: "This land enters tapped.\n Tap: Add R or W.",
+  imagePath:'/assets/cards/rabanastre-royal-city'
+},
+{
+  id: 'ragnarok-divine-deliverance',
+  name: 'Ragnarok, Divine Deliverance',
+  costLabel: '-',
+  type: 'creature',
+  power: 7,
+  toughness: 6,
+  text: 'Reach, vigilance, menace, trample, haste \n ' +
+  'When Ragnarok dies, destroy target permanent and return target nonlegendary permanent card from your graveyard to the battlefield.',
+  imagePath:'/assets/cards/ragnarok-divine-deliverance'
+},
+{
+  id: 'random-encounter',
+  name: 'Random Encounter',
+  costLabel: '4RR',
+  type: 'sorcery',
+  text: 'Shuffle your library, then mill four cards. Put each creature card milled this way onto the battlefield. ' +
+  'They gain haste. At the beginning of the next end step, return those creatures to their owner’s hand.\n' +
+  'Flashback 6RR',
+  imagePath:'/assets/cards/random-encounter'
+},
+{
+  id: 'raubahn-bull-of-ala-mhigo',
+  name: 'Raubahn, Bull of Ala Mhigo',
+  costLabel: '1R',
+  type: 'creature',
+  subtype: 'Legendary Creature \u2014 Human Warrior',
+  power: 2,
+  toughness: 2,
+  text: 'Ward—Pay life equal to Raubahn’s power.\n Whenever Raubahn attacks, attach up to one target Equipment you control to target attacking creature.',
+  imagePath:'/assets/cards/raubahn-bull-of-ala-mhigo'
+},
+{
+  id: 'reach-the-horizon',
+  name: 'Reach the Horizon',
+  costLabel: '3G',
+  type: 'sorcery',
+  text: 'Search your library for up to two basic land cards and/or Town cards with different names, put them onto the battlefield tapped, then shuffle.',
+  imagePath:'/assets/cards/reach-the-horizon'
+},
+{
+  id: 'red-mage-s-rapier',
+  name: "Red Mage's Rapier",
+  costLabel: '1R',
+  type: 'artifact',
+  subtype: 'Equipment',
+  text: "Job select (When this Equipment enters, create a 1/1 colorless Hero creature token, then attach this to it.) \n" +
+  "Equipped creature has “Whenever you cast a noncreature spell, this creature gets +2/+0 until end of turn” and is a Wizard in addition to its other types.\n" +
+  "Equip 3",
+  imagePath:'/assets/cards/red-mage-s-rapier'
+},
+{
+  id: 'relentless-x-atm092',
+  name: 'Relentless X-ATM092',
+  costLabel: '6',
+  type: 'creature',
+  subtype: 'Artifact Creature Robot Spider',
+  power: 6,
+  toughness: 5,
+  text: 'This creature can’t be blocked except by three or more creatures. \n' +
+  "8: Return this card from your graveyard to the battlefield tapped with a finality counter on it. "+
+  "(If a creature with a finality counter on it would die, exile it instead.)",
+  imagePath:'/assets/cards/relentless-x-atm092'
+},
+{
   id:
   name:
   costLabel:
