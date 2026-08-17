@@ -807,7 +807,47 @@ button {
 }
 
 .library-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.library-grid .card {
+  width: 100%;
+  height: 320px;
+}
+
+.library-grid .card-art {
+  object-fit: contain;
+  background: var(--bg);
+}
+
+.library-grid .card-name-strip {
+  display: none;
+}
+
+.library-grid .card-placeholder-name {
+  font-size: 15px;
+}
+
+.library-grid .card-placeholder-type {
+  font-size: 12px;
+}
+
+.library-grid .card-placeholder-text {
+  font-size: 11px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 6;
+  line-clamp: 6;
+  overflow: hidden;
+}
+
+.library-grid .card-placeholder-cost {
+  font-size: 12px;
+}
+
+.library-grid .card-name-strip {
+  font-size: 13px;
+  padding: 4px 6px;
 }
