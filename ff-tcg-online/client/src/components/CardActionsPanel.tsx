@@ -7,6 +7,7 @@ interface CardActionsPanelProps {
   currentZone: ZoneName;
   onToggleTap: () => void;
   onFlip: () => void;   // add this
+  onCast: () => void;
   onMove: (toZone: ZoneName) => void;
   onAdjustCounter: (label: string, delta: number) => void;
   onClose: () => void;
@@ -29,8 +30,8 @@ const ALL_ZONES: ZoneName[] = ['hand', 'battlefield', 'graveyard', 'exile', 'lib
  * keeps the board grid readable, especially once cards start carrying
  * several counters.
  */
-export default function CardActionsPanel({ definition, instance, currentZone, onToggleTap, onFlip, onMove, onAdjustCounter, onClose }: CardActionsPanelProps) {
-    const [newCounterLabel, setNewCounterLabel] = useState('+1/+1');
+export default function CardActionsPanel({ definition, instance, currentZone, onToggleTap, onFlip, onCast, onMove, onAdjustCounter, onClose }: CardActionsPanelProps) {
+  const [newCounterLabel, setNewCounterLabel] = useState('+1/+1');
 
   return (
     <div className="card-actions-overlay" onClick={onClose}>
@@ -46,6 +47,12 @@ export default function CardActionsPanel({ definition, instance, currentZone, on
         {currentZone === 'battlefield' && (
           <button className="card-action-button" onClick={onToggleTap}>
             {instance.tapped ? 'Untap' : 'Tap'}
+          </button>
+        )}
+
+        {currentZone === 'hand' && definition.type !== 'land' && (
+          <button className="card-action-button" onClick={onCast}>
+            Cast ({definition.costLabel})
           </button>
         )}
 

@@ -1,15 +1,15 @@
 // ============================================================================
-// engine/state.ts
+// engine/state.ts (CLIENT-LOCAL COPY for VS AI / practice mode)
 // ============================================================================
 
 import { CardInstance, GameState, PlayerState } from '../types';
-import { buildDefaultDecklist } from '../data/cards';
+import { SavedDeck } from '../utils/deckStorage';
 import { emptyManaPool } from './mana';
 
 let instanceCounter = 0;
 function nextInstanceId(): string {
   instanceCounter += 1;
-  return `inst-${instanceCounter}`;
+  return `local-inst-${instanceCounter}`;
 }
 
 function shuffle<T>(items: T[]): T[] {
@@ -19,44 +19,6 @@ function shuffle<T>(items: T[]): T[] {
     [arr[i], arr[j]] = [arr[j], arr[i]];
   }
   return arr;
-}
-
-function buildPlayer(id: string, name: string): PlayerState {
-  const decklist = buildDefaultDecklist();
-  const library: CardInstance[] = shuffle(decklist).map((defId) => ({
-    instanceId: nextInstanceId(),
-    defId,
-    ownerId: id,
-    tapped: false,
-    counters: [],
-    damageMarked: 0,
-    summoningSick: false,
-  }));
-
-  return {
-    id,
-    name,
-    life: 20,
-    zones: { library, hand: [], battlefield: [], graveyard: [], exile: [] },
-    ready: false,
-    manaPool: emptyManaPool(),
-  };
-}
-
-export function createInitialState(player1Name: string, player2Name: string, player1Id: string, player2Id: string): GameState {
-  const p1 = buildPlayer(player1Id, player1Name);
-  const p2 = buildPlayer(player2Id, player2Name);
-
-  return {
-    players: [p1, p2],
-    activePlayerId: p1.id,
-    phase: 'pregame',
-    turnNumber: 0,
-    log: [`${p1.name} and ${p2.name} begin a game. Draw your opening hand, then press Ready when you're happy with it.`],
-    winnerId: null,
-    declaredAttackers: [],
-    combatAssignments: [],
-  };
 }
 
 export function getPlayer(state: GameState, playerId: string): PlayerState {
@@ -86,4 +48,54 @@ export function findCardAnywhere(state: GameState, instanceId: string) {
   return null;
 }
 
-export { shuffle, nextInstanceId };
+export function createStateFromDeck(deck: SavedDeck, humanName: string): GameState {
+  const humanId = 'you';
+  const aiId = 'ai';
+
+  function buildPlayer(id: string, name: string): PlayerState {
+    const library: CardInstance[] = shuffle(deck.cardIds).map((defId) => ({
+      instanceId: nextInstanceId(),
+      defId,
+      ownerId: id,
+      tapped: false,
+      counters: [],
+      damageMarked: 0,
+      summoningSick: false,
+    }));
+
+    const commanderInstance: CardInstance = {
+      instanceId: nextInstanceId(),
+      defId: deck.commanderId,
+      ownerId: id,
+      tapped: false,
+      counters: [{ label: 'Commander', amount: 1 }],
+      damageMarked: 0,
+      summoningSick: false,
+    };
+
+    const openingHand = library.splice(0, 7);
+
+    return {
+      id,
+      name,
+      life: 40,
+      zones: { library, hand: [commanderInstance, ...openingHand], battlefield: [], graveyard: [], exile: [] },
+      ready: true,
+      manaPool: emptyManaPool(),
+    };
+  }
+
+  const you = buildPlayer(humanId, humanName);
+  const ai = buildPlayer(aiId, 'AI Opponent');
+
+  return {
+    players: [you, ai],
+    activePlayerId: humanId,
+    phase: 'untap',
+    turnNumber: 1,
+    log: [`${humanName} starts a practice match, both sides playing "${deck.name}".`, "The AI doesn't make real decisions - you control both sides of the board."],
+    winnerId: null,
+    declaredAttackers: [],
+    combatAssignments: [],
+  };
+}

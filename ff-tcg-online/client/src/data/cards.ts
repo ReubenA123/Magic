@@ -49,6 +49,7 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: '-',
     text: 'When this land enters the battlefield, you gain 2 life. Tap: add one colourless mana',
     imagePath: '/assets/cards/adventurers-inn.webp',
+    producesMana: 'C',
   },
   {
     id: 'adelbert-steiner',
@@ -179,6 +180,7 @@ export const CARD_POOL: CardDefinition[] = [
     text: "This land enters tapped. Tap: Add G or U. 5GU Tap: Transform this land. This ability costs 1 less to activate for each other Town you control.",
     imagePath: '/assets/cards/balamb-garden-seed-academy.webp',
     transformsInto: 'balamb-garden-airborne',
+    producesMana: 'G' //edit
   },
   {
     id: 'balamb-garden-airborne',
@@ -208,7 +210,7 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: '1RG',
     power: 4,
     toughness: 3,
-    text: "Reach. Vehicles you control get +1/+1 and have vigilance and reach. Whenever a Vehicle crewed by Balthier and Fran this turn attacks, if it’s the first combat phase of the turn, you may pay 1RG. If you do, after this phase, there is an additional combat phase.",
+    text: "Reach. Vehicles you control get +1/+1 and have vigilance and reach. Whenever a Vehicle crewed by Balthier and Fran this turn attacks, if it\u2019s the first combat phase of the turn, you may pay 1RG. If you do, after this phase, there is an additional combat phase.",
     imagePath: '/assets/cards/balthier-and-fran.webp',
   },
   {
@@ -227,6 +229,7 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: '-',
     text: "This land enters tapped. Tap: Add R or W.",
     imagePath: '/assets/cards/baron-airship-kingdom.webp',
+    producesMana: 'R' //edit
   },
   {
     id: 'barret-wallace',
@@ -363,6 +366,7 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: '-',
     text: "Add Mana \n 1 Tap: Add one mana of any colour. \nCycling 2 (2, Discard this card: Draw a card.)",
     imagePath: '/assets/cards/capital-city.webp',
+    producesMana: 'C'
   },
   {
     id: 'cargo-ship',
@@ -495,6 +499,7 @@ export const CARD_POOL: CardDefinition[] = [
       "\nT: Add mana." +
       "\n2, T: You may play the exiled card without paying its mana cost if you control four or more legendary creatures.",
     imagePath: '/assets/cards/clive-s-hideaway.webp',
+    producesMana: 'C'
   },
   {
     id: 'cloudbound-moogle',
@@ -603,7 +608,8 @@ export const CARD_POOL: CardDefinition[] = [
     type: 'land',
     costLabel: '-',
     text: "This land enters tapped. As it enters, choose a color. \nTap: Add one mana of the chosen color.",
-    imagePath: '/assets/cards/crossroads-village.webp'
+    imagePath: '/assets/cards/crossroads-village.webp',
+    producesMana: 'C'
   },
   {
     id: 'crystal-fragments',
@@ -750,7 +756,8 @@ export const CARD_POOL: CardDefinition[] = [
     type: 'land',
     costLabel: '-',
     text: "T: Add C.\n 5, T: Mill two cards. Then you may sacrifice this land. When you do, return another target permanent card from your graveyard to your hand.",
-    imagePath: '/assets/cards/eden-seat-of-the-sanctum.webp'
+    imagePath: '/assets/cards/eden-seat-of-the-sanctum.webp',
+    producesMana: 'C'
   },
   {
     id: 'edgar-king-of-figaro',
@@ -916,7 +923,8 @@ export const CARD_POOL: CardDefinition[] = [
     type: "land",
     costLabel: "-",
     text: "(T: Add G.)",
-    imagePath: '/assets/cards/forest.webp'
+    imagePath: '/assets/cards/forest.webp',
+    producesMana: 'G'
   }, {
     id: "freya-crescent",
     name: "Freya Crescent",
@@ -1065,7 +1073,8 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: '-',
     type: 'land',
     text: "This land enters tapped. Tap: Add B or G.",
-    imagePath: '/assets/cards/gohn-town-of-ruin.webp'
+    imagePath: '/assets/cards/gohn-town-of-ruin.webp',
+    producesMana: 'B' //edit
   },
   {
     id: 'golbez-crystal-collector',
@@ -1086,7 +1095,8 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: '-',
     type: 'land',
     text: 'This land enters tapped. \nTap: Add R or G.',
-    imagePath: '/assets/cards/gongaga-reactor-town.webp'
+    imagePath: '/assets/cards/gongaga-reactor-town.webp',
+    producesMana: 'R' //edit
   },
   {
     id: 'goobbue-gardener',
@@ -1125,7 +1135,8 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: '-',
     type: 'land',
     text: 'This land enters tapped. \nTap: Add G or U.',
-    imagePath: '/assets/cards/guadosalam-farplane-gateway.webp'
+    imagePath: '/assets/cards/guadosalam-farplane-gateway.webp',
+    producesMana: 'G' //edit
   },
   {
     id: 'gysahl-greens',
@@ -1207,7 +1218,7 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 2,
     text: 'When Ignis Scientia enters, look at the top six cards of your library. You may put a land card from among them onto the battlefield tapped. ' +
       'Put \u2019the rest on the bottom of your library in a random order. \n' +
-      'I’ve Come Up with a New Recipe! — 1GU, Tap: Exile target card from a graveyard. If a creature card was exiled this way, create a Food token.',
+      'I\u2019ve Come Up with a New Recipe! — 1GU, Tap: Exile target card from a graveyard. If a creature card was exiled this way, create a Food token.',
     imagePath: '/assets/cards/ignis-scientia.webp'
   },
   {
@@ -1226,7 +1237,8 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: '-',
     type: 'land',
     text: 'This land enters tapped. \nTap: Add W or B.',
-    imagePath: '/assets/cards/insomnia-crown-city.webp'
+    imagePath: '/assets/cards/insomnia-crown-city.webp',
+    producesMana: 'W'
   },
   {
     id: 'instant-ramen',
@@ -1255,7 +1267,8 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'This land enters tapped. Tap: Add W.' +
       '\nFaith & Grief 3WW \nSorcery — Adventure\n' +
       'Return up to two target artifact and/or enchantment cards from your graveyard to your hand. (Then exile this card. You may play the land later from exile.)',
-    imagePath: '/assets/cards/ishgard-the-holy-see.webp'
+    imagePath: '/assets/cards/ishgard-the-holy-see.webp',
+    producesMana: 'W'
   },
   {
     id: 'island',
@@ -1263,7 +1276,8 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: '-',
     type: 'land',
     text: 'Basic Land — Island \n(Tap: Add U.)',
-    imagePath: '/assets/cards/island.webp'
+    imagePath: '/assets/cards/island.webp',
+    producesMana: 'U'
   },
   {
     id: 'item-shopkeep',
@@ -1316,7 +1330,8 @@ export const CARD_POOL: CardDefinition[] = [
     type: 'land',
     text: "This land enters tapped. \nTap: Add U.\nOverture 4UU\n" +
       "Sorcery — Adventure\n Target opponent mills half their library, rounded down. (Then exile this card. You may play the land later from exile.)",
-    imagePath: '/assets/cards/jidoor-aristocratic-capital.webp'
+    imagePath: '/assets/cards/jidoor-aristocratic-capital.webp',
+    producesMana: 'U'
   },
   {
     id: 'jill-shiva-s-dominant',
@@ -1503,7 +1518,8 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'This land enters tapped.\nTap: Add R. \nA city encircled by the ramparts of a massive castle.' +
       "\nMage Siege 2R \nInstant — Adventure\n " +
       'Create a 0/1 black Wizard creature token with “Whenever you cast a noncreature spell, this token deals 1 damage to each opponent.”',
-    imagePath: '/assets/cards/lindblum-industrial-regency.webp'
+    imagePath: '/assets/cards/lindblum-industrial-regency.webp',
+    producesMana: 'R'
   },
   {
     id: 'lion-heart',
@@ -1656,7 +1672,8 @@ export const CARD_POOL: CardDefinition[] = [
     text: "This land enters tapped. \nTap: Add B. \nA triumph of technology and testament to man’s potential.\n" +
       "Reactor Raid 2B \nSorcery — Adventure\n " +
       "You may sacrifice an artifact or creature. If you do, draw two cards. (Then exile this card. You may play the land later from exile.)",
-    imagePath: '/assets/cards/midgar-city-of-mako.webp'
+    imagePath: '/assets/cards/midgar-city-of-mako.webp',
+    producesMana: 'B'
   },
   {
     id: 'minwu-white-mage',
@@ -1694,7 +1711,8 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: '-',
     type: 'land',
     text: "(Tap: Add R.)",
-    imagePath: '/assets/cards/mountain.webp'
+    imagePath: '/assets/cards/mountain.webp',
+    producesMana: 'R'
   },
   {
     id: 'mysidian-elder',
@@ -1817,7 +1835,8 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: '-',
     type: 'land',
     text: '(T: Add W.)',
-    imagePath: '/assets/cards/plains.webp'
+    imagePath: '/assets/cards/plains.webp',
+    producesMana: 'W'
   },
   {
     id: 'poison-the-waters',
@@ -1925,7 +1944,8 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: '-',
     type: 'land',
     text: "This land enters tapped.\n Tap: Add R or W.",
-    imagePath: '/assets/cards/rabanastre-royal-city.webp'
+    imagePath: '/assets/cards/rabanastre-royal-city.webp',
+    producesMana: 'R' //edit
   },
   {
     id: 'ragnarok-divine-deliverance',
@@ -2339,7 +2359,8 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: '-',
     type: 'land',
     text: 'This land enters tapped. \nTap: Add W or U.',
-    imagePath: '/assets/cards/sharlayan-nation-of-scholars.webp'
+    imagePath: '/assets/cards/sharlayan-nation-of-scholars.webp',
+    producesMana: 'W' //edit
   },
   {
     id: 'shinra-reinforcements',
@@ -2377,7 +2398,8 @@ export const CARD_POOL: CardDefinition[] = [
     type: 'land',
     text: ': Add W. \n ' +
       '3, Tap, Sacrifice an artifact: Put a +1/+1 counter on each creature you control. Activate only as a sorcery.',
-    imagePath: '/assets/cards/cooking-campsite.webp'
+    imagePath: '/assets/cards/cooking-campsite.webp',
+    producesMana: 'W'
   },
   {
     id: 'sidequest-hunt-the-mark',
@@ -2506,9 +2528,10 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: '-',
     type: 'land',
     text: 'This land enters tapped unless it\u2019s your first, second, or third turn of the game.\n' +
-      'Tap: Add M. \n' +
+      'Tap: Add C. \n' +
       'Tap, Pay 1 life: Add one mana of any color.',
-    imagePath: '/assets/cards/starting-town.webp'
+    imagePath: '/assets/cards/starting-town.webp',
+    producesMana: 'C'
   },
   {
   id: 'stiltzkin-moogle-merchant',
@@ -2785,7 +2808,8 @@ export const CARD_POOL: CardDefinition[] = [
   costLabel: '-',
   type: 'land',
   text: 'Tap add B',
-  imagePath:'/assets/cards/swamp.webp'
+  imagePath:'/assets/cards/swamp.webp',
+  producesMana: 'B'
   },
   {
   id: 'syncopate',
@@ -2916,7 +2940,8 @@ export const CARD_POOL: CardDefinition[] = [
   text: '{T}: Add {M}. \n' +
   '{2}, {T}: Flip a coin. If you win the flip, create a Treasure token. \n' +
   '{3}, {T}, Sacrifice two artifacts: Draw a card.',
-  imagePath: '/assets/cards/the-gold-saucer.webp'
+  imagePath: '/assets/cards/the-gold-saucer.webp',
+  producesMana: 'C'
   },
    {
   id: 'the-lunar-whale',
@@ -3117,7 +3142,8 @@ export const CARD_POOL: CardDefinition[] = [
   type: 'land',
   text:'This land enters tapped. \n' +
   '{T}: Add {U} or {B}.',
-  imagePath: '/assets/cards/treno-dark-city.webp'
+  imagePath: '/assets/cards/treno-dark-city.webp',
+  producesMana: 'U' //edit
   },
   {
   id: 'triple-triad',
@@ -3286,7 +3312,8 @@ export const CARD_POOL: CardDefinition[] = [
   type: 'land',
   text: 'This land enters tapped. \n' +
   '{T}: Add {B} or {R}.',
-  imagePath: '/assets/cards/vector-imperial-capital.webp'
+  imagePath: '/assets/cards/vector-imperial-capital.webp',
+  producesMana: 'B' //edit
   },
   {
   id: 'venat-heart-of-hydaelyn',
@@ -3297,7 +3324,7 @@ export const CARD_POOL: CardDefinition[] = [
   power: 3,
   toughness: 3,
   text: 'Whenever you cast a legendary spell, draw a card. This ability triggers only once each turn. \n' +
-  'Hero’s Sundering — {7}, {T}: Exile target nonland permanent. Transform Venat. Activate only as a sorcery.',
+  'Hero\u2019s Sundering — {7}, {T}: Exile target nonland permanent. Transform Venat. Activate only as a sorcery.',
   imagePath: '/assets/cards/venat-heart-of-hydaelyn.webp',
   transformsInto: 'Hydaelyn, the Mothercrystal',
   },
@@ -3381,7 +3408,8 @@ export const CARD_POOL: CardDefinition[] = [
   costLabel: '-',
   type: 'land',
   text: 'Tap Add M',
-  imagePath: '/assets/cards/wastes.webp'
+  imagePath: '/assets/cards/wastes.webp',
+  producesMana: 'C'
   },
   {
   id: 'weapons-vendor',
@@ -3423,7 +3451,8 @@ export const CARD_POOL: CardDefinition[] = [
   type: 'land',
   subtype: 'Town',
   text: 'This land enters tapped. \n{T}: Add {G} or {W}.',
-  imagePath: '/assets/cards/windurst-federation-center.webp'
+  imagePath: '/assets/cards/windurst-federation-center.webp',
+  producesMana: 'G' //edit
   },
   {
   id: 'world-map',
@@ -3500,7 +3529,8 @@ export const CARD_POOL: CardDefinition[] = [
   'Lasting Fayth {4}{G}{G} \n' +
   'Sorcery — Adventure \n' +
   'Create a 1/1 colorless Hero creature token. Put a +1/+1 counter on it for each land you control. (Then exile this card. You may play the land later from exile.)',
-  imagePath: '/assets/cards/zanarkand-ancient-metropolis.webp'
+  imagePath: '/assets/cards/zanarkand-ancient-metropolis.webp',
+  producesMana: 'G'
   },
   {
   id: 'zell-dincht',

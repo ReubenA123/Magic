@@ -16,8 +16,13 @@
 import { CardDefinition } from '../types';
 
 export const CARD_POOL: CardDefinition[] = [
-
-  // --- Creatures ---------------------------------------------------------
+  { id: 'a-realm-reborn.webp',
+    name: 'A Realm Reborn',
+    type: 'enchantment',
+    costLabel: '4GG',
+    text: 'Other permanents you control have Tap Add one mana of any color',
+    imagePath: '/assets/cards/a-realm-reborn.webp'
+  }, 
   {
     id: 'absolute-virtue',
     name: 'Absolute Virtue',
@@ -49,6 +54,7 @@ export const CARD_POOL: CardDefinition[] = [
     id: 'adelbert-steiner',
     name: 'Adelbert Steiner',
     type: 'creature',
+    subtype: 'Legendary Creature Human Knight',
     costLabel: '1W',
     power: 3,
     toughness: 4,
@@ -79,6 +85,7 @@ export const CARD_POOL: CardDefinition[] = [
     id: 'ahriman',
     name: 'Ahriman',
     type: 'creature',
+    subtype: 'Creature Eye Horror',
     costLabel: '2B',
     power: 2,
     toughness: 2,
@@ -97,6 +104,7 @@ export const CARD_POOL: CardDefinition[] = [
     id: 'al-bhed-salvagers',
     name: 'Al Bhed Salvagers',
     type: 'creature',
+    subtype: 'Creature Human Artificer Warrior',
     costLabel: '2B',
     power: 2,
     toughness: 3,
@@ -107,6 +115,7 @@ export const CARD_POOL: CardDefinition[] = [
     id: 'ambrosia-whiteheart',
     name: 'Ambrosia Whiteheart',
     type: 'creature',
+    subtype: 'Legendary Creature Bird',
     costLabel: '1W',
     power: 2,
     toughness: 2,
@@ -117,6 +126,7 @@ export const CARD_POOL: CardDefinition[] = [
     id: 'ancient-adamantoise',
     name: 'Ancient Adamantoise',
     type: 'creature',
+    subtype: 'Creature Turtle',
     costLabel: '5GGG',
     power: 8,
     toughness: 20,
@@ -133,14 +143,6 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 4,
     text: "Demons you control have menace, lifelink, and haste. Starscourge \u2014 At the beginning of combat on your turn, exile up to one target creature card from a graveyard. If you exiled a card this way, create a token thats a copy of that card, except it's a 5/5 black Demon.",
     imagePath: '/assets/cards/ardyn-the-usurper.webp',
-  },
-  {
-    id: 'a-realm-reborn',
-    name: 'A Realm Reborn',
-    type: 'enchantment',
-    costLabel: '4GG',
-    text: " Other permants you control have 'Tap: Add one mana of any color.'",
-    imagePath: '/assets/cards/a-realm-reborn.webp',
   },
   {
     id: 'ashe-princess-of-dalmasca',
@@ -191,7 +193,7 @@ export const CARD_POOL: CardDefinition[] = [
     id: 'balamb-t-rexaur',
     name: 'Balamb T-Rexaur',
     type: 'creature',
-    subtype: 'Legendary Creature \u2014 Dinosaur',
+    subtype: 'Creature \u2014 Dinosaur',
     costLabel: '4GG',
     power: 6,
     toughness: 6,
@@ -3546,7 +3548,7 @@ export const CARD_POOL: CardDefinition[] = [
   'Whenever an opponent gains control of a permanent from you, you create a Treasure token.',
   imagePath: '/assets/cards/zidane-tantalus-thief.webp'
   },
-  {
+ {
   id: 'zodiark-umbral-god',
   name: 'Zodiark, Umbral God',
   costLabel: 'BBBBB',

@@ -2,12 +2,14 @@ import React, { useEffect, useState } from 'react';
 import Login from '../components/Login';
 import PregameSetup from '../components/PregameSetup';
 import GameBoard from '../components/GameBoard';
-import { connectToGame, getSocket } from '../api/socket';
+import VsAiPage from './VsAiPage';
+import { connectToGame, getSocket, sendAction } from '../api/socket';
 import { GameState } from '../types';
 
 type ConnectionStatus = 'logged-out' | 'connecting' | 'waiting-for-opponent' | 'in-game' | 'error';
 
 export default function VersusPage() {
+  const [showVsAi, setShowVsAi] = useState(false);
   const [status, setStatus] = useState<ConnectionStatus>('logged-out');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -59,8 +61,12 @@ export default function VersusPage() {
     };
   }, []);
 
+  if (showVsAi) {
+    return <VsAiPage />;
+  }
+
   if (status === 'logged-out' || status === 'connecting' || status === 'error') {
-    return <Login onSubmit={handleLogin} errorMessage={errorMessage} />;
+    return <Login onSubmit={handleLogin} errorMessage={errorMessage} onVsAi={() => setShowVsAi(true)} />;
   }
 
   if (status === 'waiting-for-opponent') {
@@ -76,7 +82,7 @@ export default function VersusPage() {
     if (gameState.phase === 'pregame') {
       return <PregameSetup state={gameState} yourPlayerId={yourPlayerId} />;
     }
-    return <GameBoard state={gameState} yourPlayerId={yourPlayerId} actionError={actionError} />;
+    return <GameBoard state={gameState} yourPlayerId={yourPlayerId} actionError={actionError} onAction={sendAction} />;
   }
 
   return null;
