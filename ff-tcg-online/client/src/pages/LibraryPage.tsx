@@ -1,21 +1,35 @@
 import React, { useMemo, useState } from 'react';
-import { CARD_POOL } from '../data/cards';
+import { CARD_POOL, getCardDefinition } from '../data/cards';
 import { CardType } from '../types';
 import Card from '../components/Card';
+import { isTransformBackFace } from '../utils/commander';
 
 const TYPE_FILTERS: (CardType | 'all')[] = ['all', 'creature', 'instant', 'sorcery', 'artifact', 'enchantment', 'land'];
 
 export default function LibraryPage() {
   const [filter, setFilter] = useState<CardType | 'all'>('all');
   const [query, setQuery] = useState('');
+  // Which transformable cards are currently showing their back face, keyed
+  // by the FRONT face's id (the only id that ever appears as a tile here).
+  const [flippedIds, setFlippedIds] = useState<Set<string>>(new Set());
 
   const filtered = useMemo(() => {
     return CARD_POOL.filter((c) => {
+      if (isTransformBackFace(c.id)) return false; // shown via the flip icon instead
       const matchesType = filter === 'all' || c.type === filter;
       const matchesQuery = c.name.toLowerCase().includes(query.toLowerCase());
       return matchesType && matchesQuery;
     });
   }, [filter, query]);
+
+  function toggleFlip(id: string) {
+    setFlippedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   return (
     <div className="library-page">
@@ -31,9 +45,20 @@ export default function LibraryPage() {
       </div>
       <p className="library-count">{filtered.length} card(s)</p>
       <div className="library-grid">
-        {filtered.map((def) => (
-          <Card key={def.id} definition={def} />
-        ))}
+        {filtered.map((def) => {
+          const isFlippable = !!def.transformsInto;
+          const shownDef = isFlippable && flippedIds.has(def.id) ? getCardDefinition(def.transformsInto!) : def;
+          return (
+            <div key={def.id} className="library-card-wrapper">
+              <Card definition={shownDef} />
+              {isFlippable && (
+                <button className="flip-icon-button" onClick={() => toggleFlip(def.id)} title="Flip / show transformed side">
+                  {'\u21bb'}
+                </button>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

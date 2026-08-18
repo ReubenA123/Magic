@@ -1,6 +1,6 @@
 import React from 'react';
 
-export type Page = 'home' | 'library' | 'versus';
+export type Page = 'home' | 'library' | 'deckbuilder' | 'versus';
 
 interface NavBarProps {
   page: Page;
@@ -11,6 +11,7 @@ export default function NavBar({ page, onNavigate }: NavBarProps) {
   const tabs: { id: Page; label: string }[] = [
     { id: 'home', label: 'Home' },
     { id: 'library', label: 'Library' },
+    { id: 'deckbuilder', label: 'Deck Builder' },
     { id: 'versus', label: 'Versus' },
   ];
 
