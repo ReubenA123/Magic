@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { CardInstance, GameAction, GameState, ManaColor, PlayerState, ZoneName } from '../types';
 import { getCardDefinition } from '../data/cards';
-import { parseCostLabel } from '../engine/mana';
+import { parseCostLabel, canPay } from '../engine/mana';
 import Card from './Card';
 import PhaseBar from './PhaseBar';
 import CardActionsPanel from './CardActionsPanel';
@@ -19,14 +19,27 @@ const LIFE_STEPS = [-5, -1, 1, 5];
 const MANA_COLOR_ORDER: ManaColor[] = ['W', 'U', 'B', 'R', 'G', 'C'];
 
 function findCard(state: GameState, instanceId: string): { player: PlayerState; zone: ZoneName; card: CardInstance } | null {
+  const zoneNames: ZoneName[] = ['library', 'hand', 'battlefield', 'graveyard', 'exile', 'commander'];
   for (const player of state.players) {
-    const zoneNames: ZoneName[] = ['library', 'hand', 'battlefield', 'graveyard', 'exile'];
     for (const zone of zoneNames) {
       const card = player.zones[zone].find((c) => c.instanceId === instanceId);
       if (card) return { player, zone, card };
     }
   }
   return null;
+}
+
+function splitBattlefield(cards: CardInstance[]) {
+  const creatures: CardInstance[] = [];
+  const others: CardInstance[] = [];
+  const lands: CardInstance[] = [];
+  for (const c of cards) {
+    const def = getCardDefinition(c.defId);
+    if (def.type === 'creature') creatures.push(c);
+    else if (def.type === 'land') lands.push(c);
+    else others.push(c);
+  }
+  return { creatures, others, lands };
 }
 
 function ManaRow({ player }: { player: PlayerState }) {
@@ -59,7 +72,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   const [blockerAssignments, setBlockerAssignments] = useState<Record<string, string[]>>({});
   const [pendingBlocker, setPendingBlocker] = useState<string | null>(null);
 
-  const recentLog = useMemo(() => state.log.slice(-10), [state.log]);
+  const recentLog = useMemo(() => state.log.slice(-30), [state.log]);
   const openCard = openPanelId ? findCard(state, openPanelId) : null;
 
   const isDeclaringAttackers = state.phase === 'declare_attackers' && (soloControl || state.activePlayerId === yourPlayerId);
@@ -71,12 +84,21 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
 
   function handleToggleTap(card: CardInstance) {
     const def = getCardDefinition(card.defId);
-    if (!card.tapped && def.type === 'land' && def.producesMana === 'any') {
-      const chosen = window.prompt('Choose a colour to produce (W, U, B, R, G, or C for colourless):', 'C');
-      const upper = (chosen ?? '').trim().toUpperCase();
-      if (!['W', 'U', 'B', 'R', 'G', 'C'].includes(upper)) return;
-      onAction({ type: 'TOGGLE_TAP', instanceId: card.instanceId, chosenColor: upper as ManaColor });
-      return;
+    if (!card.tapped && def.type === 'land' && def.producesMana) {
+      if (Array.isArray(def.producesMana)) {
+        const choice = window.prompt(`Choose a colour to produce (${def.producesMana.join(', ')}):`, def.producesMana[0]);
+        const upper = (choice ?? '').trim().toUpperCase();
+        if (!def.producesMana.includes(upper as ManaColor)) return;
+        onAction({ type: 'TOGGLE_TAP', instanceId: card.instanceId, chosenColor: upper as ManaColor });
+        return;
+      }
+      if (def.producesMana === 'any') {
+        const choice = window.prompt('Choose a colour to produce (W, U, B, R, G, or C for colourless):', 'C');
+        const upper = (choice ?? '').trim().toUpperCase();
+        if (!['W', 'U', 'B', 'R', 'G', 'C'].includes(upper)) return;
+        onAction({ type: 'TOGGLE_TAP', instanceId: card.instanceId, chosenColor: upper as ManaColor });
+        return;
+      }
     }
     onAction({ type: 'TOGGLE_TAP', instanceId: card.instanceId });
   }
@@ -124,106 +146,118 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     setBlockerAssignments({});
   }
 
-  function renderBattlefield(player: PlayerState, isOpponentSide: boolean) {
+  function renderCreatureCard(c: CardInstance, isOpponentSide: boolean) {
+    const isAttacker = state.declaredAttackers.includes(c.instanceId);
+    const def = getCardDefinition(c.defId);
+    const canBeBlockTarget = isDeclaringBlockers && isOpponentSide && isAttacker;
+    const canAttackThis = isDeclaringAttackers && !isOpponentSide && !c.tapped && !c.summoningSick;
+    const canBeBlocker = isDeclaringBlockers && !isOpponentSide && !c.tapped;
+    const selected = selectedAttackers.has(c.instanceId) || pendingBlocker === c.instanceId;
     return (
-      <div className="battlefield-row">
-        {player.zones.battlefield.map((c) => {
-          const isAttacker = state.declaredAttackers.includes(c.instanceId);
-          const def = getCardDefinition(c.defId);
-          const canBeBlockTarget = isDeclaringBlockers && isOpponentSide && isAttacker;
-          const canAttackThis = isDeclaringAttackers && !isOpponentSide && def.type === 'creature' && !c.tapped && !c.summoningSick;
-          const canBeBlocker = isDeclaringBlockers && !isOpponentSide && def.type === 'creature' && !c.tapped;
-          const selected = selectedAttackers.has(c.instanceId) || pendingBlocker === c.instanceId;
-          return (
-            <div key={c.instanceId} className={isAttacker ? 'attacking-creature' : ''}>
-              <Card
-                definition={def}
-                instance={c}
-                selected={selected}
-                onClick={() => {
-                  if (canBeBlockTarget) handleAttackerClickForBlocking(c.instanceId);
-                  else if (canAttackThis) toggleAttacker(c.instanceId);
-                  else if (canBeBlocker) handleBlockerCandidateClick(c.instanceId);
-                  else setOpenPanelId(c.instanceId);
-                }}
-              />
-            </div>
-          );
-        })}
+      <div key={c.instanceId} className={isAttacker ? 'attacking-creature' : ''}>
+        <Card
+          definition={def}
+          instance={c}
+          selected={selected}
+          onClick={() => {
+            if (canBeBlockTarget) handleAttackerClickForBlocking(c.instanceId);
+            else if (canAttackThis) toggleAttacker(c.instanceId);
+            else if (canBeBlocker) handleBlockerCandidateClick(c.instanceId);
+            else setOpenPanelId(c.instanceId);
+          }}
+        />
       </div>
     );
   }
 
-  function renderZoneCounts(player: PlayerState) {
-    return (
-      <div className="zone-counts">
-        <button className="zone-count-button" onClick={() => setOpenZone({ playerId: player.id, zone: 'graveyard' })}>
-          Graveyard ({player.zones.graveyard.length})
-        </button>
-        <button className="zone-count-button" onClick={() => setOpenZone({ playerId: player.id, zone: 'exile' })}>
-          Exile ({player.zones.exile.length})
-        </button>
-        <span className="library-count">Library: {player.zones.library.length}</span>
-      </div>
-    );
+  function renderPlainCard(c: CardInstance) {
+    const def = getCardDefinition(c.defId);
+    return <Card key={c.instanceId} definition={def} instance={c} onClick={() => setOpenPanelId(c.instanceId)} />;
   }
 
-  return (
-    <div className="game-board">
-      <PhaseBar
-        phase={state.phase}
-        turnNumber={state.turnNumber}
-        isYourTurn={isYourTurn}
-        onNextPhase={() => onAction({ type: 'NEXT_PHASE' }, state.activePlayerId)}
-        onEndTurn={() => onAction({ type: 'END_TURN' }, state.activePlayerId)}
-      />
+  function renderPlayerZone(player: PlayerState, isOpponentSide: boolean) {
+    const { creatures, others, lands } = splitBattlefield(player.zones.battlefield);
+    const commanderCard = player.zones.commander[0];
 
-      {actionError && <div className="action-error-banner">{actionError}</div>}
-      {state.winnerId && <div className="winner-banner">{state.winnerId === yourPlayerId ? 'You win!' : `${opponent.name} wins.`}</div>}
-
-      <section className="player-zone opponent-zone">
+    return (
+      <section className={`player-zone ${isOpponentSide ? 'opponent-zone' : 'your-zone'}`}>
         <div className="mana-row-wrapper">
-          <ManaRow player={opponent} />
+          <ManaRow player={player} />
         </div>
+
+        <div className="zone-top-row">
+          <div className="corner-column">
+            <div className="corner-label">Commander</div>
+            {commanderCard ? (
+              <Card definition={getCardDefinition(commanderCard.defId)} instance={commanderCard} onClick={() => setOpenPanelId(commanderCard.instanceId)} />
+            ) : (
+              <div className="corner-box">Not in zone</div>
+            )}
+            <div className="corner-box">Library: {player.zones.library.length}</div>
+          </div>
+
+          <div className="zone-center-column">
+            <div className="battlefield-row creatures-row">{creatures.map((c) => renderCreatureCard(c, isOpponentSide))}</div>
+            <div className="battlefield-row others-row">{others.map(renderPlainCard)}</div>
+            <div className="battlefield-row lands-row">{lands.map(renderPlainCard)}</div>
+          </div>
+
+          <div className="corner-column">
+            <button className="corner-box corner-box-clickable" onClick={() => setOpenZone({ playerId: player.id, zone: 'graveyard' })}>
+              Graveyard ({player.zones.graveyard.length})
+            </button>
+            <button className="corner-box corner-box-clickable" onClick={() => setOpenZone({ playerId: player.id, zone: 'exile' })}>
+              Exile ({player.zones.exile.length})
+            </button>
+          </div>
+        </div>
+
+        <div className={`hand-row ${isOpponentSide ? 'opponent-hand' : 'your-hand'}`}>
+          {isOpponentSide
+            ? player.zones.hand.map((c) => <Card key={c.instanceId} definition={getCardDefinition(c.defId)} faceDown />)
+            : player.zones.hand.map((c) => {
+                const def = getCardDefinition(c.defId);
+                const affordable = def.type === 'land' || canPay(player.manaPool, parseCostLabel(def.costLabel), 0);
+                return <Card key={c.instanceId} definition={def} instance={c} dimmed={!affordable} onClick={() => setOpenPanelId(c.instanceId)} />;
+              })}
+        </div>
+
         <div className="life-row">
           <span className="life-total">
-            {opponent.name}: {opponent.life} life
+            {player.name}: {player.life} life
           </span>
           <div className="life-buttons">
             {LIFE_STEPS.map((delta) => (
-              <button key={delta} className="life-step-button" onClick={() => adjustLife(opponent.id, delta)}>
+              <button key={delta} className="life-step-button" onClick={() => adjustLife(player.id, delta)}>
                 {delta > 0 ? `+${delta}` : delta}
               </button>
             ))}
-            {soloControl && (
-              <button className="draw-button" onClick={() => onAction({ type: 'DRAW_CARD' }, opponent.id)}>
+            {(isOpponentSide ? soloControl : true) && (
+              <button className="draw-button" onClick={() => onAction({ type: 'DRAW_CARD' }, player.id)}>
                 Draw
               </button>
             )}
           </div>
         </div>
-        <div className="hand-row opponent-hand">
-          {opponent.zones.hand.map((c) => (
-            <Card key={c.instanceId} definition={getCardDefinition(c.defId)} faceDown />
-          ))}
-        </div>
-        {renderBattlefield(opponent, true)}
-        {renderZoneCounts(opponent)}
       </section>
+    );
+  }
 
-      <section className="middle-zone">
-        <div className="log-view">
-          {recentLog.map((line, i) => (
-            <div key={i} className="log-line">
-              {line}
-            </div>
-          ))}
-        </div>
-      </section>
+  return (
+    <div className="game-board-layout">
+      <div className="game-board-main">
+        <PhaseBar
+          phase={state.phase}
+          turnNumber={state.turnNumber}
+          isYourTurn={isYourTurn}
+          onNextPhase={() => onAction({ type: 'NEXT_PHASE' }, state.activePlayerId)}
+          onEndTurn={() => onAction({ type: 'END_TURN' }, state.activePlayerId)}
+        />
 
-      <section className="player-zone your-zone">
-        {renderZoneCounts(you)}
-        {renderBattlefield(you, false)}
+        {actionError && <div className="action-error-banner">{actionError}</div>}
+        {state.winnerId && <div className="winner-banner">{state.winnerId === yourPlayerId ? 'You win!' : `${opponent.name} wins.`}</div>}
+
+        {renderPlayerZone(opponent, true)}
 
         {isDeclaringAttackers && (
           <div className="combat-controls">
@@ -237,48 +271,39 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           </div>
         )}
 
-        <div className="hand-row your-hand">
-          {you.zones.hand.map((c) => (
-            <Card key={c.instanceId} definition={getCardDefinition(c.defId)} instance={c} onClick={() => setOpenPanelId(c.instanceId)} />
+        {renderPlayerZone(you, false)}
+
+        <div className="bottom-left-controls">
+          <button className="undo-button" onClick={() => onAction({ type: 'UNDO' })} title="Step back through recent actions">
+            {'\u21b6'} Undo
+          </button>
+          <button className="concede-button" onClick={() => onAction({ type: 'CONCEDE' }, yourPlayerId)}>
+            Concede
+          </button>
+        </div>
+      </div>
+
+      <aside className="event-log-sidebar">
+        <h3>Event Log</h3>
+        <div className="log-view">
+          {[...recentLog].reverse().map((line, i) => (
+            <div key={i} className="log-line">
+              {line}
+            </div>
           ))}
         </div>
-        <div className="mana-row-wrapper">
-          <ManaRow player={you} />
-        </div>
-        <div className="life-row">
-          <span className="life-total">
-            {you.name}: {you.life} life
-          </span>
-          <div className="life-buttons">
-            {LIFE_STEPS.map((delta) => (
-              <button key={delta} className="life-step-button" onClick={() => adjustLife(you.id, delta)}>
-                {delta > 0 ? `+${delta}` : delta}
-              </button>
-            ))}
-            <button className="draw-button" onClick={() => onAction({ type: 'DRAW_CARD' }, you.id)}>
-              Draw
-            </button>
-          </div>
-        </div>
-      </section>
-
-      <div className="bottom-left-controls">
-        <button className="undo-button" onClick={() => onAction({ type: 'UNDO' })} title="Step back through recent actions">
-          {'\u21b6'} Undo
-        </button>
-        <button className="concede-button" onClick={() => onAction({ type: 'CONCEDE' }, yourPlayerId)}>
-          Concede
-        </button>
-      </div>
+      </aside>
 
       {openCard && (
         <CardActionsPanel
           definition={getCardDefinition(openCard.card.defId)}
           instance={openCard.card}
           currentZone={openCard.zone}
+          ownerManaPool={openCard.player.manaPool}
           onToggleTap={() => handleToggleTap(openCard.card)}
           onFlip={() => onAction({ type: 'FLIP_CARD', instanceId: openCard.card.instanceId })}
           onCast={() => handleCast(openCard.card)}
+          onActivateAbility={(abilityId) => onAction({ type: 'ACTIVATE_ABILITY', instanceId: openCard.card.instanceId, abilityId })}
           onMove={(toZone) => {
             onAction({ type: 'MOVE_CARD', instanceId: openCard.card.instanceId, toZone });
             setOpenPanelId(null);

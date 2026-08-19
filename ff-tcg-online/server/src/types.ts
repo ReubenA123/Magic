@@ -7,6 +7,22 @@ export type CardType = 'creature' | 'instant' | 'sorcery' | 'land' | 'artifact' 
 export type ManaColor = 'W' | 'U' | 'B' | 'R' | 'G' | 'C';
 export type ManaPool = Record<ManaColor, number>;
 
+/** A structured activated ability. The engine automates paying `cost`; the
+ * actual effect in `effectText` is never executed automatically - it's
+ * shown to you as a prompt/log entry to resolve by hand. See
+ * engine/actions.ts: activateAbility. */
+export interface CardAbility {
+  id: string;
+  label: string; // button text, e.g. "Surveil 1"
+  cost: {
+    tap?: boolean;
+    sacrificeSelf?: boolean;
+    discardCards?: number; // NOT auto-resolved - see note above
+    manaLabel?: string; // parsed the same as costLabel, e.g. "1U"
+  };
+  effectText: string;
+}
+
 export interface CardDefinition {
   id: string;
   name: string;
@@ -18,10 +34,11 @@ export interface CardDefinition {
   text: string;
   imagePath: string;
   transformsInto?: string;
-  /** Lands only: which mana this produces when tapped. 'any' means the
-   * player picks a colour at tap time. A land without this field produces
-   * no mana - set it explicitly on every land you add. */
-  producesMana?: ManaColor | 'any';
+  /** Lands only. A single colour = always that colour. 'any' = choose from
+   * all five plus colourless at tap time. An array = choose from just
+   * those specific colours (e.g. a dual land). */
+  producesMana?: ManaColor | 'any' | ManaColor[];
+  abilities?: CardAbility[];
 }
 
 export interface Counter {
@@ -35,16 +52,11 @@ export interface CardInstance {
   ownerId: string;
   tapped: boolean;
   counters: Counter[];
-  /** Damage marked this turn - cleared at cleanup. Only meaningful for
-   * creatures, but present on every instance for simplicity. */
   damageMarked: number;
-  /** True until this creature has been under its controller's control
-   * since their most recent turn began - stops it attacking unless it has
-   * haste. */
   summoningSick: boolean;
 }
 
-export type ZoneName = 'library' | 'hand' | 'battlefield' | 'graveyard' | 'exile';
+export type ZoneName = 'library' | 'hand' | 'battlefield' | 'graveyard' | 'exile' | 'commander';
 
 export interface PlayerState {
   id: string;
@@ -52,8 +64,6 @@ export interface PlayerState {
   life: number;
   zones: Record<ZoneName, CardInstance[]>;
   ready: boolean;
-  /** Floating mana available to spend, built by tapping lands. Empties at
-   * every phase change. */
   manaPool: ManaPool;
 }
 
@@ -94,6 +104,7 @@ export type GameAction =
   | { type: 'SHUFFLE_LIBRARY' }
   | { type: 'TOGGLE_TAP'; instanceId: string; chosenColor?: ManaColor }
   | { type: 'CAST_CARD'; instanceId: string; chosenX?: number }
+  | { type: 'ACTIVATE_ABILITY'; instanceId: string; abilityId: string }
   | { type: 'ADJUST_LIFE'; playerId: string; delta: number }
   | { type: 'ADJUST_COUNTER'; instanceId: string; label: string; delta: number }
   | { type: 'FLIP_CARD'; instanceId: string }

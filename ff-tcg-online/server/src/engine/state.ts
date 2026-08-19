@@ -37,8 +37,7 @@ function buildPlayer(id: string, name: string): PlayerState {
     id,
     name,
     life: 20,
-    zones: { library, hand: [], battlefield: [], graveyard: [], exile: [] },
-    ready: false,
+    zones: { library, hand: [], battlefield: [], graveyard: [], exile: [], commander: [] }, ready: false,
     manaPool: emptyManaPool(),
   };
 }

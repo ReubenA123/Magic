@@ -38,7 +38,7 @@ export function updatePlayer(state: GameState, playerId: string, updater: (p: Pl
 }
 
 export function findCardAnywhere(state: GameState, instanceId: string) {
-  const zoneNames: (keyof PlayerState['zones'])[] = ['library', 'hand', 'battlefield', 'graveyard', 'exile'];
+  const zoneNames: (keyof PlayerState['zones'])[] = ['library', 'hand', 'battlefield', 'graveyard', 'exile', 'commander'];
   for (const player of state.players) {
     for (const zone of zoneNames) {
       const card = player.zones[zone].find((c) => c.instanceId === instanceId);
@@ -79,7 +79,7 @@ export function createStateFromDeck(deck: SavedDeck, humanName: string): GameSta
       id,
       name,
       life: 40,
-      zones: { library, hand: [commanderInstance, ...openingHand], battlefield: [], graveyard: [], exile: [] },
+      zones: { library, hand: openingHand, battlefield: [], graveyard: [], exile: [], commander: [commanderInstance] },
       ready: true,
       manaPool: emptyManaPool(),
     };

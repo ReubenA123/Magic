@@ -1,13 +1,16 @@
 import React, { useState } from 'react';
-import { CardDefinition, CardInstance, ZoneName } from '../types';
+import { CardDefinition, CardInstance, ManaPool, ZoneName } from '../types';
+import { parseCostLabel, canPay } from '../engine/mana';
 
 interface CardActionsPanelProps {
   definition: CardDefinition;
   instance: CardInstance;
   currentZone: ZoneName;
+  ownerManaPool: ManaPool;
   onToggleTap: () => void;
-  onFlip: () => void;   // add this
+  onFlip: () => void;
   onCast: () => void;
+  onActivateAbility: (abilityId: string) => void;
   onMove: (toZone: ZoneName) => void;
   onAdjustCounter: (label: string, delta: number) => void;
   onClose: () => void;
@@ -19,19 +22,30 @@ const ZONE_LABELS: Record<ZoneName, string> = {
   battlefield: 'Battlefield',
   graveyard: 'Graveyard',
   exile: 'Exile',
+  commander: 'Commander zone',
 };
 
-const ALL_ZONES: ZoneName[] = ['hand', 'battlefield', 'graveyard', 'exile', 'library'];
+const ALL_ZONES: ZoneName[] = ['hand', 'battlefield', 'graveyard', 'exile', 'library', 'commander'];
 
-/**
- * The one central place every manual action on a card happens - opened by
- * clicking any card you control, in any zone. Keeping everything in one
- * panel (rather than a button per action scattered across the card itself)
- * keeps the board grid readable, especially once cards start carrying
- * several counters.
- */
-export default function CardActionsPanel({ definition, instance, currentZone, onToggleTap, onFlip, onCast, onMove, onAdjustCounter, onClose }: CardActionsPanelProps) {
+export default function CardActionsPanel({
+  definition,
+  instance,
+  currentZone,
+  ownerManaPool,
+  onToggleTap,
+  onFlip,
+  onCast,
+  onActivateAbility,
+  onMove,
+  onAdjustCounter,
+  onClose,
+}: CardActionsPanelProps) {
   const [newCounterLabel, setNewCounterLabel] = useState('+1/+1');
+
+  const commanderTax = currentZone === 'commander' ? instance.counters.find((c) => c.label === 'Commander Tax')?.amount ?? 0 : 0;
+  const parsedCost = parseCostLabel(definition.costLabel);
+  const canAffordCast = canPay(ownerManaPool, parsedCost, commanderTax);
+  const canCastHere = (currentZone === 'hand' || currentZone === 'commander') && definition.type !== 'land';
 
   return (
     <div className="card-actions-overlay" onClick={onClose}>
@@ -50,16 +64,39 @@ export default function CardActionsPanel({ definition, instance, currentZone, on
           </button>
         )}
 
-        {currentZone === 'hand' && definition.type !== 'land' && (
-          <button className="card-action-button" onClick={onCast}>
-            Cast ({definition.costLabel})
+        {definition.transformsInto && (
+          <button className="card-action-button" onClick={onFlip}>
+            Flip / Transform
           </button>
         )}
 
-        {definition.transformsInto && (
-          <button className="card-action-button" onClick={onFlip}>
-            Flip
+        {canCastHere && (
+          <button className="card-action-button" disabled={!canAffordCast} onClick={onCast} title={canAffordCast ? '' : 'Not enough mana'}>
+            Cast ({definition.costLabel}
+            {commanderTax > 0 ? ` +${commanderTax} tax` : ''})
           </button>
+        )}
+
+        {definition.abilities && definition.abilities.length > 0 && (
+          <div className="card-actions-section">
+            <div className="card-actions-label">Abilities</div>
+            {definition.abilities.map((ability) => {
+              const manaCost = ability.cost.manaLabel ? parseCostLabel(ability.cost.manaLabel) : null;
+              const affordable = !manaCost || canPay(ownerManaPool, manaCost, 0);
+              const tapBlocked = !!ability.cost.tap && instance.tapped;
+              return (
+                <button
+                  key={ability.id}
+                  className="card-action-button secondary"
+                  disabled={!affordable || tapBlocked}
+                  onClick={() => onActivateAbility(ability.id)}
+                  title={ability.effectText}
+                >
+                  {ability.label}
+                </button>
+              );
+            })}
+          </div>
         )}
 
         <div className="card-actions-section">

@@ -1209,3 +1209,138 @@ button {
   outline: 2px solid var(--fire);
   border-radius: 8px;
 }
+.game-board-layout {
+  display: flex;
+  gap: 16px;
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 12px 16px 80px;
+}
+
+.game-board-main {
+  flex: 3;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.event-log-sidebar {
+  flex: 1;
+  min-width: 220px;
+  max-width: 320px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  height: fit-content;
+  max-height: calc(100vh - 24px);
+  position: sticky;
+  top: 12px;
+  display: flex;
+  flex-direction: column;
+}
+
+.event-log-sidebar h3 {
+  font-size: 14px;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+
+.event-log-sidebar .log-view {
+  flex: 1;
+  overflow-y: auto;
+  max-height: none;
+  background: transparent;
+  border: none;
+  padding: 0;
+  display: block;
+}
+
+.player-zone {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.zone-top-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.corner-column {
+  flex-shrink: 0;
+  width: 96px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.corner-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  letter-spacing: 0.05em;
+}
+
+.corner-box {
+  background: var(--panel-raised);
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  padding: 6px;
+  font-size: 11px;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+.corner-box-clickable {
+  cursor: pointer;
+  border-style: solid;
+}
+
+.zone-center-column {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.battlefield-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-height: 76px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 6px;
+  padding: 4px;
+}
+
+.battlefield-row .card {
+  width: 68px;
+  height: 92px;
+}
+
+.corner-column .card {
+  width: 100%;
+  height: 128px;
+}
+
+.card-tapped {
+  transform: rotate(90deg);
+  opacity: 0.85;
+}
+
+.card-dimmed {
+  opacity: 0.35;
+}
+
+.card-action-button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}

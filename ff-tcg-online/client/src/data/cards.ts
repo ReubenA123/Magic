@@ -3471,7 +3471,7 @@ export const CARD_POOL: CardDefinition[] = [
   subtype: 'Legendary Creature Human Wizard',
   power: 3,
   toughness: 3,
-  text: 'Menace (This creature can’t be blocked except by two or more creatures.) \n' +
+  text: 'Menace (This creature can\u2019t be blocked except by two or more creatures.) \n' +
   'Xande gets +1/+1 for each noncreature, nonland card in your graveyard.',
   imagePath: '/assets/cards/xande-dark-mage.webp'
   },

@@ -10,6 +10,7 @@ import { hasKeyword } from './keywords';
 import { resolveCombatDamage } from './combat';
 
 const PHASE_ORDER: Phase[] = ['untap', 'upkeep', 'draw', 'main1', 'combat_begin', 'declare_attackers', 'declare_blockers', 'combat_damage', 'combat_end', 'main2', 'end', 'cleanup'];
+const ZONE_NAMES: ZoneName[] = ['library', 'hand', 'battlefield', 'graveyard', 'exile', 'commander'];
 
 export function applyAction(state: GameState, action: GameAction, playerId: string): ActionResult {
   switch (action.type) {
@@ -23,6 +24,8 @@ export function applyAction(state: GameState, action: GameAction, playerId: stri
       return toggleTap(state, playerId, action.instanceId, action.chosenColor);
     case 'CAST_CARD':
       return castCard(state, playerId, action.instanceId, action.chosenX);
+    case 'ACTIVATE_ABILITY':
+      return activateAbility(state, playerId, action.instanceId, action.abilityId);
     case 'ADJUST_LIFE':
       return adjustLife(state, action.playerId, action.delta);
     case 'ADJUST_COUNTER':
@@ -102,6 +105,20 @@ function shuffleLibrary(state: GameState, playerId: string): ActionResult {
   return { ok: true, state: { ...next, log: [...next.log, `${player.name} shuffles their library.`] } };
 }
 
+function resolveTapColor(producesMana: ManaColor | 'any' | ManaColor[], chosenColor?: ManaColor): { ok: true; color: ManaColor } | { ok: false; error: string } {
+  if (Array.isArray(producesMana)) {
+    if (!chosenColor || !producesMana.includes(chosenColor)) {
+      return { ok: false, error: `Choose one of: ${producesMana.join(', ')}.` };
+    }
+    return { ok: true, color: chosenColor };
+  }
+  if (producesMana === 'any') {
+    if (!chosenColor) return { ok: false, error: 'Choose a colour to produce.' };
+    return { ok: true, color: chosenColor };
+  }
+  return { ok: true, color: producesMana };
+}
+
 function toggleTap(state: GameState, playerId: string, instanceId: string, chosenColor?: ManaColor): ActionResult {
   const found = findCardAnywhere(state, instanceId);
   if (!found || found.zone !== 'battlefield') return { ok: false, error: 'Only cards on a battlefield can be tapped.' };
@@ -114,12 +131,10 @@ function toggleTap(state: GameState, playerId: string, instanceId: string, chose
   }));
 
   if (!wasTapped && def.type === 'land' && def.producesMana) {
-    if (def.producesMana === 'any' && !chosenColor) {
-      return { ok: false, error: `${def.name} produces any colour - choose one when tapping it.` };
-    }
-    const colour: ManaColor = def.producesMana === 'any' ? chosenColor! : def.producesMana;
-    next = updatePlayer(next, found.ownerPlayerId, (p) => ({ ...p, manaPool: { ...p.manaPool, [colour]: p.manaPool[colour] + 1 } }));
-    next = { ...next, log: [...next.log, `${def.name} adds ${colour} to mana pool.`] };
+    const resolved = resolveTapColor(def.producesMana, chosenColor);
+    if (!resolved.ok) return resolved;
+    next = updatePlayer(next, found.ownerPlayerId, (p) => ({ ...p, manaPool: { ...p.manaPool, [resolved.color]: p.manaPool[resolved.color] + 1 } }));
+    next = { ...next, log: [...next.log, `${def.name} adds ${resolved.color} to mana pool.`] };
   }
 
   return { ok: true, state: next };
@@ -127,30 +142,79 @@ function toggleTap(state: GameState, playerId: string, instanceId: string, chose
 
 function castCard(state: GameState, playerId: string, instanceId: string, chosenX?: number): ActionResult {
   const player = getPlayer(state, playerId);
-  const card = player.zones.hand.find((c) => c.instanceId === instanceId);
-  if (!card) return { ok: false, error: 'That card is not in your hand.' };
+  let card = player.zones.hand.find((c) => c.instanceId === instanceId);
+  let sourceZone: 'hand' | 'commander' | null = card ? 'hand' : null;
+  if (!card) {
+    card = player.zones.commander.find((c) => c.instanceId === instanceId);
+    if (card) sourceZone = 'commander';
+  }
+  if (!card || !sourceZone) return { ok: false, error: 'That card is not in your hand or commander zone.' };
+
   const def = getCardDefinition(card.defId);
   if (def.type === 'land') return { ok: false, error: 'Lands are played, not cast - move it to the battlefield instead.' };
 
+  const commanderTax = sourceZone === 'commander' ? card.counters.find((c) => c.label === 'Commander Tax')?.amount ?? 0 : 0;
   const parsed = parseCostLabel(def.costLabel);
-  const extraGeneric = parsed.hasX ? chosenX ?? 0 : 0;
+  const extraGeneric = (parsed.hasX ? chosenX ?? 0 : 0) + commanderTax;
 
   if (!canPay(player.manaPool, parsed, extraGeneric)) {
-    return { ok: false, error: `Not enough mana to cast ${def.name}.` };
+    return { ok: false, error: `Not enough mana to cast ${def.name}${commanderTax > 0 ? ` (includes +${commanderTax} commander tax)` : ''}.` };
   }
 
   let next = updatePlayer(state, playerId, (p) => ({ ...p, manaPool: payCost(p.manaPool, parsed, extraGeneric) }));
-  next = updatePlayer(next, playerId, (p) => ({ ...p, zones: { ...p.zones, hand: p.zones.hand.filter((c) => c.instanceId !== instanceId) } }));
+  next = updatePlayer(next, playerId, (p) => ({ ...p, zones: { ...p.zones, [sourceZone as 'hand' | 'commander']: p.zones[sourceZone as 'hand' | 'commander'].filter((c) => c.instanceId !== instanceId) } }));
 
   const isPermanent = def.type === 'creature' || def.type === 'artifact' || def.type === 'enchantment';
   const targetZone: ZoneName = isPermanent ? 'battlefield' : 'graveyard';
   const hasHaste = hasKeyword(def.text, 'haste');
-  const movedCard = { ...card, tapped: false, damageMarked: 0, summoningSick: def.type === 'creature' ? !hasHaste : false };
+  let movedCard = { ...card, tapped: false, damageMarked: 0, summoningSick: def.type === 'creature' ? !hasHaste : false };
+
+  if (sourceZone === 'commander') {
+    const existingTax = movedCard.counters.find((c) => c.label === 'Commander Tax')?.amount ?? 0;
+    movedCard = { ...movedCard, counters: [...movedCard.counters.filter((c) => c.label !== 'Commander Tax'), { label: 'Commander Tax', amount: existingTax + 2 }] };
+  }
 
   next = updatePlayer(next, playerId, (p) => ({ ...p, zones: { ...p.zones, [targetZone]: [...p.zones[targetZone], movedCard] } }));
 
-  const xNote = parsed.hasX ? ` (X=${extraGeneric})` : '';
-  return { ok: true, state: { ...next, log: [...next.log, `${player.name} casts ${def.name}${xNote}.`] } };
+  const xNote = parsed.hasX ? ` (X=${(chosenX ?? 0)})` : '';
+  const taxNote = commanderTax > 0 ? ` (+${commanderTax} commander tax paid)` : '';
+  return { ok: true, state: { ...next, log: [...next.log, `${player.name} casts ${def.name}${xNote}${taxNote}.`] } };
+}
+
+function activateAbility(state: GameState, playerId: string, instanceId: string, abilityId: string): ActionResult {
+  const found = findCardAnywhere(state, instanceId);
+  if (!found) return { ok: false, error: "That card couldn't be found." };
+  const def = getCardDefinition(found.card.defId);
+  const ability = def.abilities?.find((a) => a.id === abilityId);
+  if (!ability) return { ok: false, error: `${def.name} has no such ability.` };
+
+  const owner = getPlayer(state, found.ownerPlayerId);
+  const manaCost = ability.cost.manaLabel ? parseCostLabel(ability.cost.manaLabel) : null;
+
+  if (ability.cost.tap && found.card.tapped) return { ok: false, error: `${def.name} is already tapped.` };
+  if (manaCost && !canPay(owner.manaPool, manaCost, 0)) return { ok: false, error: `Not enough mana to activate ${ability.label}.` };
+
+  let next = state;
+  if (manaCost) next = updatePlayer(next, found.ownerPlayerId, (p) => ({ ...p, manaPool: payCost(p.manaPool, manaCost, 0) }));
+  if (ability.cost.tap) {
+    next = updatePlayer(next, found.ownerPlayerId, (p) => ({
+      ...p,
+      zones: { ...p.zones, [found.zone]: p.zones[found.zone].map((c) => (c.instanceId === instanceId ? { ...c, tapped: true } : c)) },
+    }));
+  }
+  if (ability.cost.sacrificeSelf) {
+    next = updatePlayer(next, found.ownerPlayerId, (p) => ({
+      ...p,
+      zones: { ...p.zones, [found.zone]: p.zones[found.zone].filter((c) => c.instanceId !== instanceId), graveyard: [...p.zones.graveyard, { ...found.card, tapped: false }] },
+    }));
+  }
+
+  let logLine = `${owner.name} activates ${ability.label} on ${def.name}: ${ability.effectText}`;
+  if (ability.cost.discardCards) {
+    logLine += ` (also discard ${ability.cost.discardCards} card(s) manually as part of the cost)`;
+  }
+
+  return { ok: true, state: { ...next, log: [...next.log, logLine] } };
 }
 
 function adjustLife(state: GameState, targetPlayerId: string, delta: number): ActionResult {
@@ -243,6 +307,11 @@ function declareBlockers(state: GameState, playerId: string, assignments: Combat
     const attackerCreature = attackerPlayer.zones.battlefield.find((c) => c.instanceId === assignment.attackerInstanceId);
     if (!attackerCreature) return { ok: false, error: 'Unknown attacker in blocking assignment.' };
     const attackerDef = getCardDefinition(attackerCreature.defId);
+    const menace = hasKeyword(attackerDef.text, 'menace');
+
+    if (menace && assignment.blockerInstanceIds.length === 1) {
+      return { ok: false, error: `${attackerDef.name} has menace - it must be blocked by two or more creatures, or not at all.` };
+    }
 
     for (const blockerId of assignment.blockerInstanceIds) {
       if (usedBlockers.has(blockerId)) return { ok: false, error: 'A creature cannot block more than one attacker.' };

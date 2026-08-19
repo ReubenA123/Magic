@@ -6,6 +6,7 @@ interface CardProps {
   instance?: CardInstance;
   faceDown?: boolean;
   selected?: boolean;
+  dimmed?: boolean;
   onClick?: () => void;
 }
 
