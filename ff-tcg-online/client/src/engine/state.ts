@@ -82,6 +82,9 @@ export function createStateFromDeck(deck: SavedDeck, humanName: string): GameSta
       zones: { library, hand: openingHand, battlefield: [], graveyard: [], exile: [], commander: [commanderInstance] },
       ready: true,
       manaPool: emptyManaPool(),
+      hasPlayedLandThisTurn: false,
+      hasDrawnThisTurn: false,
+      commanderDefId: deck.commanderId,
     };
   }
 
@@ -97,5 +100,6 @@ export function createStateFromDeck(deck: SavedDeck, humanName: string): GameSta
     winnerId: null,
     declaredAttackers: [],
     combatAssignments: [],
+    mutualAdjustment: { status: 'inactive', agreedBy: [] },
   };
 }

@@ -36,6 +36,7 @@ export default function Card({ definition, instance, faceDown, selected, onClick
           <div className="card-placeholder-name">{definition.name}</div>
           <div className="card-placeholder-type">{definition.type}</div>
           <div className="card-placeholder-text">{definition.text}</div>
+          <div className="card-name-strip">{definition.name}</div>
           {definition.type === 'creature' && (
             <div className="card-placeholder-pt">
               {definition.power}/{definition.toughness}

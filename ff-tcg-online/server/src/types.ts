@@ -7,18 +7,14 @@ export type CardType = 'creature' | 'instant' | 'sorcery' | 'land' | 'artifact' 
 export type ManaColor = 'W' | 'U' | 'B' | 'R' | 'G' | 'C';
 export type ManaPool = Record<ManaColor, number>;
 
-/** A structured activated ability. The engine automates paying `cost`; the
- * actual effect in `effectText` is never executed automatically - it's
- * shown to you as a prompt/log entry to resolve by hand. See
- * engine/actions.ts: activateAbility. */
 export interface CardAbility {
   id: string;
-  label: string; // button text, e.g. "Surveil 1"
+  label: string;
   cost: {
     tap?: boolean;
     sacrificeSelf?: boolean;
-    discardCards?: number; // NOT auto-resolved - see note above
-    manaLabel?: string; // parsed the same as costLabel, e.g. "1U"
+    discardCards?: number;
+    manaLabel?: string;
   };
   effectText: string;
 }
@@ -34,9 +30,6 @@ export interface CardDefinition {
   text: string;
   imagePath: string;
   transformsInto?: string;
-  /** Lands only. A single colour = always that colour. 'any' = choose from
-   * all five plus colourless at tap time. An array = choose from just
-   * those specific colours (e.g. a dual land). */
   producesMana?: ManaColor | 'any' | ManaColor[];
   abilities?: CardAbility[];
 }
@@ -65,6 +58,14 @@ export interface PlayerState {
   zones: Record<ZoneName, CardInstance[]>;
   ready: boolean;
   manaPool: ManaPool;
+  hasPlayedLandThisTurn: boolean;
+  /** Which CardDefinition id is this player's actual commander, if known.
+   * Set at game creation for VS AI (from the chosen deck). Networked
+   * Versus play doesn't have deck selection wired up yet, so this stays
+   * undefined there for now - see CardActionsPanel for where this gates
+   * the "move to commander zone" option. */
+  hasDrawnThisTurn: boolean;
+  commanderDefId?: string;
 }
 
 export type Phase =
@@ -87,6 +88,19 @@ export interface CombatAssignment {
   blockerInstanceIds: string[];
 }
 
+/**
+ * Mutual Adjustment: a sandbox/correction mode both players must agree to
+ * enter (and agree to exit). While active, the usual rules - mana cost,
+ * one land per turn, no manual life changes - are all bypassed, so you two
+ * can fix a mistake or set up a test scenario together. See
+ * engine/actions.ts for exactly which checks this turns off.
+ */
+export interface MutualAdjustmentState {
+  status: 'inactive' | 'requested' | 'active' | 'exit_requested';
+  requestedBy?: string;
+  agreedBy: string[];
+}
+
 export interface GameState {
   players: [PlayerState, PlayerState];
   activePlayerId: string;
@@ -96,6 +110,7 @@ export interface GameState {
   winnerId: string | null;
   declaredAttackers: string[];
   combatAssignments: CombatAssignment[];
+  mutualAdjustment: MutualAdjustmentState;
 }
 
 export type GameAction =
@@ -113,6 +128,10 @@ export type GameAction =
   | { type: 'NEXT_PHASE' }
   | { type: 'END_TURN' }
   | { type: 'READY_TO_START' }
+  | { type: 'REQUEST_MUTUAL_ADJUSTMENT' }
+  | { type: 'RESPOND_MUTUAL_ADJUSTMENT'; accept: boolean }
+  | { type: 'REQUEST_EXIT_MUTUAL_ADJUSTMENT' }
+  | { type: 'RESPOND_EXIT_MUTUAL_ADJUSTMENT'; accept: boolean }
   | { type: 'UNDO' }
   | { type: 'CONCEDE' };
 

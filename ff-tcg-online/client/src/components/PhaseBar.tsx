@@ -6,10 +6,15 @@ const PHASE_LABELS: Record<Phase, string> = {
   untap: 'Untap',
   upkeep: 'Upkeep',
   draw: 'Draw',
-  main1: 'Main Phase 1',
-  combat: 'Combat',
-  main2: 'Main Phase 2',
-  end: 'End Step',
+  main1: 'Main 1',
+  combat_begin: 'Combat',
+  declare_attackers: 'Attackers',
+  declare_blockers: 'Blockers',
+  combat_damage: 'Damage',
+  combat_end: 'End Combat',
+  main2: 'Main 2',
+  end: 'End',
+  cleanup: 'Cleanup',
 };
 
 interface PhaseBarProps {
@@ -20,26 +25,21 @@ interface PhaseBarProps {
   onEndTurn: () => void;
 }
 
-/** A reference strip only - nothing is enforced by phase, see types.ts. Next
- * Phase just advances the cosmetic label; End Turn is what actually passes
- * the turn (and untaps the other player's stuff for them). */
 export default function PhaseBar({ phase, turnNumber, isYourTurn, onNextPhase, onEndTurn }: PhaseBarProps) {
   return (
-    <div className="phase-bar">
-      <div className="phase-bar-info">
-        <span className="phase-bar-turn">Turn {turnNumber}</span>
-        <span className="phase-bar-phase">{PHASE_LABELS[phase]}</span>
-        <span className="phase-bar-whose-turn">{isYourTurn ? 'Your turn' : "Opponent's turn"}</span>
-      </div>
+    <div className="phase-bar-compact">
+      <span className="phase-bar-compact-info">
+        T{turnNumber} {'\u00b7'} {PHASE_LABELS[phase]} {'\u00b7'} {isYourTurn ? 'You' : 'Opp'}
+      </span>
       {isYourTurn && (
-        <div className="phase-bar-buttons">
-          <button className="phase-bar-button secondary" onClick={onNextPhase} disabled={phase === 'end'}>
-            Next phase
+        <>
+          <button className="phase-bar-compact-button secondary" onClick={onNextPhase} disabled={phase === 'end'}>
+            Next
           </button>
-          <button className="phase-bar-button" onClick={onEndTurn}>
-            End turn
+          <button className="phase-bar-compact-button" onClick={onEndTurn}>
+            End Turn
           </button>
-        </div>
+        </>
       )}
     </div>
   );

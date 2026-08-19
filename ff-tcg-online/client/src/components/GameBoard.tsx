@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { CardInstance, GameAction, GameState, ManaColor, PlayerState, ZoneName } from '../types';
 import { getCardDefinition } from '../data/cards';
 import { parseCostLabel, canPay } from '../engine/mana';
@@ -6,6 +6,8 @@ import Card from './Card';
 import PhaseBar from './PhaseBar';
 import CardActionsPanel from './CardActionsPanel';
 import ZoneModal from './ZoneModal';
+import EventLog from './EventLog';
+import MutualAdjustmentControls from './MutualAdjustmentControls';
 
 interface GameBoardProps {
   state: GameState;
@@ -15,7 +17,6 @@ interface GameBoardProps {
   soloControl?: boolean;
 }
 
-const LIFE_STEPS = [-5, -1, 1, 5];
 const MANA_COLOR_ORDER: ManaColor[] = ['W', 'U', 'B', 'R', 'G', 'C'];
 
 function findCard(state: GameState, instanceId: string): { player: PlayerState; zone: ZoneName; card: CardInstance } | null {
@@ -65,6 +66,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   const you = state.players.find((p) => p.id === yourPlayerId)!;
   const opponent = state.players.find((p) => p.id !== yourPlayerId)!;
   const isYourTurn = soloControl ? true : state.activePlayerId === yourPlayerId;
+  const mutualActive = state.mutualAdjustment.status === 'active';
 
   const [openPanelId, setOpenPanelId] = useState<string | null>(null);
   const [openZone, setOpenZone] = useState<{ playerId: string; zone: 'graveyard' | 'exile' } | null>(null);
@@ -72,15 +74,10 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   const [blockerAssignments, setBlockerAssignments] = useState<Record<string, string[]>>({});
   const [pendingBlocker, setPendingBlocker] = useState<string | null>(null);
 
-  const recentLog = useMemo(() => state.log.slice(-30), [state.log]);
   const openCard = openPanelId ? findCard(state, openPanelId) : null;
 
   const isDeclaringAttackers = state.phase === 'declare_attackers' && (soloControl || state.activePlayerId === yourPlayerId);
   const isDeclaringBlockers = state.phase === 'declare_blockers' && (soloControl || state.activePlayerId !== yourPlayerId);
-
-  function adjustLife(playerId: string, delta: number) {
-    onAction({ type: 'ADJUST_LIFE', playerId, delta });
-  }
 
   function handleToggleTap(card: CardInstance) {
     const def = getCardDefinition(card.defId);
@@ -216,28 +213,31 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           {isOpponentSide
             ? player.zones.hand.map((c) => <Card key={c.instanceId} definition={getCardDefinition(c.defId)} faceDown />)
             : player.zones.hand.map((c) => {
-                const def = getCardDefinition(c.defId);
-                const affordable = def.type === 'land' || canPay(player.manaPool, parseCostLabel(def.costLabel), 0);
-                return <Card key={c.instanceId} definition={def} instance={c} dimmed={!affordable} onClick={() => setOpenPanelId(c.instanceId)} />;
-              })}
+              const def = getCardDefinition(c.defId);
+              const affordable = def.type === 'land' || canPay(player.manaPool, parseCostLabel(def.costLabel), 0);
+              return <Card key={c.instanceId} definition={def} instance={c} dimmed={!affordable} onClick={() => setOpenPanelId(c.instanceId)} />;
+            })}
         </div>
-
         <div className="life-row">
-          <span className="life-total">
-            {player.name}: {player.life} life
-          </span>
-          <div className="life-buttons">
-            {LIFE_STEPS.map((delta) => (
-              <button key={delta} className="life-step-button" onClick={() => adjustLife(player.id, delta)}>
-                {delta > 0 ? `+${delta}` : delta}
-              </button>
-            ))}
-            {(isOpponentSide ? soloControl : true) && (
-              <button className="draw-button" onClick={() => onAction({ type: 'DRAW_CARD' }, player.id)}>
-                Draw
-              </button>
+          <div className="life-total-group">
+            <span className="life-total">
+              {player.name}: {player.life} life
+            </span>
+            {mutualActive && (
+              <div className="life-buttons">
+                {[-5, -1, 1, 5].map((delta) => (
+                  <button key={delta} className="life-step-button" onClick={() => onAction({ type: 'ADJUST_LIFE', playerId: player.id, delta })}>
+                    {delta > 0 ? `+${delta}` : delta}
+                  </button>
+                ))}
+              </div>
             )}
           </div>
+          {(isOpponentSide ? soloControl : true) && (
+            <button className="draw-button" onClick={() => onAction({ type: 'DRAW_CARD' }, player.id)}>
+              Draw
+            </button>
+          )}
         </div>
       </section>
     );
@@ -246,14 +246,6 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   return (
     <div className="game-board-layout">
       <div className="game-board-main">
-        <PhaseBar
-          phase={state.phase}
-          turnNumber={state.turnNumber}
-          isYourTurn={isYourTurn}
-          onNextPhase={() => onAction({ type: 'NEXT_PHASE' }, state.activePlayerId)}
-          onEndTurn={() => onAction({ type: 'END_TURN' }, state.activePlayerId)}
-        />
-
         {actionError && <div className="action-error-banner">{actionError}</div>}
         {state.winnerId && <div className="winner-banner">{state.winnerId === yourPlayerId ? 'You win!' : `${opponent.name} wins.`}</div>}
 
@@ -272,27 +264,46 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
         )}
 
         {renderPlayerZone(you, false)}
-
-        <div className="bottom-left-controls">
-          <button className="undo-button" onClick={() => onAction({ type: 'UNDO' })} title="Step back through recent actions">
-            {'\u21b6'} Undo
-          </button>
-          <button className="concede-button" onClick={() => onAction({ type: 'CONCEDE' }, yourPlayerId)}>
-            Concede
-          </button>
-        </div>
       </div>
 
-      <aside className="event-log-sidebar">
-        <h3>Event Log</h3>
-        <div className="log-view">
-          {[...recentLog].reverse().map((line, i) => (
-            <div key={i} className="log-line">
-              {line}
-            </div>
-          ))}
-        </div>
-      </aside>
+      <EventLog log={state.log} />
+
+      <div className="bottom-left-controls">
+        <button className="undo-button" onClick={() => onAction({ type: 'UNDO' })} title="Step back through recent actions">
+          {'\u21b6'} Undo
+        </button>
+        <MutualAdjustmentControls
+          state={state}
+          yourPlayerId={yourPlayerId}
+          onRequest={() => onAction({ type: 'REQUEST_MUTUAL_ADJUSTMENT' }, yourPlayerId)}
+          onRespond={(accept) => onAction({ type: 'RESPOND_MUTUAL_ADJUSTMENT', accept }, yourPlayerId)}
+          onRequestExit={() => onAction({ type: 'REQUEST_EXIT_MUTUAL_ADJUSTMENT' }, yourPlayerId)}
+          onRespondExit={(accept) => onAction({ type: 'RESPOND_EXIT_MUTUAL_ADJUSTMENT', accept }, yourPlayerId)}
+        />
+        <button className="concede-button" onClick={() => onAction({ type: 'CONCEDE' }, yourPlayerId)}>
+          Concede
+        </button>
+      </div>
+
+      <div className="bottom-right-controls">
+        <PhaseBar
+          phase={state.phase}
+          turnNumber={state.turnNumber}
+          isYourTurn={isYourTurn}
+          onNextPhase={() => onAction({ type: 'NEXT_PHASE' }, state.activePlayerId)}
+          onEndTurn={() => onAction({ type: 'END_TURN' }, state.activePlayerId)}
+        />
+      </div>
+
+      <div className="bottom-right-controls">
+        <PhaseBar
+          phase={state.phase}
+          turnNumber={state.turnNumber}
+          isYourTurn={isYourTurn}
+          onNextPhase={() => onAction({ type: 'NEXT_PHASE' }, state.activePlayerId)}
+          onEndTurn={() => onAction({ type: 'END_TURN' }, state.activePlayerId)}
+        />
+      </div>
 
       {openCard && (
         <CardActionsPanel
@@ -300,6 +311,8 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           instance={openCard.card}
           currentZone={openCard.zone}
           ownerManaPool={openCard.player.manaPool}
+          ownerCommanderDefId={openCard.player.commanderDefId}
+          mutualActive={mutualActive}
           onToggleTap={() => handleToggleTap(openCard.card)}
           onFlip={() => onAction({ type: 'FLIP_CARD', instanceId: openCard.card.instanceId })}
           onCast={() => handleCast(openCard.card)}

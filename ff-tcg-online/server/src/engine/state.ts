@@ -37,8 +37,11 @@ function buildPlayer(id: string, name: string): PlayerState {
     id,
     name,
     life: 20,
-    zones: { library, hand: [], battlefield: [], graveyard: [], exile: [], commander: [] }, ready: false,
+    zones: { library, hand: [], battlefield: [], graveyard: [], exile: [], commander: [] },
+    ready: false,
     manaPool: emptyManaPool(),
+    hasPlayedLandThisTurn: false,
+    hasDrawnThisTurn: false,
   };
 }
 
@@ -55,6 +58,7 @@ export function createInitialState(player1Name: string, player2Name: string, pla
     winnerId: null,
     declaredAttackers: [],
     combatAssignments: [],
+    mutualAdjustment: { status: 'inactive', agreedBy: [] },
   };
 }
 
@@ -75,7 +79,7 @@ export function updatePlayer(state: GameState, playerId: string, updater: (p: Pl
 }
 
 export function findCardAnywhere(state: GameState, instanceId: string) {
-  const zoneNames: (keyof PlayerState['zones'])[] = ['library', 'hand', 'battlefield', 'graveyard', 'exile'];
+  const zoneNames: (keyof PlayerState['zones'])[] = ['library', 'hand', 'battlefield', 'graveyard', 'exile', 'commander'];
   for (const player of state.players) {
     for (const zone of zoneNames) {
       const card = player.zones[zone].find((c) => c.instanceId === instanceId);
