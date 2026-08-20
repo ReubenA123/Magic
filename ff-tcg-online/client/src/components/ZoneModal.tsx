@@ -1,5 +1,5 @@
-import React from 'react';
-import { CardInstance } from '../types';
+import React, { useMemo, useState } from 'react';
+import { CardInstance, CardType } from '../types';
 import { getCardDefinition } from '../data/cards';
 import Card from './Card';
 
@@ -10,12 +10,21 @@ interface ZoneModalProps {
   onCardClick: (instanceId: string) => void;
 }
 
-/** Graveyard and exile are public zones in Magic - either player can look
- * through either player's pile, so this modal doesn't distinguish "yours"
- * vs "theirs." Clicking a card opens the same CardActionsPanel used
- * everywhere else, so you can e.g. return a creature from a graveyard to
- * hand for a reanimation-style effect. */
+const TYPE_FILTERS: (CardType | 'all')[] = ['all', 'creature', 'instant', 'sorcery', 'artifact', 'enchantment', 'land'];
+
 export default function ZoneModal({ title, cards, onClose, onCardClick }: ZoneModalProps) {
+  const [filter, setFilter] = useState<CardType | 'all'>('all');
+  const [query, setQuery] = useState('');
+
+  const filtered = useMemo(() => {
+    return [...cards].reverse().filter((c) => {
+      const def = getCardDefinition(c.defId);
+      const matchesType = filter === 'all' || def.type === filter;
+      const matchesQuery = def.name.toLowerCase().includes(query.toLowerCase());
+      return matchesType && matchesQuery;
+    });
+  }, [cards, filter, query]);
+
   return (
     <div className="card-actions-overlay" onClick={onClose}>
       <div className="zone-modal" onClick={(e) => e.stopPropagation()}>
@@ -25,11 +34,23 @@ export default function ZoneModal({ title, cards, onClose, onCardClick }: ZoneMo
             {'\u2715'}
           </button>
         </div>
-        {cards.length === 0 ? (
-          <p className="card-actions-hint">Empty.</p>
+
+        <div className="library-controls">
+          <input className="library-search" placeholder="Search by name\u2026" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <div className="library-filters">
+            {TYPE_FILTERS.map((t) => (
+              <button key={t} className={`library-filter-button ${filter === t ? 'library-filter-active' : ''}`} onClick={() => setFilter(t)}>
+                {t}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {filtered.length === 0 ? (
+          <p className="card-actions-hint">No matching cards.</p>
         ) : (
           <div className="zone-modal-grid">
-            {cards.map((c) => (
+            {filtered.map((c) => (
               <Card key={c.instanceId} definition={getCardDefinition(c.defId)} instance={c} onClick={() => onCardClick(c.instanceId)} />
             ))}
           </div>

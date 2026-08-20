@@ -79,6 +79,30 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   const isDeclaringAttackers = state.phase === 'declare_attackers' && (soloControl || state.activePlayerId === yourPlayerId);
   const isDeclaringBlockers = state.phase === 'declare_blockers' && (soloControl || state.activePlayerId !== yourPlayerId);
 
+  const [draggedInstanceId, setDraggedInstanceId] = useState<string | null>(null);
+  const [handOrder, setHandOrder] = useState<string[]>([]);
+
+  function orderedHand(hand: CardInstance[]): CardInstance[] {
+    const byId = new Map(hand.map((c) => [c.instanceId, c]));
+    const ordered = handOrder.map((id) => byId.get(id)).filter((c): c is CardInstance => !!c);
+    const missing = hand.filter((c) => !handOrder.includes(c.instanceId));
+    return [...ordered, ...missing];
+  }
+
+  function handleHandDrop(playerId: string, targetInstanceId: string) {
+    if (!draggedInstanceId || draggedInstanceId === targetInstanceId) return;
+    const you = state.players.find((p) => p.id === playerId)!;
+    const current = orderedHand(you.zones.hand).map((c) => c.instanceId);
+    const fromIndex = current.indexOf(draggedInstanceId);
+    const toIndex = current.indexOf(targetInstanceId);
+    if (fromIndex === -1 || toIndex === -1) return;
+    const next = [...current];
+    next.splice(fromIndex, 1);
+    next.splice(toIndex, 0, draggedInstanceId);
+    setHandOrder(next);
+    setDraggedInstanceId(null);
+  }
+
   function handleToggleTap(card: CardInstance) {
     const def = getCardDefinition(card.defId);
     if (!card.tapped && def.type === 'land' && def.producesMana) {
@@ -190,7 +214,20 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
             ) : (
               <div className="corner-box">Not in zone</div>
             )}
-            <div className="corner-box">Library: {player.zones.library.length}</div>
+            {(() => {
+              const isDrawStep = state.phase === 'draw' && state.activePlayerId === player.id;
+              const canDrawHere = player.id === yourPlayerId || (soloControl && isOpponentSide);
+              return (
+                <div
+                  className={`library-stack ${isDrawStep ? 'library-stack-draw-highlight' : ''} ${canDrawHere ? 'library-stack-clickable' : ''}`}
+                  onClick={() => canDrawHere && onAction({ type: 'DRAW_CARD' }, player.id)}
+                  title={canDrawHere ? 'Click to draw' : ''}
+                >
+                  <div className="card card-back" />
+                  <span className="library-stack-count">{player.zones.library.length}</span>
+                </div>
+              );
+            })()}
           </div>
 
           <div className="zone-center-column">
@@ -200,22 +237,44 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           </div>
 
           <div className="corner-column">
-            <button className="corner-box corner-box-clickable" onClick={() => setOpenZone({ playerId: player.id, zone: 'graveyard' })}>
-              Graveyard ({player.zones.graveyard.length})
-            </button>
-            <button className="corner-box corner-box-clickable" onClick={() => setOpenZone({ playerId: player.id, zone: 'exile' })}>
-              Exile ({player.zones.exile.length})
-            </button>
+            {(['graveyard', 'exile'] as const).map((zoneName) => {
+              const cards = player.zones[zoneName];
+              const topCard = cards[cards.length - 1];
+              return (
+                <div key={zoneName} className="zone-pile" onClick={() => setOpenZone({ playerId: player.id, zone: zoneName })}>
+                  {topCard ? <Card definition={getCardDefinition(topCard.defId)} /> : <div className="card card-empty-pile" />}
+                  <span className="zone-pile-label">
+                    {zoneName === 'graveyard' ? 'Graveyard' : 'Exile'} ({cards.length})
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
 
-        <div className={`hand-row ${isOpponentSide ? 'opponent-hand' : 'your-hand'}`}>
+        <div className={`hand-fan ${isOpponentSide ? 'opponent-hand' : 'your-hand'}`}>
           {isOpponentSide
             ? player.zones.hand.map((c) => <Card key={c.instanceId} definition={getCardDefinition(c.defId)} faceDown />)
-            : player.zones.hand.map((c) => {
+            : (isOpponentSide ? player.zones.hand : orderedHand(player.zones.hand)).map((c, i, arr) => {
               const def = getCardDefinition(c.defId);
               const affordable = def.type === 'land' || canPay(player.manaPool, parseCostLabel(def.costLabel), 0);
-              return <Card key={c.instanceId} definition={def} instance={c} dimmed={!affordable} onClick={() => setOpenPanelId(c.instanceId)} />;
+              const mid = (arr.length - 1) / 2;
+              const offset = i - mid;
+              const rotate = offset * 4;
+              const lift = Math.abs(offset) * 6;
+              return (
+                <div
+                  key={c.instanceId}
+                  className="hand-fan-card"
+                  style={{ transform: `rotate(${rotate}deg) translateY(${lift}px)`, zIndex: i }}
+                  draggable
+                  onDragStart={() => setDraggedInstanceId(c.instanceId)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => handleHandDrop(player.id, c.instanceId)}
+                >
+                  <Card definition={def} instance={c} dimmed={!affordable} onClick={() => setOpenPanelId(c.instanceId)} />
+                </div>
+              );
             })}
         </div>
         <div className="life-row">
@@ -246,9 +305,11 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   return (
     <div className="game-board-layout">
       <div className="game-board-main">
-        {actionError && <div className="action-error-banner">{actionError}</div>}
-        {state.winnerId && <div className="winner-banner">{state.winnerId === yourPlayerId ? 'You win!' : `${opponent.name} wins.`}</div>}
-
+        {state.winnerId && (
+          <div className="winner-overlay">
+            <div className="winner-banner">{state.winnerId === yourPlayerId ? 'You win!' : `${opponent.name} wins.`}</div>
+          </div>
+        )}
         {renderPlayerZone(opponent, true)}
 
         {isDeclaringAttackers && (
@@ -342,6 +403,8 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
             />
           );
         })()}
+      {actionError && <div className="action-error-banner action-error-bottom">{actionError}</div>}
+
     </div>
   );
 }

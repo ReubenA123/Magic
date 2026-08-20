@@ -278,15 +278,26 @@ button {
   font-size: 14px;
 }
 
+.winner-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 5, 10, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 60;
+}
+
 .winner-banner {
-  background: var(--panel-raised);
-  border: 1px solid var(--accent);
+  background: var(--panel);
+  border: 2px solid var(--accent);
   color: var(--accent);
   text-align: center;
-  padding: 14px;
-  border-radius: 8px;
+  padding: 32px 48px;
+  border-radius: 14px;
   font-family: 'Cinzel', serif;
-  font-size: 18px;
+  font-size: 28px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
 }
 
 .player-zone {
@@ -902,7 +913,7 @@ button {
 
 .deckbuilder-pool-item .card {
   width: 100%;
-  height: 400px;
+  height: 320px;
 }
 
 .deckbuilder-pool-actions {
@@ -1341,16 +1352,29 @@ button {
   padding: 24px;
 }
 
+.card-preview-panel,
+.card-actions-panel {
+  width: 360px;
+  height: 520px;
+}
+
 .card-preview-panel {
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
 }
 
 .card-preview-image {
-  width: 320px;
-  max-width: 40vw;
-  border-radius: 12px;
-  border: 1px solid var(--border);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: var(--bg);
 }
 
 .card-actions-panel {
@@ -1358,8 +1382,6 @@ button {
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 18px;
-  width: 340px;
-  max-height: 90vh;
   overflow-y: auto;
   flex-shrink: 0;
 }
@@ -1429,8 +1451,18 @@ button {
 }
 
 .battlefield-row .card {
-  width: 68px;
-  height: 92px;
+  width: 120px;
+  height: 160px;
+}
+
+.hand-row .card {
+  width: 130px;
+  height: 175px;
+}
+
+.corner-column .card {
+  width: 100%;
+  height: 170px;
 }
 
 .corner-column .card {
@@ -1503,4 +1535,106 @@ button {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+.action-error-bottom {
+  position: fixed;
+  bottom: 74px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+}
+.zone-top-row {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.corner-column {
+  flex-shrink: 0;
+  width: 110px;
+}
+
+.zone-center-column {
+  flex: 1;
+  min-width: 0;
+}
+
+.battlefield-row {
+  min-height: 160px;
+}
+.library-stack {
+  position: relative;
+  width: 100%;
+}
+
+.library-stack-clickable {
+  cursor: pointer;
+}
+
+.library-stack-draw-highlight .card-back {
+  outline: 3px solid #f4d35e;
+  box-shadow: 0 0 12px rgba(244, 211, 94, 0.6);
+}
+
+.library-stack-count {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  background: rgba(10, 10, 16, 0.8);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+.zone-pile {
+  cursor: pointer;
+  text-align: center;
+}
+
+.card-empty-pile {
+  border-style: dashed;
+  background: transparent;
+}
+
+.zone-pile-label {
+  display: block;
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+.hand-fan {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  min-height: 170px;
+  gap: -20px;
+}
+
+.hand-fan .hand-fan-card {
+  margin-left: -24px;
+  transition: transform 0.15s ease;
+}
+
+.hand-fan .hand-fan-card:first-child {
+  margin-left: 0;
+}
+
+.hand-fan .hand-fan-card:hover {
+  transform: translateY(-16px) scale(1.05) !important;
+  z-index: 999 !important;
+}
+
+.opponent-hand.hand-fan {
+  gap: 4px;
+}
+
+.opponent-hand.hand-fan .hand-fan-card {
+  margin-left: 0;
+}
+
+.zone-modal-grid .card {
+  width: 110px;
+  height: 148px;
 }
