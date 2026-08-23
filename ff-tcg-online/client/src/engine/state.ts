@@ -85,6 +85,7 @@ export function createStateFromDeck(deck: SavedDeck, humanName: string): GameSta
       hasPlayedLandThisTurn: false,
       hasDrawnThisTurn: false,
       commanderDefId: deck.commanderId,
+      commanderDamageTaken: 0,
     };
   }
 

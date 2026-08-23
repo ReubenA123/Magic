@@ -1,10 +1,5 @@
 // ============================================================================
 // engine/combat.ts
-//
-// Automatic combat damage: first/double strike pass, then the regular pass
-// (which also covers double strike's second hit), with dead creatures
-// removed between passes so a first-strike kill happens before the victim
-// gets to hit back.
 // ============================================================================
 
 import { CardInstance, GameState } from '../types';
@@ -32,6 +27,11 @@ function findInstance(state: GameState, instanceId: string) {
   return null;
 }
 
+function isCommanderAttack(state: GameState, controllerId: string, attackerDefId: string): boolean {
+  const controller = state.players.find((p) => p.id === controllerId);
+  return !!controller?.commanderDefId && controller.commanderDefId === attackerDefId;
+}
+
 function markDamage(state: GameState, instanceId: string, amount: number): GameState {
   const found = findInstance(state, instanceId);
   if (!found) return state;
@@ -39,6 +39,15 @@ function markDamage(state: GameState, instanceId: string, amount: number): GameS
     ...p,
     zones: { ...p.zones, battlefield: p.zones.battlefield.map((c) => (c.instanceId === instanceId ? { ...c, damageMarked: c.damageMarked + amount } : c)) },
   }));
+}
+
+function dealDirectDamageToDefender(state: GameState, attackerControllerId: string, attackerDefId: string, attackerName: string, defenderId: string, amount: number): GameState {
+  let next = updatePlayer(state, defenderId, (p) => ({ ...p, life: p.life - amount }));
+  if (isCommanderAttack(next, attackerControllerId, attackerDefId)) {
+    next = updatePlayer(next, defenderId, (p) => ({ ...p, commanderDamageTaken: p.commanderDamageTaken + amount }));
+    next = { ...next, log: [...next.log, `${attackerName} deals ${amount} commander damage.`] };
+  }
+  return next;
 }
 
 function strikesInPass(text: string, pass: 1 | 2): boolean {
@@ -64,7 +73,7 @@ function dealDamagePass(state: GameState, pass: 1 | 2): GameState {
 
       if (blockers.length === 0) {
         const defender = getOpponent(next, attackerFound.controllerId);
-        next = updatePlayer(next, defender.id, (p) => ({ ...p, life: p.life - power }));
+        next = dealDirectDamageToDefender(next, attackerFound.controllerId, attackerFound.instance.defId, attackerDef.name, defender.id, power);
         next = { ...next, log: [...next.log, `${attackerDef.name} hits ${defender.name} for ${power}.`] };
         if (isLifelink) next = updatePlayer(next, attackerFound.controllerId, (p) => ({ ...p, life: p.life + power }));
       } else {
@@ -82,7 +91,7 @@ function dealDamagePass(state: GameState, pass: 1 | 2): GameState {
         }
         if (isTrample && remaining > 0) {
           const defender = getOpponent(next, attackerFound.controllerId);
-          next = updatePlayer(next, defender.id, (p) => ({ ...p, life: p.life - remaining }));
+          next = dealDirectDamageToDefender(next, attackerFound.controllerId, attackerFound.instance.defId, attackerDef.name, defender.id, remaining);
           next = { ...next, log: [...next.log, `${attackerDef.name} tramples ${remaining} over to ${defender.name}.`] };
         }
       }
@@ -92,7 +101,7 @@ function dealDamagePass(state: GameState, pass: 1 | 2): GameState {
       const blockerDef = getCardDefinition(blocker.instance.defId);
       if (!strikesInPass(blockerDef.text, pass)) continue;
       const stillThere = findInstance(next, attackerFound.instance.instanceId);
-      if (!stillThere) continue; // killed by first strike before this pass
+      if (!stillThere) continue;
       const blockerPower = effectivePower(blockerDef.power, blocker.instance);
       next = markDamage(next, attackerFound.instance.instanceId, blockerPower);
       next = { ...next, log: [...next.log, `${blockerDef.name} deals ${blockerPower} damage to ${attackerDef.name}.`] };

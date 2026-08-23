@@ -9,6 +9,8 @@ interface CardActionsPanelProps {
   ownerManaPool: ManaPool;
   ownerCommanderDefId?: string;
   mutualActive: boolean;
+  isMyTurn: boolean;
+  alreadyPlayedLand: boolean;
   onToggleTap: () => void;
   onFlip: () => void;
   onCast: () => void;
@@ -36,6 +38,8 @@ export default function CardActionsPanel({
   ownerManaPool,
   ownerCommanderDefId,
   mutualActive,
+  isMyTurn,
+  alreadyPlayedLand,
   onToggleTap,
   onFlip,
   onCast,
@@ -48,11 +52,14 @@ export default function CardActionsPanel({
 
   const commanderTax = currentZone === 'commander' ? instance.counters.find((c) => c.label === 'Commander Tax')?.amount ?? 0 : 0;
   const parsedCost = parseCostLabel(definition.costLabel);
-  const canAffordCast = mutualActive || canPay(ownerManaPool, parsedCost, commanderTax);
-  const canCastHere = (currentZone === 'hand' || currentZone === 'commander') && definition.type !== 'land';
+  const isLand = definition.type === 'land';
+  const canPlay = mutualActive || (isLand ? isMyTurn && !alreadyPlayedLand : canPay(ownerManaPool, parsedCost, commanderTax));
+  const canPlayHere = currentZone === 'hand' || (currentZone === 'commander' && !isLand);
   const isActualCommander = ownerCommanderDefId === definition.id;
 
-  const availableZones = ALL_ZONES.filter((z) => z !== currentZone).filter((z) => z !== 'commander' || isActualCommander);
+  const availableZones = ALL_ZONES.filter((z) => z !== currentZone)
+    .filter((z) => z !== 'commander' || isActualCommander)
+    .filter((z) => z !== 'battlefield' || mutualActive);
 
   return (
     <div className="card-drawer-overlay" onClick={onClose}>
@@ -77,16 +84,17 @@ export default function CardActionsPanel({
           </button>
         )}
 
-        {definition.transformsInto && (
+        {/* Flip is never a way to "play" a card - it only ever applies to a
+            permanent already on the battlefield, and never costs mana. */}
+        {currentZone === 'battlefield' && definition.transformsInto && (
           <button className="card-action-button" onClick={onFlip}>
             Flip / Transform
           </button>
         )}
 
-        {canCastHere && (
-          <button className="card-action-button" disabled={!canAffordCast} onClick={onCast} title={canAffordCast ? '' : 'Not enough mana'}>
-            Cast ({definition.costLabel}
-            {commanderTax > 0 ? ` +${commanderTax} tax` : ''})
+        {canPlayHere && (
+          <button className="card-action-button" disabled={!canPlay} onClick={onCast} title={canPlay ? '' : isLand ? 'Already played a land, or not your turn' : 'Not enough mana'}>
+            {isLand ? `Play ${definition.name}` : `Cast (${definition.costLabel}${commanderTax > 0 ? ` +${commanderTax} tax` : ''})`}
           </button>
         )}
 

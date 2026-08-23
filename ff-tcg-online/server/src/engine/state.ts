@@ -42,6 +42,7 @@ function buildPlayer(id: string, name: string): PlayerState {
     manaPool: emptyManaPool(),
     hasPlayedLandThisTurn: false,
     hasDrawnThisTurn: false,
+    commanderDamageTaken: 0,
   };
 }
 

@@ -30,7 +30,7 @@ export function applyAction(state: GameState, action: GameAction, playerId: stri
     case 'ACTIVATE_ABILITY':
       return activateAbility(state, playerId, action.instanceId, action.abilityId);
     case 'ADJUST_LIFE':
-      return adjustLife(state, playerId, action.playerId, action.delta);
+      return adjustLife(state, action.playerId, action.delta);
     case 'ADJUST_COUNTER':
       return adjustCounter(state, playerId, action.instanceId, action.label, action.delta);
     case 'FLIP_CARD':
@@ -75,20 +75,6 @@ function shuffleArr<T>(items: T[]): T[] {
   return arr;
 }
 
-/** The actual card move, no per-turn restriction - used by the automatic
- * draw step, and by drawCard() below once its check passes. */
-function performDraw(state: GameState, playerId: string): ActionResult {
-  const player = getPlayer(state, playerId);
-  const [drawn, ...rest] = player.zones.library;
-  if (!drawn) return { ok: false, error: 'Your library is empty.' };
-  const next = updatePlayer(state, playerId, (p) => ({ ...p, zones: { ...p.zones, library: rest, hand: [...p.zones.hand, drawn] } }));
-  return { ok: true, state: { ...next, log: [...next.log, `${player.name} draws a card.`] } };
-}
-
-/** One manual draw per turn per player - bypassed during Mutual Adjustment.
- * "An effect that lets you draw more" is handled the same way everything
- * else outside the rules is: agree to Mutual Adjustment and draw as many
- * as the effect calls for. */
 function drawCard(state: GameState, playerId: string): ActionResult {
   const player = getPlayer(state, playerId);
   if (!isMutualActive(state) && player.hasDrawnThisTurn) {
@@ -100,24 +86,32 @@ function drawCard(state: GameState, playerId: string): ActionResult {
   return { ok: true, state: next };
 }
 
+function performDraw(state: GameState, playerId: string): ActionResult {
+  const player = getPlayer(state, playerId);
+  const [drawn, ...rest] = player.zones.library;
+  if (!drawn) return { ok: false, error: 'Your library is empty.' };
+  const next = updatePlayer(state, playerId, (p) => ({ ...p, zones: { ...p.zones, library: rest, hand: [...p.zones.hand, drawn] } }));
+  return { ok: true, state: { ...next, log: [...next.log, `${player.name} draws a card.`] } };
+}
+
+/** Manual zone moves - for anything that ISN'T "play this card from my
+ * hand," which now goes through castCard instead (see below) so cost gets
+ * enforced. Moving hand/commander -> battlefield is blocked here outside
+ * Mutual Adjustment, since that would bypass paying for the card. */
 function moveCard(state: GameState, playerId: string, instanceId: string, toZone: ZoneName): ActionResult {
   const found = findCardAnywhere(state, instanceId);
   if (!found) return { ok: false, error: "That card couldn't be found." };
   if (found.zone === toZone) return { ok: false, error: 'That card is already there.' };
 
-  const def = getCardDefinition(found.card.defId);
-  const ownerId = found.ownerPlayerId;
   const mutual = isMutualActive(state);
-
-  // One-land-per-turn, and only on your own turn - both bypassed during Mutual Adjustment.
-  if (!mutual && def.type === 'land' && found.zone === 'hand' && toZone === 'battlefield') {
-    if (state.activePlayerId !== playerId) return { ok: false, error: 'You can only play a land on your own turn.' };
-    const player = getPlayer(state, playerId);
-    if (player.hasPlayedLandThisTurn) return { ok: false, error: "You've already played a land this turn." };
+  if (!mutual && toZone === 'battlefield' && (found.zone === 'hand' || found.zone === 'commander')) {
+    return { ok: false, error: 'Use the Play/Cast button instead - it pays the cost automatically.' };
   }
 
+  const ownerId = found.ownerPlayerId;
   let next = updatePlayer(state, ownerId, (p) => ({ ...p, zones: { ...p.zones, [found.zone]: p.zones[found.zone].filter((c) => c.instanceId !== instanceId) } }));
 
+  const def = getCardDefinition(found.card.defId);
   const movedCard = {
     ...found.card,
     tapped: false,
@@ -126,9 +120,8 @@ function moveCard(state: GameState, playerId: string, instanceId: string, toZone
   };
 
   next = updatePlayer(next, ownerId, (p) => {
-    const updatedZones = toZone === 'library' ? { ...p.zones, library: shuffleArr([...p.zones.library, movedCard]) } : { ...p.zones, [toZone]: [...p.zones[toZone], movedCard] };
-    const landFlag = !mutual && def.type === 'land' && found.zone === 'hand' && toZone === 'battlefield' && p.id === playerId ? { hasPlayedLandThisTurn: true } : {};
-    return { ...p, zones: updatedZones, ...landFlag };
+    if (toZone === 'library') return { ...p, zones: { ...p.zones, library: shuffleArr([...p.zones.library, movedCard]) } };
+    return { ...p, zones: { ...p.zones, [toZone]: [...p.zones[toZone], movedCard] } };
   });
 
   const mover = getPlayer(state, playerId);
@@ -174,9 +167,18 @@ function toggleTap(state: GameState, playerId: string, instanceId: string, chose
   return { ok: true, state: next };
 }
 
+/**
+ * The single "play this card" action - covers lands AND spells. The engine
+ * decides where the card ends up: lands and permanents go to the
+ * battlefield, instants/sorceries go to the graveyard after resolving.
+ * Lands are free but limited to one per turn (on your own turn); everything
+ * else costs mana, checked and paid automatically. Mutual Adjustment
+ * bypasses both the cost and the one-land-per-turn limit.
+ */
 function castCard(state: GameState, playerId: string, instanceId: string, chosenX?: number): ActionResult {
   const player = getPlayer(state, playerId);
   const mutual = isMutualActive(state);
+
   let card = player.zones.hand.find((c) => c.instanceId === instanceId);
   let sourceZone: 'hand' | 'commander' | null = card ? 'hand' : null;
   if (!card) {
@@ -186,7 +188,21 @@ function castCard(state: GameState, playerId: string, instanceId: string, chosen
   if (!card || !sourceZone) return { ok: false, error: 'That card is not in your hand or commander zone.' };
 
   const def = getCardDefinition(card.defId);
-  if (def.type === 'land') return { ok: false, error: 'Lands are played, not cast - move it to the battlefield instead.' };
+
+  if (def.type === 'land') {
+    if (!mutual) {
+      if (state.activePlayerId !== playerId) return { ok: false, error: 'You can only play a land on your own turn.' };
+      if (player.hasPlayedLandThisTurn) return { ok: false, error: "You've already played a land this turn." };
+    }
+    let next = updatePlayer(state, playerId, (p) => ({ ...p, zones: { ...p.zones, hand: p.zones.hand.filter((c) => c.instanceId !== instanceId) } }));
+    const movedCard = { ...card, tapped: false, damageMarked: 0, summoningSick: false };
+    next = updatePlayer(next, playerId, (p) => ({
+      ...p,
+      zones: { ...p.zones, battlefield: [...p.zones.battlefield, movedCard] },
+      hasPlayedLandThisTurn: mutual ? p.hasPlayedLandThisTurn : true,
+    }));
+    return { ok: true, state: { ...next, log: [...next.log, `${player.name} plays ${def.name}.`] } };
+  }
 
   const commanderTax = sourceZone === 'commander' ? card.counters.find((c) => c.label === 'Commander Tax')?.amount ?? 0 : 0;
   const parsed = parseCostLabel(def.costLabel);
@@ -197,10 +213,11 @@ function castCard(state: GameState, playerId: string, instanceId: string, chosen
   }
 
   let next = state;
-  if (!mutual) {
-    next = updatePlayer(next, playerId, (p) => ({ ...p, manaPool: payCost(p.manaPool, parsed, extraGeneric) }));
-  }
-  next = updatePlayer(next, playerId, (p) => ({ ...p, zones: { ...p.zones, [sourceZone as 'hand' | 'commander']: p.zones[sourceZone as 'hand' | 'commander'].filter((c) => c.instanceId !== instanceId) } }));
+  if (!mutual) next = updatePlayer(next, playerId, (p) => ({ ...p, manaPool: payCost(p.manaPool, parsed, extraGeneric) }));
+  next = updatePlayer(next, playerId, (p) => ({
+    ...p,
+    zones: { ...p.zones, [sourceZone as 'hand' | 'commander']: p.zones[sourceZone as 'hand' | 'commander'].filter((c) => c.instanceId !== instanceId) },
+  }));
 
   const isPermanent = def.type === 'creature' || def.type === 'artifact' || def.type === 'enchantment';
   const targetZone: ZoneName = isPermanent ? 'battlefield' : 'graveyard';
@@ -258,10 +275,8 @@ function activateAbility(state: GameState, playerId: string, instanceId: string,
   return { ok: true, state: { ...next, log: [...next.log, logLine] } };
 }
 
-function adjustLife(state: GameState, actingPlayerId: string, targetPlayerId: string, delta: number): ActionResult {
-  if (!isMutualActive(state)) {
-    return { ok: false, error: 'Life can only be changed automatically (combat damage) or during Mutual Adjustment.' };
-  }
+function adjustLife(state: GameState, targetPlayerId: string, delta: number): ActionResult {
+  if (!isMutualActive(state)) return { ok: false, error: 'Life can only be changed automatically (combat damage) or during Mutual Adjustment.' };
   const target = getPlayer(state, targetPlayerId);
   const next = updatePlayer(state, targetPlayerId, (p) => ({ ...p, life: p.life + delta }));
   const verb = delta >= 0 ? 'gains' : 'loses';
@@ -413,9 +428,10 @@ function nextPhase(state: GameState, playerId: string): ActionResult {
 }
 
 function runUntapStep(state: GameState, playerId: string): GameState {
-  let next = updatePlayer(state, playerId, (p) => ({
+  return updatePlayer(state, playerId, (p) => ({
     ...p,
     hasPlayedLandThisTurn: false,
+    hasDrawnThisTurn: false,
     zones: {
       ...p.zones,
       battlefield: p.zones.battlefield.map((c) => {
@@ -427,7 +443,6 @@ function runUntapStep(state: GameState, playerId: string): GameState {
       }),
     },
   }));
-  return next;
 }
 
 function endTurn(state: GameState, playerId: string): ActionResult {
@@ -436,8 +451,6 @@ function endTurn(state: GameState, playerId: string): ActionResult {
 
   let next = runUntapStep(state, newActivePlayer.id);
   next = emptyManaPools(next);
-  next = updatePlayer(next, newActivePlayer.id, (p) => ({ ...p, hasDrawnThisTurn: false }));
-  next = updatePlayer(next, playerId, (p) => ({ ...p, hasDrawnThisTurn: false }));
   next = {
     ...next,
     activePlayerId: newActivePlayer.id,
@@ -462,32 +475,23 @@ function readyToStart(state: GameState, playerId: string): ActionResult {
   return { ok: true, state: next };
 }
 
-// --- Mutual Adjustment -----------------------------------------------------
-
 function requestMutualAdjustment(state: GameState, playerId: string): ActionResult {
   if (state.mutualAdjustment.status !== 'inactive') return { ok: false, error: 'A Mutual Adjustment request is already in progress.' };
   const requester = getPlayer(state, playerId);
   return {
     ok: true,
-    state: {
-      ...state,
-      mutualAdjustment: { status: 'requested', requestedBy: playerId, agreedBy: [playerId] },
-      log: [...state.log, `${requester.name} requests Mutual Adjustment - waiting for the other player to agree.`],
-    },
+    state: { ...state, mutualAdjustment: { status: 'requested', requestedBy: playerId, agreedBy: [playerId] }, log: [...state.log, `${requester.name} requests Mutual Adjustment - waiting for the other player to agree.`] },
   };
 }
 
 function respondMutualAdjustment(state: GameState, playerId: string, accept: boolean): ActionResult {
   if (state.mutualAdjustment.status !== 'requested') return { ok: false, error: 'No Mutual Adjustment request is pending.' };
   const responder = getPlayer(state, playerId);
-
   if (!accept) {
     return { ok: true, state: { ...state, mutualAdjustment: { status: 'inactive', agreedBy: [] }, log: [...state.log, `${responder.name} declined Mutual Adjustment.`] } };
   }
-
   const agreedBy = Array.from(new Set([...state.mutualAdjustment.agreedBy, playerId]));
   const bothAgreed = agreedBy.length >= 2;
-
   return {
     ok: true,
     state: {
@@ -503,25 +507,18 @@ function requestExitMutualAdjustment(state: GameState, playerId: string): Action
   const requester = getPlayer(state, playerId);
   return {
     ok: true,
-    state: {
-      ...state,
-      mutualAdjustment: { status: 'exit_requested', requestedBy: playerId, agreedBy: [playerId] },
-      log: [...state.log, `${requester.name} wants to end Mutual Adjustment - waiting for the other player to agree.`],
-    },
+    state: { ...state, mutualAdjustment: { status: 'exit_requested', requestedBy: playerId, agreedBy: [playerId] }, log: [...state.log, `${requester.name} wants to end Mutual Adjustment - waiting for the other player to agree.`] },
   };
 }
 
 function respondExitMutualAdjustment(state: GameState, playerId: string, accept: boolean): ActionResult {
   if (state.mutualAdjustment.status !== 'exit_requested') return { ok: false, error: 'No exit request is pending.' };
   const responder = getPlayer(state, playerId);
-
   if (!accept) {
     return { ok: true, state: { ...state, mutualAdjustment: { status: 'active', agreedBy: [] }, log: [...state.log, `${responder.name} declined to end Mutual Adjustment - it remains active.`] } };
   }
-
   const agreedBy = Array.from(new Set([...state.mutualAdjustment.agreedBy, playerId]));
   const bothAgreed = agreedBy.length >= 2;
-
   return {
     ok: true,
     state: {

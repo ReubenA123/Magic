@@ -66,6 +66,7 @@ export interface PlayerState {
    * the "move to commander zone" option. */
   hasDrawnThisTurn: boolean;
   commanderDefId?: string;
+  commanderDamageTaken: number;
 }
 
 export type Phase =
