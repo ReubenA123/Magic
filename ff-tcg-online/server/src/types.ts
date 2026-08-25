@@ -32,6 +32,13 @@ export interface CardDefinition {
   transformsInto?: string;
   producesMana?: ManaColor | 'any' | ManaColor[];
   abilities?: CardAbility[];
+  /** Marks this as an Aura or Equipment - what kind of permanent it can be
+   * attached to. See CardInstance.attachedToInstanceId and
+   * engine/actions.ts: attachCard/detachCard. */
+  attachesTo?: 'creature' | 'artifact' | 'land' | 'enchantment' | 'permanent';
+  /** Equipment only - mana cost to attach/reattach. Auras don't have this;
+   * they attach for free once, right after casting, via the same Attach flow. */
+  equipCost?: string;
 }
 
 export interface Counter {
@@ -47,6 +54,10 @@ export interface CardInstance {
   counters: Counter[];
   damageMarked: number;
   summoningSick: boolean;
+  /** If set, this card (an Aura or Equipment) is attached to the battlefield
+   * permanent with this instanceId. Cleared automatically if either card
+   * leaves the battlefield - see engine/actions.ts and engine/combat.ts. */
+  attachedToInstanceId?: string;
 }
 
 export type ZoneName = 'library' | 'hand' | 'battlefield' | 'graveyard' | 'exile' | 'commander';
@@ -124,6 +135,8 @@ export type GameAction =
   | { type: 'ADJUST_LIFE'; playerId: string; delta: number }
   | { type: 'ADJUST_COUNTER'; instanceId: string; label: string; delta: number }
   | { type: 'FLIP_CARD'; instanceId: string }
+  | { type: 'ATTACH_CARD'; instanceId: string; targetInstanceId: string }
+  | { type: 'DETACH_CARD'; instanceId: string }
   | { type: 'DECLARE_ATTACKERS'; instanceIds: string[] }
   | { type: 'DECLARE_BLOCKERS'; assignments: CombatAssignment[] }
   | { type: 'NEXT_PHASE' }

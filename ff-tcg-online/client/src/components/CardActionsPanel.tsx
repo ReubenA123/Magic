@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { CardDefinition, CardInstance, ManaPool, ZoneName } from '../types';
 import { parseCostLabel, canPay } from '../engine/mana';
 
@@ -11,12 +11,15 @@ interface CardActionsPanelProps {
   mutualActive: boolean;
   isMyTurn: boolean;
   alreadyPlayedLand: boolean;
+  attachedToName: string | null;
   onToggleTap: () => void;
   onFlip: () => void;
   onCast: () => void;
   onActivateAbility: (abilityId: string) => void;
   onMove: (toZone: ZoneName) => void;
   onAdjustCounter: (label: string, delta: number) => void;
+  onStartAttach: () => void;
+  onDetach: () => void;
   onClose: () => void;
 }
 
@@ -40,16 +43,17 @@ export default function CardActionsPanel({
   mutualActive,
   isMyTurn,
   alreadyPlayedLand,
+  attachedToName,
   onToggleTap,
   onFlip,
   onCast,
   onActivateAbility,
   onMove,
   onAdjustCounter,
+  onStartAttach,
+  onDetach,
   onClose,
 }: CardActionsPanelProps) {
-  const [newCounterLabel, setNewCounterLabel] = useState('+1/+1');
-
   const commanderTax = currentZone === 'commander' ? instance.counters.find((c) => c.label === 'Commander Tax')?.amount ?? 0 : 0;
   const parsedCost = parseCostLabel(definition.costLabel);
   const isLand = definition.type === 'land';
@@ -74,6 +78,7 @@ export default function CardActionsPanel({
             {'\u2715'}
           </button>
         </div>
+
         <p className="card-actions-text">{definition.text}</p>
 
         {mutualActive && <p className="mutual-active-note">Mutual Adjustment is active - normal cost/timing rules are suspended.</p>}
@@ -84,18 +89,28 @@ export default function CardActionsPanel({
           </button>
         )}
 
-        {/* Flip is never a way to "play" a card - it only ever applies to a
-            permanent already on the battlefield, and never costs mana. */}
         {currentZone === 'battlefield' && definition.transformsInto && (
           <button className="card-action-button" onClick={onFlip}>
             Flip / Transform
           </button>
         )}
 
-        {canPlayHere && (
-          <button className="card-action-button" disabled={!canPlay} onClick={onCast} title={canPlay ? '' : isLand ? 'Already played a land, or not your turn' : 'Not enough mana'}>
-            {isLand ? `Play ${definition.name}` : `Cast (${definition.costLabel}${commanderTax > 0 ? ` +${commanderTax} tax` : ''})`}
-          </button>
+        {definition.attachesTo && currentZone === 'battlefield' && (
+          <div className="card-actions-section">
+            <div className="card-actions-label">Attachment</div>
+            {attachedToName ? (
+              <>
+                <p className="card-actions-hint">Attached to: {attachedToName}</p>
+                <button className="card-action-button secondary" onClick={onDetach}>
+                  Detach
+                </button>
+              </>
+            ) : (
+              <button className="card-action-button secondary" onClick={onStartAttach}>
+                {definition.equipCost ? `Equip (${definition.equipCost})` : 'Attach to\u2026'}
+              </button>
+            )}
+          </div>
         )}
 
         {definition.abilities && definition.abilities.length > 0 && (
@@ -114,40 +129,46 @@ export default function CardActionsPanel({
           </div>
         )}
 
-        <div className="card-actions-section">
-          <div className="card-actions-label">Move to</div>
-          <div className="card-actions-zone-row">
-            {availableZones.map((zone) => (
-              <button key={zone} className="card-action-button secondary" onClick={() => onMove(zone)}>
-                {ZONE_LABELS[zone]}
-              </button>
+        {mutualActive && (
+          <div className="card-actions-section">
+            <div className="card-actions-label">Move to (Mutual Adjustment)</div>
+            <div className="card-actions-zone-row">
+              {availableZones.map((zone) => (
+                <button key={zone} className="card-action-button secondary" onClick={() => onMove(zone)}>
+                  {ZONE_LABELS[zone]}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {mutualActive && (
+          <div className="card-actions-section">
+            <div className="card-actions-label">Counters (Mutual Adjustment)</div>
+            {instance.counters.length === 0 && <p className="card-actions-hint">No counters yet.</p>}
+            {instance.counters.map((c) => (
+              <div key={c.label} className="counter-row">
+                <span>
+                  {c.label}: {c.amount}
+                </span>
+                <button className="counter-step" onClick={() => onAdjustCounter(c.label, -1)}>
+                  {'\u2013'}
+                </button>
+                <button className="counter-step" onClick={() => onAdjustCounter(c.label, 1)}>
+                  +
+                </button>
+              </div>
             ))}
           </div>
-        </div>
+        )}
 
-        <div className="card-actions-section">
-          <div className="card-actions-label">Counters</div>
-          {instance.counters.length === 0 && <p className="card-actions-hint">No counters yet.</p>}
-          {instance.counters.map((c) => (
-            <div key={c.label} className="counter-row">
-              <span>
-                {c.label}: {c.amount}
-              </span>
-              <button className="counter-step" onClick={() => onAdjustCounter(c.label, -1)}>
-                {'\u2013'}
-              </button>
-              <button className="counter-step" onClick={() => onAdjustCounter(c.label, 1)}>
-                +
-              </button>
-            </div>
-          ))}
-          <div className="counter-add-row">
-            <input value={newCounterLabel} onChange={(e) => setNewCounterLabel(e.target.value)} placeholder="counter label" />
-            <button className="counter-step" onClick={() => newCounterLabel.trim() && onAdjustCounter(newCounterLabel.trim(), 1)}>
-              Add
-            </button>
-          </div>
-        </div>
+        <div className="card-actions-spacer" />
+
+        {canPlayHere && (
+          <button className="card-action-button card-action-button-play" disabled={!canPlay} onClick={onCast} title={canPlay ? '' : isLand ? 'Already played a land, or not your turn' : 'Not enough mana'}>
+            {isLand ? `Play ${definition.name}` : `Cast (${definition.costLabel}${commanderTax > 0 ? ` +${commanderTax} tax` : ''})`}
+          </button>
+        )}
       </div>
     </div>
   );

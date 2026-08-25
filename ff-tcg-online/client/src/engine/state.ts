@@ -75,11 +75,23 @@ export function createStateFromDeck(deck: SavedDeck, humanName: string): GameSta
 
     const openingHand = library.splice(0, 7);
 
+    // The AI's commander starts already on the battlefield for now, so it
+    // has something to block with from turn one - this is a testing
+    // convenience, not how a real Commander game starts.
+    const aiStartsOnField = id === 'ai';
+
     return {
       id,
       name,
       life: 40,
-      zones: { library, hand: openingHand, battlefield: [], graveyard: [], exile: [], commander: [commanderInstance] },
+      zones: {
+        library,
+        hand: openingHand,
+        battlefield: aiStartsOnField ? [commanderInstance] : [],
+        graveyard: [],
+        exile: [],
+        commander: aiStartsOnField ? [] : [commanderInstance],
+      },
       ready: true,
       manaPool: emptyManaPool(),
       hasPlayedLandThisTurn: false,

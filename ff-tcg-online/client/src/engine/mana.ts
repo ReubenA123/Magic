@@ -71,3 +71,10 @@ export function payCost(pool: ManaPool, cost: ParsedCost, extraGeneric: number):
   }
   return remaining;
 }
+
+/** Total mana value of a cost - generic + every coloured pip, ignoring X
+ * (X's value isn't fixed until cast). "Mana value 5" style checks. */
+export function manaValue(cost: ParsedCost): number {
+  const colourTotal = Object.values(cost.colors).reduce((a, b) => a + (b ?? 0), 0);
+  return cost.generic + colourTotal;
+}

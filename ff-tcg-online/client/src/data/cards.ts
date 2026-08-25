@@ -337,6 +337,8 @@ export const CARD_POOL: CardDefinition[] = [
       "Whenever equipped creature deals combat damage to a player, draw a card, " +
       "then you may cast a spell from your hand with mana value less than or equal to that damage without paying its mana cost. Equip 2",
     imagePath: '/assets/cards/buster-sword.webp',
+    attachesTo: 'creature',
+    equipCost: '2',
   },
   {
     id: 'cactuar',

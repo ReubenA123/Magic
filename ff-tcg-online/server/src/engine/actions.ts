@@ -35,6 +35,10 @@ export function applyAction(state: GameState, action: GameAction, playerId: stri
       return adjustCounter(state, playerId, action.instanceId, action.label, action.delta);
     case 'FLIP_CARD':
       return flipCard(state, action.instanceId);
+    case 'ATTACH_CARD':
+      return attachCard(state, playerId, action.instanceId, action.targetInstanceId);
+    case 'DETACH_CARD':
+      return detachCard(state, playerId, action.instanceId);
     case 'DECLARE_ATTACKERS':
       return declareAttackers(state, playerId, action.instanceIds);
     case 'DECLARE_BLOCKERS':
@@ -75,17 +79,6 @@ function shuffleArr<T>(items: T[]): T[] {
   return arr;
 }
 
-function drawCard(state: GameState, playerId: string): ActionResult {
-  const player = getPlayer(state, playerId);
-  if (!isMutualActive(state) && player.hasDrawnThisTurn) {
-    return { ok: false, error: 'Already drew a card this turn.' };
-  }
-  const result = performDraw(state, playerId);
-  if (!result.ok) return result;
-  const next = updatePlayer(result.state, playerId, (p) => ({ ...p, hasDrawnThisTurn: true }));
-  return { ok: true, state: next };
-}
-
 function performDraw(state: GameState, playerId: string): ActionResult {
   const player = getPlayer(state, playerId);
   const [drawn, ...rest] = player.zones.library;
@@ -94,10 +87,29 @@ function performDraw(state: GameState, playerId: string): ActionResult {
   return { ok: true, state: { ...next, log: [...next.log, `${player.name} draws a card.`] } };
 }
 
-/** Manual zone moves - for anything that ISN'T "play this card from my
- * hand," which now goes through castCard instead (see below) so cost gets
- * enforced. Moving hand/commander -> battlefield is blocked here outside
- * Mutual Adjustment, since that would bypass paying for the card. */
+/** One manual draw per turn, only during your own draw step - bypassed
+ * during Mutual Adjustment. Drawing during the draw step also immediately
+ * advances into main phase 1, since there's nothing else to do there once
+ * you've drawn. */
+function drawCard(state: GameState, playerId: string): ActionResult {
+  const player = getPlayer(state, playerId);
+  const mutual = isMutualActive(state);
+  if (!mutual) {
+    if (state.phase !== 'draw') return { ok: false, error: 'You can only draw during the draw step (until effects that grant extra draws are added).' };
+    if (state.activePlayerId !== playerId) return { ok: false, error: "It's not your draw step." };
+    if (player.hasDrawnThisTurn) return { ok: false, error: 'Already drew a card this turn.' };
+  }
+
+  const result = performDraw(state, playerId);
+  if (!result.ok) return result;
+
+  let next = updatePlayer(result.state, playerId, (p) => ({ ...p, hasDrawnThisTurn: true }));
+  if (!mutual && next.phase === 'draw' && next.activePlayerId === playerId) {
+    next = { ...next, phase: 'main1' };
+  }
+  return { ok: true, state: next };
+}
+
 function moveCard(state: GameState, playerId: string, instanceId: string, toZone: ZoneName): ActionResult {
   const found = findCardAnywhere(state, instanceId);
   if (!found) return { ok: false, error: "That card couldn't be found." };
@@ -108,14 +120,21 @@ function moveCard(state: GameState, playerId: string, instanceId: string, toZone
     return { ok: false, error: 'Use the Play/Cast button instead - it pays the cost automatically.' };
   }
 
-  const ownerId = found.ownerPlayerId;
-  let next = updatePlayer(state, ownerId, (p) => ({ ...p, zones: { ...p.zones, [found.zone]: p.zones[found.zone].filter((c) => c.instanceId !== instanceId) } }));
-
   const def = getCardDefinition(found.card.defId);
+  const ownerId = found.ownerPlayerId;
+  let next = state;
+
+  if (found.zone === 'battlefield') {
+    next = detachEverythingFrom(next, instanceId);
+  }
+
+  next = updatePlayer(next, ownerId, (p) => ({ ...p, zones: { ...p.zones, [found.zone]: p.zones[found.zone].filter((c) => c.instanceId !== instanceId) } }));
+
   const movedCard = {
     ...found.card,
     tapped: false,
     damageMarked: 0,
+    attachedToInstanceId: undefined,
     summoningSick: toZone === 'battlefield' && def.type === 'creature' ? !hasKeyword(def.text, 'haste') : false,
   };
 
@@ -126,6 +145,30 @@ function moveCard(state: GameState, playerId: string, instanceId: string, toZone
 
   const mover = getPlayer(state, playerId);
   return { ok: true, state: { ...next, log: [...next.log, `${mover.name} moves ${def.name} to ${toZone}.`] } };
+}
+
+function detachEverythingFrom(state: GameState, anchorInstanceId: string): GameState {
+  let next = state;
+  for (const p2 of next.players) {
+    const attached = p2.zones.battlefield.filter((c) => c.attachedToInstanceId === anchorInstanceId);
+    for (const child of attached) {
+      const childDef = getCardDefinition(child.defId);
+      if (childDef.type === 'enchantment') {
+        next = updatePlayer(next, p2.id, (p) => ({
+          ...p,
+          zones: { ...p.zones, battlefield: p.zones.battlefield.filter((c) => c.instanceId !== child.instanceId), graveyard: [...p.zones.graveyard, { ...child, attachedToInstanceId: undefined, tapped: false }] },
+        }));
+        next = { ...next, log: [...next.log, `${childDef.name} falls off and goes to the graveyard.`] };
+      } else {
+        next = updatePlayer(next, p2.id, (p) => ({
+          ...p,
+          zones: { ...p.zones, battlefield: p.zones.battlefield.map((c) => (c.instanceId === child.instanceId ? { ...c, attachedToInstanceId: undefined } : c)) },
+        }));
+        next = { ...next, log: [...next.log, `${childDef.name} becomes unattached.`] };
+      }
+    }
+  }
+  return next;
 }
 
 function shuffleLibrary(state: GameState, playerId: string): ActionResult {
@@ -167,14 +210,22 @@ function toggleTap(state: GameState, playerId: string, instanceId: string, chose
   return { ok: true, state: next };
 }
 
-/**
- * The single "play this card" action - covers lands AND spells. The engine
- * decides where the card ends up: lands and permanents go to the
- * battlefield, instants/sorceries go to the graveyard after resolving.
- * Lands are free but limited to one per turn (on your own turn); everything
- * else costs mana, checked and paid automatically. Mutual Adjustment
- * bypasses both the cost and the one-land-per-turn limit.
- */
+function checkLegendRule(state: GameState, playerId: string): GameState {
+  const player = getPlayer(state, playerId);
+  const legendaryNames = new Map<string, number>();
+  for (const c of player.zones.battlefield) {
+    const def = getCardDefinition(c.defId);
+    if (def.subtype?.toLowerCase().includes('legendary')) {
+      legendaryNames.set(def.name, (legendaryNames.get(def.name) ?? 0) + 1);
+    }
+  }
+  let next = state;
+  for (const [name, count] of legendaryNames) {
+    if (count > 1) next = { ...next, log: [...next.log, `Legend rule: ${player.name} controls ${count} copies of ${name} - choose one to keep, move the rest to your graveyard.`] };
+  }
+  return next;
+}
+
 function castCard(state: GameState, playerId: string, instanceId: string, chosenX?: number): ActionResult {
   const player = getPlayer(state, playerId);
   const mutual = isMutualActive(state);
@@ -189,6 +240,11 @@ function castCard(state: GameState, playerId: string, instanceId: string, chosen
 
   const def = getCardDefinition(card.defId);
 
+  if (!mutual && def.type !== 'land' && def.type !== 'instant' && !hasKeyword(def.text, 'flash')) {
+    if (state.activePlayerId !== playerId) return { ok: false, error: `${def.name} can only be cast on your own turn (no flash).` };
+    if (state.phase !== 'main1' && state.phase !== 'main2') return { ok: false, error: `${def.name} can only be cast during a main phase (no flash).` };
+  }
+
   if (def.type === 'land') {
     if (!mutual) {
       if (state.activePlayerId !== playerId) return { ok: false, error: 'You can only play a land on your own turn.' };
@@ -201,6 +257,7 @@ function castCard(state: GameState, playerId: string, instanceId: string, chosen
       zones: { ...p.zones, battlefield: [...p.zones.battlefield, movedCard] },
       hasPlayedLandThisTurn: mutual ? p.hasPlayedLandThisTurn : true,
     }));
+    next = checkLegendRule(next, playerId);
     return { ok: true, state: { ...next, log: [...next.log, `${player.name} plays ${def.name}.`] } };
   }
 
@@ -230,6 +287,7 @@ function castCard(state: GameState, playerId: string, instanceId: string, chosen
   }
 
   next = updatePlayer(next, playerId, (p) => ({ ...p, zones: { ...p.zones, [targetZone]: [...p.zones[targetZone], movedCard] } }));
+  next = checkLegendRule(next, playerId);
 
   const xNote = parsed.hasX ? ` (X=${chosenX ?? 0})` : '';
   const taxNote = commanderTax > 0 ? ` (+${commanderTax} commander tax paid)` : '';
@@ -315,6 +373,58 @@ function flipCard(state: GameState, instanceId: string): ActionResult {
   return { ok: true, state: { ...next, log: [...next.log, `${currentDef.name} transforms into ${backDef.name}.`] } };
 }
 
+function attachCard(state: GameState, playerId: string, instanceId: string, targetInstanceId: string): ActionResult {
+  const found = findCardAnywhere(state, instanceId);
+  if (!found || found.zone !== 'battlefield') return { ok: false, error: 'Only a permanent on the battlefield can be attached.' };
+  const def = getCardDefinition(found.card.defId);
+  if (!def.attachesTo) return { ok: false, error: `${def.name} can't be attached to anything.` };
+
+  const target = findCardAnywhere(state, targetInstanceId);
+  if (!target || target.zone !== 'battlefield') return { ok: false, error: 'Target is not on the battlefield.' };
+  const targetDef = getCardDefinition(target.card.defId);
+  if (target.card.instanceId === instanceId) return { ok: false, error: "A card can't attach to itself." };
+  if (def.attachesTo !== 'permanent' && targetDef.type !== def.attachesTo) {
+    return { ok: false, error: `${def.name} can only attach to a ${def.attachesTo}.` };
+  }
+
+  const mutual = isMutualActive(state);
+  const isEquipment = !!def.equipCost;
+
+  if (!mutual && !isEquipment && found.card.attachedToInstanceId) {
+    return { ok: false, error: `${def.name} is already attached - Auras don't move once attached.` };
+  }
+
+  let next = state;
+  if (isEquipment && !mutual) {
+    const parsed = parseCostLabel(def.equipCost!);
+    const owner = getPlayer(state, found.ownerPlayerId);
+    if (!canPay(owner.manaPool, parsed, 0)) return { ok: false, error: `Not enough mana to equip ${def.name} (${def.equipCost}).` };
+    next = updatePlayer(next, found.ownerPlayerId, (p) => ({ ...p, manaPool: payCost(p.manaPool, parsed, 0) }));
+  }
+
+  next = updatePlayer(next, found.ownerPlayerId, (p) => ({
+    ...p,
+    zones: { ...p.zones, battlefield: p.zones.battlefield.map((c) => (c.instanceId === instanceId ? { ...c, attachedToInstanceId: targetInstanceId } : c)) },
+  }));
+
+  const actor = getPlayer(state, playerId);
+  return { ok: true, state: { ...next, log: [...next.log, `${actor.name} attaches ${def.name} to ${targetDef.name}.`] } };
+}
+
+function detachCard(state: GameState, playerId: string, instanceId: string): ActionResult {
+  const found = findCardAnywhere(state, instanceId);
+  if (!found || found.zone !== 'battlefield') return { ok: false, error: "That card isn't on the battlefield." };
+  const def = getCardDefinition(found.card.defId);
+  if (!found.card.attachedToInstanceId) return { ok: false, error: `${def.name} isn't attached to anything.` };
+
+  const next = updatePlayer(state, found.ownerPlayerId, (p) => ({
+    ...p,
+    zones: { ...p.zones, battlefield: p.zones.battlefield.map((c) => (c.instanceId === instanceId ? { ...c, attachedToInstanceId: undefined } : c)) },
+  }));
+  const actor = getPlayer(state, playerId);
+  return { ok: true, state: { ...next, log: [...next.log, `${actor.name} detaches ${def.name}.`] } };
+}
+
 function declareAttackers(state: GameState, playerId: string, instanceIds: string[]): ActionResult {
   if (state.activePlayerId !== playerId) return { ok: false, error: 'Only the active player declares attackers.' };
   if (state.phase !== 'declare_attackers') return { ok: false, error: 'Not currently the declare attackers step.' };
@@ -327,6 +437,7 @@ function declareAttackers(state: GameState, playerId: string, instanceIds: strin
     if (creature.summoningSick) return { ok: false, error: "A creature with summoning sickness can't attack yet." };
     const def = getCardDefinition(creature.defId);
     if (def.type !== 'creature') return { ok: false, error: 'Only creatures can attack.' };
+    if (hasKeyword(def.text, 'defender')) return { ok: false, error: `${def.name} has defender and can't attack.` };
   }
 
   const attackerIds = new Set(instanceIds);
@@ -400,6 +511,9 @@ function nextPhase(state: GameState, playerId: string): ActionResult {
   if (state.activePlayerId !== playerId) return { ok: false, error: 'Only the active player advances the phase.' };
   if (state.phase === 'declare_attackers') return { ok: false, error: 'Declare your attackers (even zero) to move past this step.' };
   if (state.phase === 'declare_blockers') return { ok: false, error: "Waiting on the defending player's blocks." };
+  if (state.phase === 'draw' && !isMutualActive(state) && !getPlayer(state, playerId).hasDrawnThisTurn) {
+    return { ok: false, error: 'Draw your card before moving on.' };
+  }
 
   const currentIndex = PHASE_ORDER.indexOf(state.phase as Phase);
   if (currentIndex === -1 || currentIndex === PHASE_ORDER.length - 1) {
@@ -408,11 +522,6 @@ function nextPhase(state: GameState, playerId: string): ActionResult {
 
   let next: GameState = { ...state, phase: PHASE_ORDER[currentIndex + 1] };
   next = emptyManaPools(next);
-
-  if (next.phase === 'draw') {
-    const result = performDraw(next, next.activePlayerId);
-    if (result.ok) next = updatePlayer(result.state, next.activePlayerId, (p) => ({ ...p, hasDrawnThisTurn: true }));
-  }
 
   if (next.phase === 'cleanup') {
     for (const player of next.players) {

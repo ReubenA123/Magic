@@ -7,8 +7,7 @@
 // prose happens to contain one of these phrases incidentally.
 // ============================================================================
 
-export type CombatKeyword = 'flying' | 'first strike' | 'double strike' | 'deathtouch' | 'trample' | 'lifelink' | 'vigilance' | 'reach' | 'menace' | 'haste';
-
+export type CombatKeyword = 'flying' | 'first strike' | 'double strike' | 'deathtouch' | 'trample' | 'lifelink' | 'vigilance' | 'reach' | 'menace' | 'haste' | 'flash' | 'defender' | 'hexproof' | 'indestructible';
 export function hasKeyword(text: string, keyword: CombatKeyword): boolean {
   return text.toLowerCase().includes(keyword);
 }

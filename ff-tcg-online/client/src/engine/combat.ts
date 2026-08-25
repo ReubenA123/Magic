@@ -114,25 +114,53 @@ function dealDamagePass(state: GameState, pass: 1 | 2): GameState {
 
 function removeDeadCreatures(state: GameState): GameState {
   let next = state;
-  for (const player of next.players) {
-    const survivors: CardInstance[] = [];
+  for (const player of state.players) {
     const dead: CardInstance[] = [];
     for (const c of player.zones.battlefield) {
       const def = getCardDefinition(c.defId);
-      if (def.type !== 'creature') {
-        survivors.push(c);
-        continue;
-      }
+      if (def.type !== 'creature') continue;
       const toughness = effectiveToughness(def.toughness, c);
-      if (toughness > 0 && c.damageMarked >= toughness) dead.push(c);
-      else survivors.push(c);
+      const isIndestructible = hasKeyword(def.text, 'indestructible');
+      if (!isIndestructible && toughness > 0 && c.damageMarked >= toughness) dead.push(c);
     }
-    if (dead.length > 0) {
-      next = updatePlayer(next, player.id, (p) => ({ ...p, zones: { ...p.zones, battlefield: survivors, graveyard: [...p.zones.graveyard, ...dead] } }));
-      for (const d of dead) {
-        const def = getCardDefinition(d.defId);
-        next = { ...next, log: [...next.log, `${def.name} is destroyed.`] };
+    if (dead.length === 0) continue;
+
+    for (const dyingCard of dead) {
+      for (const p2 of next.players) {
+        const attached = p2.zones.battlefield.filter((c) => c.attachedToInstanceId === dyingCard.instanceId);
+        for (const child of attached) {
+          const childDef = getCardDefinition(child.defId);
+          if (childDef.type === 'enchantment') {
+            next = updatePlayer(next, p2.id, (p) => ({
+              ...p,
+              zones: { ...p.zones, battlefield: p.zones.battlefield.filter((c) => c.instanceId !== child.instanceId), graveyard: [...p.zones.graveyard, { ...child, attachedToInstanceId: undefined, tapped: false }] },
+            }));
+          } else {
+            next = updatePlayer(next, p2.id, (p) => ({
+              ...p,
+              zones: { ...p.zones, battlefield: p.zones.battlefield.map((c) => (c.instanceId === child.instanceId ? { ...c, attachedToInstanceId: undefined } : c)) },
+            }));
+          }
+        }
       }
+    }
+
+    // Re-read this player's current battlefield from `next` (not the stale
+    // loop-start snapshot) since the cascade above may have already
+    // changed it - otherwise a detach could get silently overwritten.
+    const deadIds = new Set(dead.map((d) => d.instanceId));
+    next = updatePlayer(next, player.id, (p) => ({
+      ...p,
+      zones: {
+        ...p.zones,
+        battlefield: p.zones.battlefield.filter((c) => !deadIds.has(c.instanceId)),
+        graveyard: [...p.zones.graveyard, ...p.zones.battlefield.filter((c) => deadIds.has(c.instanceId))],
+      },
+    }));
+
+    for (const d of dead) {
+      const def = getCardDefinition(d.defId);
+      next = { ...next, log: [...next.log, `${def.name} is destroyed.`] };
     }
   }
   return next;

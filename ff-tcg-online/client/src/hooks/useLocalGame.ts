@@ -41,38 +41,96 @@ export function useLocalGame(initialState: GameState) {
     });
   }, []);
 
-  // --- Basic AI turn: play a land if it has one, then end turn. -----------
-  // Deliberately simple for now - see engine/actions.ts if you want the AI
-  // to eventually cast creatures/spells too; this just proves the turn
-  // actually passes back and forth correctly.
+  // --- AI: auto-accept Mutual Adjustment requests/exits ---------------
   useEffect(() => {
-    if (state.activePlayerId !== AI_PLAYER_ID) return;
-    if (state.mutualAdjustment.status !== 'inactive') return;
-    if (state.winnerId) return;
+    const ma = state.mutualAdjustment;
+    const pendingOnAi = (ma.status === 'requested' || ma.status === 'exit_requested') && ma.requestedBy !== AI_PLAYER_ID && !ma.agreedBy.includes(AI_PLAYER_ID);
+    if (!pendingOnAi) return;
 
     const timer = setTimeout(() => {
-      setState((current) => {
-        if (current.activePlayerId !== AI_PLAYER_ID) return current;
-        let working = current;
-
-        const aiPlayer = working.players.find((p) => p.id === AI_PLAYER_ID)!;
-        if (!aiPlayer.hasPlayedLandThisTurn) {
-          const landCard = aiPlayer.zones.hand.find((c) => getCardDefinition(c.defId).type === 'land');
-          if (landCard) {
-            const playResult = applyAction(working, { type: 'CAST_CARD', instanceId: landCard.instanceId }, AI_PLAYER_ID);
-            if (playResult.ok) working = playResult.state;
-          }
-        }
-
-        const endResult = applyAction(working, { type: 'END_TURN' }, AI_PLAYER_ID);
-        if (endResult.ok) working = endResult.state;
-
-        return working;
-      });
-    }, 900);
+      if (ma.status === 'requested') dispatch({ type: 'RESPOND_MUTUAL_ADJUSTMENT', accept: true }, AI_PLAYER_ID);
+      else dispatch({ type: 'RESPOND_EXIT_MUTUAL_ADJUSTMENT', accept: true }, AI_PLAYER_ID);
+    }, 500);
 
     return () => clearTimeout(timer);
-  }, [state.activePlayerId, state.turnNumber, state.mutualAdjustment.status, state.winnerId]);
+  }, [state.mutualAdjustment, dispatch]);
+
+  // --- AI: block when it's the defending player ------------------------
+  // Simple greedy assignment - first available untapped creature blocks
+  // the first attacker, and so on. No target prioritization yet.
+  useEffect(() => {
+    if (state.winnerId) return;
+    if (state.phase !== 'declare_blockers') return;
+    if (state.mutualAdjustment.status !== 'inactive') return;
+
+    const defenderId = state.players.find((p) => p.id !== state.activePlayerId)!.id;
+    if (defenderId !== AI_PLAYER_ID) return;
+
+    const timer = setTimeout(() => {
+      const ai = state.players.find((p) => p.id === AI_PLAYER_ID)!;
+      const availableBlockers = ai.zones.battlefield.filter((c) => getCardDefinition(c.defId).type === 'creature' && !c.tapped);
+      const assignments = state.declaredAttackers.map((attackerId, i) => ({
+        attackerInstanceId: attackerId,
+        blockerInstanceIds: availableBlockers[i] ? [availableBlockers[i].instanceId] : [],
+      }));
+      dispatch({ type: 'DECLARE_BLOCKERS', assignments }, AI_PLAYER_ID);
+    }, 800);
+
+    return () => clearTimeout(timer);
+  }, [state.phase, state.declaredAttackers, state.activePlayerId, state.mutualAdjustment.status, state.winnerId, dispatch]);
+
+  // --- AI: step through its own turn -----------------------------------
+  useEffect(() => {
+    if (state.winnerId) return;
+    if (state.activePlayerId !== AI_PLAYER_ID) return;
+    if (state.mutualAdjustment.status !== 'inactive') return;
+    if (state.phase === 'untap') return;
+    if (state.phase === 'declare_blockers') return; // handled by the effect above, for whichever side is defending
+
+    const timer = setTimeout(() => {
+      const ai = state.players.find((p) => p.id === AI_PLAYER_ID)!;
+
+      switch (state.phase) {
+        case 'upkeep':
+        case 'combat_begin':
+        case 'combat_end':
+        case 'combat_damage':
+        case 'main2':
+        case 'end':
+          dispatch({ type: 'NEXT_PHASE' }, AI_PLAYER_ID);
+          break;
+
+        case 'draw':
+          if (!ai.hasDrawnThisTurn) dispatch({ type: 'DRAW_CARD' }, AI_PLAYER_ID);
+          break;
+
+        case 'main1': {
+          if (!ai.hasPlayedLandThisTurn) {
+            const land = ai.zones.hand.find((c) => getCardDefinition(c.defId).type === 'land');
+            if (land) {
+              dispatch({ type: 'CAST_CARD', instanceId: land.instanceId }, AI_PLAYER_ID);
+              break;
+            }
+          }
+          dispatch({ type: 'NEXT_PHASE' }, AI_PLAYER_ID);
+          break;
+        }
+
+        case 'declare_attackers':
+          dispatch({ type: 'DECLARE_ATTACKERS', instanceIds: [] }, AI_PLAYER_ID);
+          break;
+
+        case 'cleanup':
+          dispatch({ type: 'END_TURN' }, AI_PLAYER_ID);
+          break;
+
+        default:
+          break;
+      }
+    }, 800);
+
+    return () => clearTimeout(timer);
+  }, [state, dispatch]);
 
   return { state, dispatch, actionError };
 }
