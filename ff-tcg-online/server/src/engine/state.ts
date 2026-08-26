@@ -3,7 +3,7 @@
 // ============================================================================
 
 import { CardInstance, GameState, PlayerState } from '../types';
-import { buildDefaultDecklist } from '../data/cards';
+import { buildDefaultDecklist, getCardDefinition } from '../data/cards';
 import { emptyManaPool } from './mana';
 
 let instanceCounter = 0;
@@ -60,6 +60,7 @@ export function createInitialState(player1Name: string, player2Name: string, pla
     declaredAttackers: [],
     combatAssignments: [],
     mutualAdjustment: { status: 'inactive', agreedBy: [] },
+    pendingDeaths: [],
   };
 }
 
@@ -88,6 +89,33 @@ export function findCardAnywhere(state: GameState, instanceId: string) {
     }
   }
   return null;
+}
+
+/** Shared by actions.ts and combat.ts: when a permanent leaves the
+ * battlefield, detach anything attached to it. Auras go to their owner's
+ * graveyard; Equipment just becomes unattached and stays put. */
+export function detachEverythingFrom(state: GameState, anchorInstanceId: string): GameState {
+  let next = state;
+  for (const p2 of next.players) {
+    const attached = p2.zones.battlefield.filter((c) => c.attachedToInstanceId === anchorInstanceId);
+    for (const child of attached) {
+      const childDef = getCardDefinition(child.defId);
+      if (childDef.type === 'enchantment') {
+        next = updatePlayer(next, p2.id, (p) => ({
+          ...p,
+          zones: { ...p.zones, battlefield: p.zones.battlefield.filter((c) => c.instanceId !== child.instanceId), graveyard: [...p.zones.graveyard, { ...child, attachedToInstanceId: undefined, tapped: false }] },
+        }));
+        next = { ...next, log: [...next.log, `${childDef.name} falls off and goes to the graveyard.`] };
+      } else {
+        next = updatePlayer(next, p2.id, (p) => ({
+          ...p,
+          zones: { ...p.zones, battlefield: p.zones.battlefield.map((c) => (c.instanceId === child.instanceId ? { ...c, attachedToInstanceId: undefined } : c)) },
+        }));
+        next = { ...next, log: [...next.log, `${childDef.name} becomes unattached.`] };
+      }
+    }
+  }
+  return next;
 }
 
 export { shuffle, nextInstanceId };

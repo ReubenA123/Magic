@@ -4,7 +4,7 @@
 
 import { CardInstance, GameState } from '../types';
 import { getCardDefinition } from '../data/cards';
-import { getOpponent, updatePlayer } from './state';
+import { getOpponent, updatePlayer, detachEverythingFrom } from './state';
 import { hasKeyword } from './keywords';
 
 function effectivePower(power: number | undefined, instance: CardInstance): number {
@@ -56,14 +56,21 @@ function strikesInPass(text: string, pass: 1 | 2): boolean {
   return pass === 1 ? fs || ds : ds || (!fs && !ds);
 }
 
+function isPendingDeath(state: GameState, instanceId: string): boolean {
+  return state.pendingDeaths.includes(instanceId);
+}
+
 function dealDamagePass(state: GameState, pass: 1 | 2): GameState {
   let next = state;
 
   for (const assignment of next.combatAssignments) {
     const attackerFound = findInstance(next, assignment.attackerInstanceId);
-    if (!attackerFound) continue;
+    if (!attackerFound || isPendingDeath(next, attackerFound.instance.instanceId)) continue;
     const attackerDef = getCardDefinition(attackerFound.instance.defId);
-    const blockers = assignment.blockerInstanceIds.map((id) => findInstance(next, id)).filter((b): b is NonNullable<typeof b> => !!b);
+    const blockers = assignment.blockerInstanceIds
+      .map((id) => findInstance(next, id))
+      .filter((b): b is NonNullable<typeof b> => !!b)
+      .filter((b) => !isPendingDeath(next, b.instance.instanceId));
     const isDeathtouch = hasKeyword(attackerDef.text, 'deathtouch');
     const isTrample = hasKeyword(attackerDef.text, 'trample');
     const isLifelink = hasKeyword(attackerDef.text, 'lifelink');
@@ -100,8 +107,7 @@ function dealDamagePass(state: GameState, pass: 1 | 2): GameState {
     for (const blocker of blockers) {
       const blockerDef = getCardDefinition(blocker.instance.defId);
       if (!strikesInPass(blockerDef.text, pass)) continue;
-      const stillThere = findInstance(next, attackerFound.instance.instanceId);
-      if (!stillThere) continue;
+      if (isPendingDeath(next, attackerFound.instance.instanceId)) continue;
       const blockerPower = effectivePower(blockerDef.power, blocker.instance);
       next = markDamage(next, attackerFound.instance.instanceId, blockerPower);
       next = { ...next, log: [...next.log, `${blockerDef.name} deals ${blockerPower} damage to ${attackerDef.name}.`] };
@@ -112,64 +118,67 @@ function dealDamagePass(state: GameState, pass: 1 | 2): GameState {
   return next;
 }
 
-function removeDeadCreatures(state: GameState): GameState {
-  let next = state;
+/** Marks lethally-damaged creatures as pending death WITHOUT moving them
+ * to the graveyard - they stay visible, greyed out, until the End Combat
+ * step ends. See engine/actions.ts: nextPhase -> resolvePendingDeaths. */
+function markPendingDeaths(state: GameState): GameState {
+  const newlyDead: string[] = [];
   for (const player of state.players) {
-    const dead: CardInstance[] = [];
     for (const c of player.zones.battlefield) {
+      if (state.pendingDeaths.includes(c.instanceId)) continue;
       const def = getCardDefinition(c.defId);
       if (def.type !== 'creature') continue;
-      const toughness = effectiveToughness(def.toughness, c);
       const isIndestructible = hasKeyword(def.text, 'indestructible');
-      if (!isIndestructible && toughness > 0 && c.damageMarked >= toughness) dead.push(c);
+      const toughness = effectiveToughness(def.toughness, c);
+      if (!isIndestructible && toughness > 0 && c.damageMarked >= toughness) newlyDead.push(c.instanceId);
     }
+  }
+  if (newlyDead.length === 0) return state;
+
+  let next = state;
+  for (const id of newlyDead) {
+    const found = findInstance(next, id);
+    if (found) {
+      const def = getCardDefinition(found.instance.defId);
+      next = { ...next, log: [...next.log, `${def.name} takes lethal damage.`] };
+    }
+  }
+  return { ...next, pendingDeaths: [...next.pendingDeaths, ...newlyDead] };
+}
+
+export function resolveCombatDamage(state: GameState): GameState {
+  let next = dealDamagePass(state, 1);
+  next = markPendingDeaths(next);
+  next = dealDamagePass(next, 2);
+  next = markPendingDeaths(next);
+  return next;
+}
+
+/** Actually moves every pending-death creature to its owner's graveyard,
+ * cascading any attached Auras/Equipment off first. Called when leaving
+ * the End Combat step. */
+export function resolvePendingDeaths(state: GameState): GameState {
+  if (state.pendingDeaths.length === 0) return state;
+  let next = state;
+
+  for (const id of state.pendingDeaths) {
+    next = detachEverythingFrom(next, id);
+  }
+
+  const deadIds = next.pendingDeaths;
+  for (const player of next.players) {
+    const dead = player.zones.battlefield.filter((c) => deadIds.includes(c.instanceId));
     if (dead.length === 0) continue;
-
-    for (const dyingCard of dead) {
-      for (const p2 of next.players) {
-        const attached = p2.zones.battlefield.filter((c) => c.attachedToInstanceId === dyingCard.instanceId);
-        for (const child of attached) {
-          const childDef = getCardDefinition(child.defId);
-          if (childDef.type === 'enchantment') {
-            next = updatePlayer(next, p2.id, (p) => ({
-              ...p,
-              zones: { ...p.zones, battlefield: p.zones.battlefield.filter((c) => c.instanceId !== child.instanceId), graveyard: [...p.zones.graveyard, { ...child, attachedToInstanceId: undefined, tapped: false }] },
-            }));
-          } else {
-            next = updatePlayer(next, p2.id, (p) => ({
-              ...p,
-              zones: { ...p.zones, battlefield: p.zones.battlefield.map((c) => (c.instanceId === child.instanceId ? { ...c, attachedToInstanceId: undefined } : c)) },
-            }));
-          }
-        }
-      }
-    }
-
-    // Re-read this player's current battlefield from `next` (not the stale
-    // loop-start snapshot) since the cascade above may have already
-    // changed it - otherwise a detach could get silently overwritten.
-    const deadIds = new Set(dead.map((d) => d.instanceId));
+    const survivors = player.zones.battlefield.filter((c) => !deadIds.includes(c.instanceId));
     next = updatePlayer(next, player.id, (p) => ({
       ...p,
-      zones: {
-        ...p.zones,
-        battlefield: p.zones.battlefield.filter((c) => !deadIds.has(c.instanceId)),
-        graveyard: [...p.zones.graveyard, ...p.zones.battlefield.filter((c) => deadIds.has(c.instanceId))],
-      },
+      zones: { ...p.zones, battlefield: survivors, graveyard: [...p.zones.graveyard, ...dead.map((d) => ({ ...d, damageMarked: 0 }))] },
     }));
-
     for (const d of dead) {
       const def = getCardDefinition(d.defId);
       next = { ...next, log: [...next.log, `${def.name} is destroyed.`] };
     }
   }
-  return next;
-}
 
-export function resolveCombatDamage(state: GameState): GameState {
-  let next = dealDamagePass(state, 1);
-  next = removeDeadCreatures(next);
-  next = dealDamagePass(next, 2);
-  next = removeDeadCreatures(next);
-  return next;
+  return { ...next, pendingDeaths: [] };
 }

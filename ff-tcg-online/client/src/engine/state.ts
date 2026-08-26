@@ -48,6 +48,32 @@ export function findCardAnywhere(state: GameState, instanceId: string) {
   return null;
 }
 
+import { getCardDefinition } from '../data/cards';
+
+export function detachEverythingFrom(state: GameState, anchorInstanceId: string): GameState {
+  let next = state;
+  for (const p2 of next.players) {
+    const attached = p2.zones.battlefield.filter((c) => c.attachedToInstanceId === anchorInstanceId);
+    for (const child of attached) {
+      const childDef = getCardDefinition(child.defId);
+      if (childDef.type === 'enchantment') {
+        next = updatePlayer(next, p2.id, (p) => ({
+          ...p,
+          zones: { ...p.zones, battlefield: p.zones.battlefield.filter((c) => c.instanceId !== child.instanceId), graveyard: [...p.zones.graveyard, { ...child, attachedToInstanceId: undefined, tapped: false }] },
+        }));
+        next = { ...next, log: [...next.log, `${childDef.name} falls off and goes to the graveyard.`] };
+      } else {
+        next = updatePlayer(next, p2.id, (p) => ({
+          ...p,
+          zones: { ...p.zones, battlefield: p.zones.battlefield.map((c) => (c.instanceId === child.instanceId ? { ...c, attachedToInstanceId: undefined } : c)) },
+        }));
+        next = { ...next, log: [...next.log, `${childDef.name} becomes unattached.`] };
+      }
+    }
+  }
+  return next;
+}
+
 export function createStateFromDeck(deck: SavedDeck, humanName: string): GameState {
   const humanId = 'you';
   const aiId = 'ai';
@@ -104,7 +130,7 @@ export function createStateFromDeck(deck: SavedDeck, humanName: string): GameSta
   const you = buildPlayer(humanId, humanName);
   const ai = buildPlayer(aiId, 'AI Opponent');
 
-  return {
+   return {
     players: [you, ai],
     activePlayerId: humanId,
     phase: 'untap',
@@ -114,5 +140,6 @@ export function createStateFromDeck(deck: SavedDeck, humanName: string): GameSta
     declaredAttackers: [],
     combatAssignments: [],
     mutualAdjustment: { status: 'inactive', agreedBy: [] },
+    pendingDeaths: [],
   };
 }

@@ -180,7 +180,7 @@ export const CARD_POOL: CardDefinition[] = [
     text: "This land enters tapped. Tap: Add G or U. 5GU Tap: Transform this land. This ability costs 1 less to activate for each other Town you control.",
     imagePath: '/assets/cards/balamb-garden-seed-academy.webp',
     transformsInto: 'balamb-garden-airborne',
-    producesMana: 'G' //edit
+    producesMana: ['G', 'U'],
   },
   {
     id: 'balamb-garden-airborne',
@@ -229,7 +229,7 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: '-',
     text: "This land enters tapped. Tap: Add R or W.",
     imagePath: '/assets/cards/baron-airship-kingdom.webp',
-    producesMana: 'R' //edit
+    producesMana: ['G', 'U']
   },
   {
     id: 'barret-wallace',
@@ -1076,7 +1076,7 @@ export const CARD_POOL: CardDefinition[] = [
     type: 'land',
     text: "This land enters tapped. Tap: Add B or G.",
     imagePath: '/assets/cards/gohn-town-of-ruin.webp',
-    producesMana: 'B' //edit
+    producesMana: ['B', 'G']
   },
   {
     id: 'golbez-crystal-collector',
@@ -1098,7 +1098,7 @@ export const CARD_POOL: CardDefinition[] = [
     type: 'land',
     text: 'This land enters tapped. \nTap: Add R or G.',
     imagePath: '/assets/cards/gongaga-reactor-town.webp',
-    producesMana: 'R' //edit
+    producesMana: ['R', 'G']
   },
   {
     id: 'goobbue-gardener',
@@ -1138,7 +1138,7 @@ export const CARD_POOL: CardDefinition[] = [
     type: 'land',
     text: 'This land enters tapped. \nTap: Add G or U.',
     imagePath: '/assets/cards/guadosalam-farplane-gateway.webp',
-    producesMana: 'G' //edit
+    producesMana: ['G', 'B']
   },
   {
     id: 'gysahl-greens',
@@ -1947,7 +1947,7 @@ export const CARD_POOL: CardDefinition[] = [
     type: 'land',
     text: "This land enters tapped.\n Tap: Add R or W.",
     imagePath: '/assets/cards/rabanastre-royal-city.webp',
-    producesMana: 'R' //edit
+    producesMana: ['R', 'W']
   },
   {
     id: 'ragnarok-divine-deliverance',
@@ -2362,7 +2362,7 @@ export const CARD_POOL: CardDefinition[] = [
     type: 'land',
     text: 'This land enters tapped. \nTap: Add W or U.',
     imagePath: '/assets/cards/sharlayan-nation-of-scholars.webp',
-    producesMana: 'W' //edit
+    producesMana: ['W', 'U']
   },
   {
     id: 'shinra-reinforcements',
@@ -3145,7 +3145,7 @@ export const CARD_POOL: CardDefinition[] = [
   text:'This land enters tapped. \n' +
   '{T}: Add {U} or {B}.',
   imagePath: '/assets/cards/treno-dark-city.webp',
-  producesMana: 'U' //edit
+  producesMana: ['U', 'B']
   },
   {
   id: 'triple-triad',
@@ -3315,7 +3315,7 @@ export const CARD_POOL: CardDefinition[] = [
   text: 'This land enters tapped. \n' +
   '{T}: Add {B} or {R}.',
   imagePath: '/assets/cards/vector-imperial-capital.webp',
-  producesMana: 'B' //edit
+  producesMana: ['B', 'R']
   },
   {
   id: 'venat-heart-of-hydaelyn',
@@ -3454,7 +3454,7 @@ export const CARD_POOL: CardDefinition[] = [
   subtype: 'Town',
   text: 'This land enters tapped. \n{T}: Add {G} or {W}.',
   imagePath: '/assets/cards/windurst-federation-center.webp',
-  producesMana: 'G' //edit
+  producesMana: ['G', 'W']
   },
   {
   id: 'world-map',

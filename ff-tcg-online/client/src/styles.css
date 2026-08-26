@@ -1399,14 +1399,6 @@ button {
   align-items: flex-start;
 }
 
-.corner-column {
-  flex-shrink: 0;
-  width: 96px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
 .corner-label {
   font-size: 10px;
   text-transform: uppercase;
@@ -1458,13 +1450,8 @@ button {
   height: 220px;
 }
 
-.corner-column .card {
-  width: 150px;
-  height: 200px;
-}
-
 .corner-column {
-  width: 150px;
+  width: 165px;
 }
 
 .card-tapped {
@@ -1486,6 +1473,11 @@ button {
   bottom: 16px;
   right: 16px;
   z-index: 20;
+  cursor: grab;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-end;
 }
 
 .phase-bar-compact {
@@ -1545,11 +1537,6 @@ button {
   gap: 16px;
   align-items: flex-start;
   justify-content: space-between;
-}
-
-.corner-column {
-  flex-shrink: 0;
-  width: 110px;
 }
 
 .zone-center-column {
@@ -1769,8 +1756,8 @@ button {
 }
 
 .corner-column .card {
-  width: 100%;
-  height: 190px;
+  width: 165px;
+  height: 220px;
 }
 
 .zone-modal-grid .card {
@@ -1786,4 +1773,15 @@ button {
 .library-grid .card {
   width: 100%;
   height: 420px;
+}
+
+.destroyed-card-wrapper .card {
+  filter: grayscale(1);
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.reset-position-button {
+  font-size: 11px;
+  padding: 4px 10px;
 }

@@ -123,6 +123,10 @@ export interface GameState {
   declaredAttackers: string[];
   combatAssignments: CombatAssignment[];
   mutualAdjustment: MutualAdjustmentState;
+  /** Creatures dealt lethal combat damage, staying visible (greyed out) on
+   * the battlefield until the End Combat step ends - see engine/combat.ts
+   * and engine/actions.ts: resolvePendingDeaths. */
+  pendingDeaths: string[];
 }
 
 export type GameAction =

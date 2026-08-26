@@ -3,12 +3,10 @@
 // ============================================================================
 
 import { ActionResult, CombatAssignment, GameAction, GameState, ManaColor, Phase, ZoneName } from '../types';
-import { findCardAnywhere, getOpponent, getPlayer, updatePlayer } from './state';
-import { getCardDefinition } from '../data/cards';
+import { findCardAnywhere, getOpponent, getPlayer, updatePlayer, detachEverythingFrom } from './state'; import { getCardDefinition } from '../data/cards';
 import { emptyManaPool, canPay, payCost, parseCostLabel } from './mana';
 import { hasKeyword } from './keywords';
-import { resolveCombatDamage } from './combat';
-
+import { resolveCombatDamage, resolvePendingDeaths } from './combat';
 const PHASE_ORDER: Phase[] = ['untap', 'upkeep', 'draw', 'main1', 'combat_begin', 'declare_attackers', 'declare_blockers', 'combat_damage', 'combat_end', 'main2', 'end', 'cleanup'];
 
 function isMutualActive(state: GameState): boolean {
@@ -147,29 +145,6 @@ function moveCard(state: GameState, playerId: string, instanceId: string, toZone
   return { ok: true, state: { ...next, log: [...next.log, `${mover.name} moves ${def.name} to ${toZone}.`] } };
 }
 
-function detachEverythingFrom(state: GameState, anchorInstanceId: string): GameState {
-  let next = state;
-  for (const p2 of next.players) {
-    const attached = p2.zones.battlefield.filter((c) => c.attachedToInstanceId === anchorInstanceId);
-    for (const child of attached) {
-      const childDef = getCardDefinition(child.defId);
-      if (childDef.type === 'enchantment') {
-        next = updatePlayer(next, p2.id, (p) => ({
-          ...p,
-          zones: { ...p.zones, battlefield: p.zones.battlefield.filter((c) => c.instanceId !== child.instanceId), graveyard: [...p.zones.graveyard, { ...child, attachedToInstanceId: undefined, tapped: false }] },
-        }));
-        next = { ...next, log: [...next.log, `${childDef.name} falls off and goes to the graveyard.`] };
-      } else {
-        next = updatePlayer(next, p2.id, (p) => ({
-          ...p,
-          zones: { ...p.zones, battlefield: p.zones.battlefield.map((c) => (c.instanceId === child.instanceId ? { ...c, attachedToInstanceId: undefined } : c)) },
-        }));
-        next = { ...next, log: [...next.log, `${childDef.name} becomes unattached.`] };
-      }
-    }
-  }
-  return next;
-}
 
 function shuffleLibrary(state: GameState, playerId: string): ActionResult {
   const player = getPlayer(state, playerId);
@@ -453,12 +428,13 @@ function declareAttackers(state: GameState, playerId: string, instanceIds: strin
     },
   }));
 
+  const skipBlockers = instanceIds.length === 0;
   next = {
     ...next,
     declaredAttackers: instanceIds,
     combatAssignments: instanceIds.map((id) => ({ attackerInstanceId: id, blockerInstanceIds: [] })),
-    phase: 'declare_blockers',
-    log: [...next.log, instanceIds.length > 0 ? `${player.name} attacks with ${instanceIds.length} creature(s).` : `${player.name} declares no attackers.`],
+    phase: skipBlockers ? 'combat_end' : 'declare_blockers',
+    log: [...next.log, instanceIds.length > 0 ? `${player.name} attacks with ${instanceIds.length} creature(s).` : `${player.name} declares no attackers - skipping straight past blocking.`],
   };
 
   return { ok: true, state: emptyManaPools(next) };
@@ -503,7 +479,7 @@ function declareBlockers(state: GameState, playerId: string, assignments: Combat
   };
 
   next = resolveCombatDamage(next);
-  next = { ...next, phase: 'combat_damage' };
+  next = { ...next, phase: 'combat_end' };
   return { ok: true, state: emptyManaPools(next) };
 }
 
@@ -520,8 +496,20 @@ function nextPhase(state: GameState, playerId: string): ActionResult {
     return { ok: false, error: 'Use End Turn to move on from the cleanup step.' };
   }
 
-  let next: GameState = { ...state, phase: PHASE_ORDER[currentIndex + 1] };
+  let nextPhaseName = PHASE_ORDER[currentIndex + 1];
+  // Nothing happens during the momentary "begin combat" step yet - skip
+  // straight into declaring attackers so the attack zone appears the
+  // instant combat starts, per the "no separate attackers phase" design.
+  if (nextPhaseName === 'combat_begin') nextPhaseName = 'declare_attackers';
+
+  let next: GameState = { ...state, phase: nextPhaseName };
   next = emptyManaPools(next);
+
+  // Leaving End Combat: now that both players have seen the outcome,
+  // actually move anything that died to the graveyard.
+  if (state.phase === 'combat_end') {
+    next = resolvePendingDeaths(next);
+  }
 
   if (next.phase === 'cleanup') {
     for (const player of next.players) {

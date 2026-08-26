@@ -88,43 +88,21 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   const [winnerDismissed, setWinnerDismissed] = useState(false);
   const [selectionBox, setSelectionBox] = useState<SelectionBox | null>(null);
   const [multiSelected, setMultiSelected] = useState<Set<string>>(new Set());
-  const [attachingInstanceId, setAttachingInstanceId] = useState<string | null>(null);
+  const [phaseBoxPos, setPhaseBoxPos] = useState<{ x: number; y: number } | null>(null);
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const phaseDragRef = useRef<{ offsetX: number; offsetY: number } | null>(null);
 
-  // --- Untap step auto-advances after a short pause, for whoever's turn it is ---
   useEffect(() => {
     if (state.phase !== 'untap' || !isYourTurn) return;
     const timer = setTimeout(() => onAction({ type: 'NEXT_PHASE' }, state.activePlayerId), 2000);
     return () => clearTimeout(timer);
   }, [state.phase, state.turnNumber, state.activePlayerId, isYourTurn, onAction]);
 
-  // --- Reset the "winner dismissed" flag if the winner changes (e.g. via undo) ---
   useEffect(() => {
     if (!state.winnerId) setWinnerDismissed(false);
   }, [state.winnerId]);
 
   const openCard = openPanelId ? findCard(state, openPanelId) : null;
-  const attachingSource = attachingInstanceId ? findCard(state, attachingInstanceId) : null;
-  const attachingSourceDef = attachingSource ? getCardDefinition(attachingSource.card.defId) : null;
-
-  function isValidAttachTarget(candidate: CardInstance): boolean {
-    if (!attachingSourceDef || !attachingInstanceId) return false;
-    if (candidate.instanceId === attachingInstanceId) return false;
-    const candidateDef = getCardDefinition(candidate.defId);
-    return attachingSourceDef.attachesTo === 'permanent' || candidateDef.type === attachingSourceDef.attachesTo;
-  }
-
-  function handleAttachTargetClick(targetInstanceId: string) {
-    if (!attachingInstanceId) return;
-    onAction({ type: 'ATTACH_CARD', instanceId: attachingInstanceId, targetInstanceId });
-    setAttachingInstanceId(null);
-  }
-
-  function getAttachedToName(instance: CardInstance): string | null {
-    if (!instance.attachedToInstanceId) return null;
-    const target = findCard(state, instance.attachedToInstanceId);
-    return target ? getCardDefinition(target.card.defId).name : null;
-  }
 
   const isDeclaringAttackers = state.phase === 'declare_attackers' && (soloControl || state.activePlayerId === yourPlayerId);
   const isDeclaringBlockers = state.phase === 'declare_blockers' && (soloControl || state.activePlayerId !== yourPlayerId);
@@ -194,6 +172,17 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     onAction({ type: 'TOGGLE_TAP', instanceId: card.instanceId });
   }
 
+  function handleBoardDrop(playerId: string) {
+    if (!draggedInstanceId) return;
+    const found = findCard(state, draggedInstanceId);
+    if (!found) return;
+    if (found.player.id !== playerId) return;
+    if (found.zone === 'hand' || found.zone === 'commander') {
+      handleCast(found.card);
+    }
+    setDraggedInstanceId(null);
+  }
+
   function handleCast(card: CardInstance) {
     const def = getCardDefinition(card.defId);
     const parsed = parseCostLabel(def.costLabel);
@@ -240,14 +229,11 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
 
   function confirmBlockers() {
     const assignments = Object.entries(blockerAssignments).map(([attackerInstanceId, blockerInstanceIds]) => ({ attackerInstanceId, blockerInstanceIds }));
-    const defenderId = soloControl ? opponent.id : yourPlayerId;
+    const defenderId = state.players.find((p) => p.id !== state.activePlayerId)!.id;
     onAction({ type: 'DECLARE_BLOCKERS', assignments }, defenderId);
     setBlockerAssignments({});
   }
 
-  // --- Marquee (drag-box) multi-select, for tapping several cards at once ---
-  // Evaluated once on mouse-up, not continuously - a lighter-weight approach
-  // than live-tracking every card under the box as you drag.
   function startSelection(e: React.MouseEvent, enabled: boolean) {
     if (!enabled) return;
     if ((e.target as HTMLElement).closest('.card')) return;
@@ -292,29 +278,49 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     else cardRefs.current.delete(id);
   }
 
+  function startPhaseDrag(e: React.MouseEvent) {
+    if ((e.target as HTMLElement).closest('button')) return;
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    phaseDragRef.current = { offsetX: e.clientX - rect.left, offsetY: e.clientY - rect.top };
+    window.addEventListener('mousemove', onPhaseDragMove);
+    window.addEventListener('mouseup', onPhaseDragEnd);
+  }
+
+  function onPhaseDragMove(e: MouseEvent) {
+    if (!phaseDragRef.current) return;
+    setPhaseBoxPos({ x: e.clientX - phaseDragRef.current.offsetX, y: e.clientY - phaseDragRef.current.offsetY });
+  }
+
+  function onPhaseDragEnd() {
+    phaseDragRef.current = null;
+    window.removeEventListener('mousemove', onPhaseDragMove);
+    window.removeEventListener('mouseup', onPhaseDragEnd);
+  }
+
   function renderCreatureCard(c: CardInstance, isOpponentSide: boolean, rowCards: CardInstance[]) {
+    const isDead = state.pendingDeaths.includes(c.instanceId);
     const isAttacker = state.declaredAttackers.includes(c.instanceId);
     const def = getCardDefinition(c.defId);
-    const canBeBlockTarget = isDeclaringBlockers && isOpponentSide && isAttacker;
-    const canAttackThis = isDeclaringAttackers && !isOpponentSide && !c.tapped && !c.summoningSick;
-    const canBeBlocker = isDeclaringBlockers && !isOpponentSide && !c.tapped;
+    const canBeBlockTarget = !isDead && isDeclaringBlockers && isOpponentSide && isAttacker;
+    const canAttackThis = !isDead && isDeclaringAttackers && !isOpponentSide && !c.tapped && !c.summoningSick;
+    const canBeBlocker = !isDead && isDeclaringBlockers && !isOpponentSide && !c.tapped;
     const combatDraggable = canAttackThis || canBeBlocker;
-    const reorderAllowed = !isDeclaringAttackers && !isDeclaringBlockers && (!isOpponentSide || soloControl);
-    const isAttachTarget = !!attachingInstanceId && isValidAttachTarget(c);
-    const selected = selectedAttackers.has(c.instanceId) || pendingBlocker === c.instanceId || multiSelected.has(c.instanceId) || isAttachTarget;
+    const reorderAllowed = !isDead && !isDeclaringAttackers && !isDeclaringBlockers && (!isOpponentSide || !!soloControl);
+    const selected = selectedAttackers.has(c.instanceId) || pendingBlocker === c.instanceId || multiSelected.has(c.instanceId);
 
     return (
-      <div key={c.instanceId} className={isAttacker ? 'attacking-creature' : ''} ref={(el) => registerCardRef(c.instanceId, el)}>
+      <div key={c.instanceId} className={`${isAttacker ? 'attacking-creature' : ''} ${isDead ? 'destroyed-card-wrapper' : ''}`} ref={(el) => registerCardRef(c.instanceId, el)}>
         <div
           draggable={combatDraggable || reorderAllowed}
           onDragStart={() => setDraggedInstanceId(c.instanceId)}
           onDragOver={(e) => (canBeBlockTarget || reorderAllowed) && e.preventDefault()}
-          onClick={() => {
-            if (isAttachTarget) handleAttachTargetClick(c.instanceId);
-            else if (canBeBlockTarget) handleAttackerClickForBlocking(c.instanceId);
-            else if (canAttackThis) toggleAttacker(c.instanceId);
-            else if (canBeBlocker) handleBlockerCandidateClick(c.instanceId);
-            else setOpenPanelId(c.instanceId);
+          onDrop={() => {
+            if (canBeBlockTarget && draggedInstanceId) {
+              assignBlocker(c.instanceId, draggedInstanceId);
+              setDraggedInstanceId(null);
+            } else if (reorderAllowed && draggedInstanceId) {
+              handleRowDrop(isOpponentSide ? opponent.id : you.id, 'creatures', rowCards, c.instanceId);
+            }
           }}
         >
           <Card
@@ -322,11 +328,13 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
             instance={c}
             selected={selected}
             onClick={() => {
+              if (isDead) return;
               if (canBeBlockTarget) handleAttackerClickForBlocking(c.instanceId);
               else if (canAttackThis) toggleAttacker(c.instanceId);
               else if (canBeBlocker) handleBlockerCandidateClick(c.instanceId);
               else setOpenPanelId(c.instanceId);
             }}
+            onDoubleClick={() => !isDead && handleToggleTap(c)}
           />
         </div>
       </div>
@@ -335,12 +343,12 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
 
   function renderPlainCard(c: CardInstance, playerId: string, rowKey: string, rowCards: CardInstance[], reorderAllowed: boolean) {
     const def = getCardDefinition(c.defId);
-    const isAttachTarget = !!attachingInstanceId && isValidAttachTarget(c);
+    const isAttachTarget = false;
     return (
       <div key={c.instanceId} ref={(el) => registerCardRef(c.instanceId, el)}>
         <div
-          draggable={reorderAllowed && !isAttachTarget}
-          onDragStart={() => reorderAllowed && !isAttachTarget && setDraggedInstanceId(c.instanceId)}
+          draggable={reorderAllowed}
+          onDragStart={() => reorderAllowed && setDraggedInstanceId(c.instanceId)}
           onDragOver={(e) => reorderAllowed && e.preventDefault()}
           onDrop={() => reorderAllowed && draggedInstanceId && handleRowDrop(playerId, rowKey, rowCards, c.instanceId)}
         >
@@ -348,7 +356,8 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
             definition={def}
             instance={c}
             selected={multiSelected.has(c.instanceId) || isAttachTarget}
-            onClick={() => (isAttachTarget ? handleAttachTargetClick(c.instanceId) : setOpenPanelId(c.instanceId))}
+            onClick={() => setOpenPanelId(c.instanceId)}
+            onDoubleClick={() => handleToggleTap(c)}
           />
         </div>
       </div>
@@ -368,7 +377,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     const commanderColumn = (
       <div className="corner-column">
         <div className="corner-label">Commander</div>
-       {commanderCard ? (
+        {commanderCard ? (
           <Card definition={getCardDefinition(commanderCard.defId)} instance={commanderCard} onClick={() => setOpenPanelId(commanderCard.instanceId)} />
         ) : (
           <div className="corner-box">In play</div>
@@ -378,7 +387,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           onClick={() => canDrawHere && onAction({ type: 'DRAW_CARD' }, player.id)}
           title={canDrawHere ? 'Click to draw' : ''}
         >
-          <div className="card card-back" />
+          <Card definition={{ id: '', name: '', type: 'creature', costLabel: '', text: '', imagePath: '' }} faceDown />
           <span className="library-stack-count">{player.zones.library.length}</span>
         </div>
       </div>
@@ -401,6 +410,20 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
       </div>
     );
 
+    const battlefieldRows = isOpponentSide ? (
+      <>
+        <div className="battlefield-row lands-row">{orderedLands.map((c) => renderPlainCard(c, player.id, 'lands', lands, selectEnabled))}</div>
+        <div className="battlefield-row others-row">{orderedOthers.map((c) => renderPlainCard(c, player.id, 'others', others, selectEnabled))}</div>
+        <div className="battlefield-row creatures-row">{orderedCreatures.map((c) => renderCreatureCard(c, isOpponentSide, creatures))}</div>
+      </>
+    ) : (
+      <>
+        <div className="battlefield-row creatures-row">{orderedCreatures.map((c) => renderCreatureCard(c, isOpponentSide, creatures))}</div>
+        <div className="battlefield-row others-row">{orderedOthers.map((c) => renderPlainCard(c, player.id, 'others', others, selectEnabled))}</div>
+        <div className="battlefield-row lands-row">{orderedLands.map((c) => renderPlainCard(c, player.id, 'lands', lands, selectEnabled))}</div>
+      </>
+    );
+
     const centerColumn = (
       <div
         className="zone-center-column"
@@ -408,21 +431,18 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
         onMouseMove={updateSelection}
         onMouseUp={finishSelection}
         onMouseLeave={finishSelection}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={() => handleBoardDrop(player.id)}
       >
-        <div className="battlefield-row creatures-row">{orderedCreatures.map((c) => renderCreatureCard(c, isOpponentSide, creatures))}</div>
-        <div className="battlefield-row others-row">{orderedOthers.map((c) => renderPlainCard(c, player.id, 'others', others, !isOpponentSide || !!soloControl))}</div>
-        <div className="battlefield-row lands-row">{orderedLands.map((c) => renderPlainCard(c, player.id, 'lands', lands, !isOpponentSide || !!soloControl))}</div>
+        {battlefieldRows}
       </div>
     );
 
-    return (
-      <section className={`player-zone ${isOpponentSide ? 'opponent-zone' : 'your-zone'}`}>
-        <div className="zone-top-row">{isOpponentSide ? <>{graveyardExileColumn}{centerColumn}{commanderColumn}</> : <>{commanderColumn}{centerColumn}{graveyardExileColumn}</>}</div>
-
-        <div className={`hand-fan ${isOpponentSide ? 'opponent-hand' : 'your-hand'}`}>
-          {isOpponentSide
-            ? player.zones.hand.map((c) => <Card key={c.instanceId} definition={getCardDefinition(c.defId)} faceDown />)
-            : orderedHand(player.zones.hand).map((c, i, arr) => {
+    const handRow = (
+      <div className={`hand-fan ${isOpponentSide ? 'opponent-hand' : 'your-hand'}`}>
+        {isOpponentSide
+          ? player.zones.hand.map((c) => <Card key={c.instanceId} definition={getCardDefinition(c.defId)} faceDown />)
+          : orderedHand(player.zones.hand).map((c, i, arr) => {
               const def = getCardDefinition(c.defId);
               const affordable = def.type === 'land' || canPay(player.manaPool, parseCostLabel(def.costLabel), 0);
               const mid = (arr.length - 1) / 2;
@@ -441,26 +461,51 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                 </div>
               );
             })}
-        </div>
+      </div>
+    );
 
-        <div className="life-row">
-          <div className="life-total-group">
-            <span className="life-total">
-              {player.name}: {player.life} life
-            </span>
-            {player.commanderDamageTaken > 0 && <span className="commander-damage-badge">Commander dmg: {player.commanderDamageTaken}</span>}
-            {mutualActive && (
-              <div className="life-buttons">
-                {[-5, -1, 1, 5].map((delta) => (
-                  <button key={delta} className="life-step-button" onClick={() => onAction({ type: 'ADJUST_LIFE', playerId: player.id, delta })}>
-                    {delta > 0 ? `+${delta}` : delta}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          <ManaRow player={player} />
+    const lifeRow = (
+      <div className="life-row">
+        <div className="life-total-group">
+          <span className="life-total">
+            {player.name}: {player.life} life
+          </span>
+          {player.commanderDamageTaken > 0 && <span className="commander-damage-badge">Commander dmg: {player.commanderDamageTaken}</span>}
+          {mutualActive && (
+            <div className="life-buttons">
+              {[-5, -1, 1, 5].map((delta) => (
+                <button key={delta} className="life-step-button" onClick={() => onAction({ type: 'ADJUST_LIFE', playerId: player.id, delta })}>
+                  {delta > 0 ? `+${delta}` : delta}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
+        <ManaRow player={player} />
+      </div>
+    );
+
+    return (
+      <section className={`player-zone ${isOpponentSide ? 'opponent-zone' : 'your-zone'}`}>
+        {isOpponentSide && lifeRow}
+        {isOpponentSide && handRow}
+        <div className="zone-top-row">
+          {isOpponentSide ? (
+            <>
+              {graveyardExileColumn}
+              {centerColumn}
+              {commanderColumn}
+            </>
+          ) : (
+            <>
+              {commanderColumn}
+              {centerColumn}
+              {graveyardExileColumn}
+            </>
+          )}
+        </div>
+        {!isOpponentSide && handRow}
+        {!isOpponentSide && lifeRow}
       </section>
     );
   }
@@ -474,15 +519,6 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           <span>{multiSelected.size} selected</span>
           <button onClick={tapMultiSelected}>Tap</button>
           <button onClick={() => setMultiSelected(new Set())}>Clear</button>
-        </div>
-      )}
-
-      {attachingInstanceId && attachingSourceDef && (
-        <div className="multi-select-toolbar">
-          <span>
-            Choose a {attachingSourceDef.attachesTo} to attach {attachingSourceDef.name} to
-          </span>
-          <button onClick={() => setAttachingInstanceId(null)}>Cancel</button>
         </div>
       )}
 
@@ -563,8 +599,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
               <div className="combat-zone-row">
                 {state.players
                   .find((p) => p.id !== state.activePlayerId)!
-                  .zones.battlefield
-                  .filter((c) => getCardDefinition(c.defId).type === 'creature' && !c.tapped)
+                  .zones.battlefield.filter((c) => getCardDefinition(c.defId).type === 'creature' && !c.tapped)
                   .filter((c) => !Object.values(blockerAssignments).flat().includes(c.instanceId))
                   .map((c) => (
                     <div key={c.instanceId} draggable onDragStart={() => setDraggedInstanceId(c.instanceId)}>
@@ -601,18 +636,24 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
         </button>
       </div>
 
-      <div className="bottom-right-controls">
+      <div
+        className="bottom-right-controls"
+        onMouseDown={startPhaseDrag}
+        style={phaseBoxPos ? { left: phaseBoxPos.x, top: phaseBoxPos.y, right: 'auto', bottom: 'auto' } : undefined}
+      >
         <PhaseBar
           phase={state.phase}
           turnNumber={state.turnNumber}
           isYourTurn={isYourTurn}
-          onNextPhase={() => {
-            if (isDeclaringAttackers) confirmAttackers();
-            else if (isDeclaringBlockers) confirmBlockers();
-            else onAction({ type: 'NEXT_PHASE' }, state.activePlayerId);
-          }}
+          hideControls={isDeclaringAttackers || isDeclaringBlockers}
+          onNextPhase={() => onAction({ type: 'NEXT_PHASE' }, state.activePlayerId)}
           onEndTurn={() => onAction({ type: 'END_TURN' }, state.activePlayerId)}
         />
+        {phaseBoxPos && (
+          <button className="phase-bar-compact-button secondary reset-position-button" onClick={() => setPhaseBoxPos(null)}>
+            Reset turn box location
+          </button>
+        )}
       </div>
 
       {openCard && (
@@ -625,6 +666,9 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           mutualActive={mutualActive}
           isMyTurn={state.activePlayerId === openCard.player.id}
           alreadyPlayedLand={openCard.player.hasPlayedLandThisTurn}
+          attachedToName={
+            openCard.card.attachedToInstanceId ? getCardDefinition(findCard(state, openCard.card.attachedToInstanceId)?.card.defId ?? '')?.name ?? null : null
+          }
           onToggleTap={() => handleToggleTap(openCard.card)}
           onFlip={() => onAction({ type: 'FLIP_CARD', instanceId: openCard.card.instanceId })}
           onCast={() => handleCast(openCard.card)}
@@ -634,11 +678,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
             setOpenPanelId(null);
           }}
           onAdjustCounter={(label, delta) => onAction({ type: 'ADJUST_COUNTER', instanceId: openCard.card.instanceId, label, delta })}
-          attachedToName={getAttachedToName(openCard.card)}
-          onStartAttach={() => {
-            setAttachingInstanceId(openCard.card.instanceId);
-            setOpenPanelId(null);
-          }}
+          onStartAttach={() => setOpenPanelId(null)}
           onDetach={() => {
             onAction({ type: 'DETACH_CARD', instanceId: openCard.card.instanceId });
             setOpenPanelId(null);

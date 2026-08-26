@@ -8,33 +8,34 @@ interface CardProps {
   selected?: boolean;
   dimmed?: boolean;
   onClick?: () => void;
+  onDoubleClick?: () => void;
 }
 
-/**
- * Renders one card. No card art exists yet in this repo - see
- * client/public/assets/cards/README.md - so this always tries the image
- * first and falls back to a plain text placeholder if it 404s, meaning the
- * game is fully playable before any art exists. Counters are drawn as small
- * badges in the corner; tapped cards rotate, matching a physical table.
- */
-export default function Card({ definition, instance, faceDown, selected, onClick }: CardProps) {
+export default function Card({ definition, instance, faceDown, selected, dimmed, onClick, onDoubleClick }: CardProps) {
   const [imageFailed, setImageFailed] = useState(false);
+  const [backImageFailed, setBackImageFailed] = useState(false);
 
   if (faceDown) {
-    return <div className="card card-back" />;
+    return (
+      <div className="card card-back">
+        {!backImageFailed && <img src="/assets/cards/card-back.jpg" alt="Card back" className="card-art" onError={() => setBackImageFailed(true)} />}
+      </div>
+    );
   }
 
-  const classNames = ['card', selected ? 'card-selected' : '', onClick ? 'card-clickable' : '', instance?.tapped ? 'card-tapped' : ''].filter(Boolean).join(' ');
+  const classNames = ['card', selected ? 'card-selected' : '', onClick ? 'card-clickable' : '', instance?.tapped ? 'card-tapped' : '', dimmed ? 'card-dimmed' : '']
+    .filter(Boolean)
+    .join(' ');
 
   return (
-    <div className={classNames} onClick={onClick} title={definition.text}>
+    <div className={classNames} onClick={onClick} onDoubleClick={onDoubleClick} title={definition.text}>
       {!imageFailed ? (
         <img src={definition.imagePath} alt={definition.name} onError={() => setImageFailed(true)} className="card-art" />
       ) : (
         <div className="card-placeholder">
           <div className="card-placeholder-cost">{definition.costLabel}</div>
           <div className="card-placeholder-name">{definition.name}</div>
-          <div className="card-placeholder-type">{definition.type}</div>
+          <div className="card-placeholder-type">{definition.subtype ?? definition.type}</div>
           <div className="card-placeholder-text">{definition.text}</div>
           {definition.type === 'creature' && (
             <div className="card-placeholder-pt">
@@ -43,7 +44,7 @@ export default function Card({ definition, instance, faceDown, selected, onClick
           )}
         </div>
       )}
-        {instance && instance.counters.length > 0 && (
+      {instance && instance.counters.length > 0 && (
         <div className="card-counters">
           {instance.counters.map((c) => (
             <span key={c.label} className="counter-badge" title={`${c.amount} ${c.label} counter(s)`}>
