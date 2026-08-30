@@ -51,7 +51,7 @@ export default function ZoneModal({ title, cards, onClose, onCardClick }: ZoneMo
         ) : (
           <div className="zone-modal-grid">
             {filtered.map((c) => (
-              <Card key={c.instanceId} definition={getCardDefinition(c.defId)} instance={c} onClick={() => onCardClick(c.instanceId)} />
+              <Card key={c.instanceId} definition={getCardDefinition(c.defId)} instance={{ ...c, tapped: false }} onClick={() => onCardClick(c.instanceId)} />
             ))}
           </div>
         )}

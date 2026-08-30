@@ -27,6 +27,8 @@ export default function Card({ definition, instance, faceDown, selected, dimmed,
     .filter(Boolean)
     .join(' ');
 
+  const dualMana = Array.isArray(definition.producesMana) && definition.producesMana.length === 2 ? definition.producesMana : null;
+
   return (
     <div className={classNames} onClick={onClick} onDoubleClick={onDoubleClick} title={definition.text}>
       {!imageFailed ? (
@@ -42,6 +44,12 @@ export default function Card({ definition, instance, faceDown, selected, dimmed,
               {definition.power}/{definition.toughness}
             </div>
           )}
+        </div>
+      )}
+      {dualMana && (
+        <div className="dual-mana-split">
+          <span className={`dual-mana-half mana-${dualMana[0]}`}>{dualMana[0]}</span>
+          <span className={`dual-mana-half mana-${dualMana[1]}`}>{dualMana[1]}</span>
         </div>
       )}
       {instance && instance.counters.length > 0 && (

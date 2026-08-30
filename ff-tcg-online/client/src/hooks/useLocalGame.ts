@@ -3,9 +3,11 @@
 // ============================================================================
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { GameAction, GameState } from '../types';
+import { GameAction, GameState, ManaColor } from '../types';
 import { applyAction } from '../engine/actions';
 import { getCardDefinition } from '../data/cards';
+import { canPay, parseCostLabel } from '../engine/mana';
+import { hasKeyword } from '../engine/keywords';
 
 const MAX_HISTORY = 25;
 const AI_PLAYER_ID = 'ai';
@@ -41,28 +43,21 @@ export function useLocalGame(initialState: GameState) {
     });
   }, []);
 
-  // --- AI: auto-accept Mutual Adjustment requests/exits ---------------
   useEffect(() => {
     const ma = state.mutualAdjustment;
     const pendingOnAi = (ma.status === 'requested' || ma.status === 'exit_requested') && ma.requestedBy !== AI_PLAYER_ID && !ma.agreedBy.includes(AI_PLAYER_ID);
     if (!pendingOnAi) return;
-
     const timer = setTimeout(() => {
       if (ma.status === 'requested') dispatch({ type: 'RESPOND_MUTUAL_ADJUSTMENT', accept: true }, AI_PLAYER_ID);
       else dispatch({ type: 'RESPOND_EXIT_MUTUAL_ADJUSTMENT', accept: true }, AI_PLAYER_ID);
     }, 500);
-
     return () => clearTimeout(timer);
   }, [state.mutualAdjustment, dispatch]);
 
-  // --- AI: block when it's the defending player ------------------------
-  // Simple greedy assignment - first available untapped creature blocks
-  // the first attacker, and so on. No target prioritization yet.
   useEffect(() => {
     if (state.winnerId) return;
     if (state.phase !== 'declare_blockers') return;
     if (state.mutualAdjustment.status !== 'inactive') return;
-
     const defenderId = state.players.find((p) => p.id !== state.activePlayerId)!.id;
     if (defenderId !== AI_PLAYER_ID) return;
 
@@ -75,17 +70,20 @@ export function useLocalGame(initialState: GameState) {
       }));
       dispatch({ type: 'DECLARE_BLOCKERS', assignments }, AI_PLAYER_ID);
     }, 800);
-
     return () => clearTimeout(timer);
   }, [state.phase, state.declaredAttackers, state.activePlayerId, state.mutualAdjustment.status, state.winnerId, dispatch]);
 
   // --- AI: step through its own turn -----------------------------------
+  // Main phase logic: play a land if it hasn't yet, then tap untapped
+  // lands one at a time (building its mana pool over several ticks) and
+  // cast whatever in hand it can currently afford, repeating until nothing
+  // more is affordable, then move on. Deliberately simple - no sequencing
+  // strategy, just "spend everything you can."
   useEffect(() => {
     if (state.winnerId) return;
     if (state.activePlayerId !== AI_PLAYER_ID) return;
     if (state.mutualAdjustment.status !== 'inactive') return;
-    if (state.phase === 'untap') return;
-    if (state.phase === 'declare_blockers') return; // handled by the effect above, for whichever side is defending
+    if (state.phase === 'untap' || state.phase === 'declare_blockers') return;
 
     const timer = setTimeout(() => {
       const ai = state.players.find((p) => p.id === AI_PLAYER_ID)!;
@@ -112,13 +110,42 @@ export function useLocalGame(initialState: GameState) {
               break;
             }
           }
+
+          const untappedLand = ai.zones.battlefield.find((c) => {
+            const d = getCardDefinition(c.defId);
+            return d.type === 'land' && !c.tapped && d.producesMana;
+          });
+          if (untappedLand) {
+            const d = getCardDefinition(untappedLand.defId);
+            let color: ManaColor = 'C';
+            if (Array.isArray(d.producesMana)) color = d.producesMana[0];
+            else if (d.producesMana && d.producesMana !== 'any') color = d.producesMana;
+            dispatch({ type: 'TOGGLE_TAP', instanceId: untappedLand.instanceId, chosenColor: color }, AI_PLAYER_ID);
+            break;
+          }
+
+          const castable = ai.zones.hand.find((c) => {
+            const d = getCardDefinition(c.defId);
+            if (d.type === 'land') return false;
+            return canPay(ai.manaPool, parseCostLabel(d.costLabel), 0);
+          });
+          if (castable) {
+            dispatch({ type: 'CAST_CARD', instanceId: castable.instanceId }, AI_PLAYER_ID);
+            break;
+          }
+
           dispatch({ type: 'NEXT_PHASE' }, AI_PLAYER_ID);
           break;
         }
 
-        case 'declare_attackers':
-          dispatch({ type: 'DECLARE_ATTACKERS', instanceIds: [] }, AI_PLAYER_ID);
+        case 'declare_attackers': {
+          const attackers = ai.zones.battlefield.filter((c) => {
+            const d = getCardDefinition(c.defId);
+            return d.type === 'creature' && !c.tapped && !c.summoningSick && !hasKeyword(d.text, 'defender');
+          });
+          dispatch({ type: 'DECLARE_ATTACKERS', instanceIds: attackers.map((c) => c.instanceId) }, AI_PLAYER_ID);
           break;
+        }
 
         case 'cleanup':
           dispatch({ type: 'END_TURN' }, AI_PLAYER_ID);

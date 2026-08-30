@@ -472,15 +472,14 @@ function declareBlockers(state: GameState, playerId: string, assignments: Combat
     }
   }
 
-  let next: GameState = {
+  const next: GameState = {
     ...state,
     combatAssignments: state.combatAssignments.map((existing) => assignments.find((a) => a.attackerInstanceId === existing.attackerInstanceId) ?? existing),
-    log: [...state.log, `${blockerPlayer.name} declares blockers.`],
+    phase: 'combat_damage',
+    log: [...state.log, `${blockerPlayer.name} declares blockers. Press Resolve Combat when ready - cast an instant first if you want.`],
   };
 
-  next = resolveCombatDamage(next);
-  next = { ...next, phase: 'combat_end' };
-  return { ok: true, state: emptyManaPools(next) };
+  return { ok: true, state: next };
 }
 
 function nextPhase(state: GameState, playerId: string): ActionResult {
@@ -489,6 +488,12 @@ function nextPhase(state: GameState, playerId: string): ActionResult {
   if (state.phase === 'declare_blockers') return { ok: false, error: "Waiting on the defending player's blocks." };
   if (state.phase === 'draw' && !isMutualActive(state) && !getPlayer(state, playerId).hasDrawnThisTurn) {
     return { ok: false, error: 'Draw your card before moving on.' };
+  }
+
+  if (state.phase === 'combat_damage') {
+    let next = resolveCombatDamage(state);
+    next = { ...next, phase: 'combat_end' };
+    return { ok: true, state: emptyManaPools(next) };
   }
 
   const currentIndex = PHASE_ORDER.indexOf(state.phase as Phase);

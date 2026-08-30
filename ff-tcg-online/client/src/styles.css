@@ -1218,13 +1218,85 @@ button {
   border-radius: 8px;
 }
 .game-board-layout {
-  display: flex;
-  gap: 16px;
-  max-width: 1600px;
-  margin: 0 auto;
-  padding: 12px 16px 80px;
+  max-width: 100%;
+  width: 100%;
+  padding: 12px 20px 90px;
 }
 
+.dual-mana-split {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  display: flex;
+  border-radius: 50%;
+  overflow: hidden;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--border);
+}
+
+.dual-mana-half {
+  width: 11px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+  font-weight: 700;
+  color: #14151d;
+}
+
+.mana-choice-toolbar {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  z-index: 47;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+}
+
+.mana-choice-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.mana-choice-button {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  font-weight: 700;
+  font-size: 13px;
+  color: #14151d;
+}
+
+.mana-choice-cancel {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+}
+
+.card-actions-bottom-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.card-actions-bottom-row .card-action-button-play {
+  flex: 1;
+  margin-bottom: 0;
+}
 .game-board-main {
   flex: 3;
   min-width: 0;
@@ -1785,3 +1857,38 @@ button {
   font-size: 11px;
   padding: 4px 10px;
 }
+
+.mana-choice-inline {
+  border: 2px solid var(--holy);
+  background: rgba(216, 201, 143, 0.1);
+  border-radius: 8px;
+  padding: 8px;
+  flex: 1;
+}
+
+.mana-choice-inline-label {
+  font-size: 11px;
+  color: var(--holy);
+  margin-bottom: 6px;
+  text-align: center;
+}
+
+.battlefield-row .card {
+  width: 160px;
+  height: 214px;
+}
+
+.hand-row .card,
+.hand-fan .card {
+  width: 175px;
+  height: 234px;
+}
+
+.corner-column .card {
+  width: 160px;
+  height: 214px;
+}
+
+.corner-column {
+  width: 160px;
+} 

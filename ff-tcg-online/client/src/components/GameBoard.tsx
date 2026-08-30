@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { CardInstance, GameAction, GameState, ManaColor, PlayerState, ZoneName } from '../types';
 import { getCardDefinition } from '../data/cards';
 import { parseCostLabel, canPay } from '../engine/mana';
+import { hasKeyword } from '../engine/keywords';
 import Card from './Card';
 import PhaseBar from './PhaseBar';
 import CardActionsPanel from './CardActionsPanel';
@@ -18,6 +19,7 @@ interface GameBoardProps {
 }
 
 const MANA_COLOR_ORDER: ManaColor[] = ['W', 'U', 'B', 'R', 'G', 'C'];
+const ALL_MANA_COLORS: ManaColor[] = ['W', 'U', 'B', 'R', 'G', 'C'];
 
 function findCard(state: GameState, instanceId: string): { player: PlayerState; zone: ZoneName; card: CardInstance } | null {
   const zoneNames: ZoneName[] = ['library', 'hand', 'battlefield', 'graveyard', 'exile', 'commander'];
@@ -41,6 +43,13 @@ function splitBattlefield(cards: CardInstance[]) {
     else others.push(c);
   }
   return { creatures, others, lands };
+}
+
+/** Hides the Commander Tax counter on the battlefield - it's only relevant
+ * while the card is sitting in the commander zone waiting to be recast. */
+function displayInstance(instance: CardInstance): CardInstance {
+  if (!instance.counters.some((c) => c.label === 'Commander Tax')) return instance;
+  return { ...instance, counters: instance.counters.filter((c) => c.label !== 'Commander Tax') };
 }
 
 function ManaRow({ player }: { player: PlayerState }) {
@@ -71,6 +80,11 @@ interface SelectionBox {
   h: number;
 }
 
+interface ManaChoiceItem {
+  instanceId: string;
+  options: ManaColor[];
+}
+
 export default function GameBoard({ state, yourPlayerId, actionError, onAction, soloControl }: GameBoardProps) {
   const you = state.players.find((p) => p.id === yourPlayerId)!;
   const opponent = state.players.find((p) => p.id !== yourPlayerId)!;
@@ -89,6 +103,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   const [selectionBox, setSelectionBox] = useState<SelectionBox | null>(null);
   const [multiSelected, setMultiSelected] = useState<Set<string>>(new Set());
   const [phaseBoxPos, setPhaseBoxPos] = useState<{ x: number; y: number } | null>(null);
+  const [manaChoiceQueue, setManaChoiceQueue] = useState<ManaChoiceItem[]>([]);
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const phaseDragRef = useRef<{ offsetX: number; offsetY: number } | null>(null);
 
@@ -102,10 +117,39 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     if (!state.winnerId) setWinnerDismissed(false);
   }, [state.winnerId]);
 
+  // Clear all local selection state whenever the turn changes.
+  useEffect(() => {
+    setSelectedAttackers(new Set());
+    setBlockerAssignments({});
+    setPendingBlocker(null);
+    setMultiSelected(new Set());
+    setDraggedInstanceId(null);
+  }, [state.turnNumber]);
+
   const openCard = openPanelId ? findCard(state, openPanelId) : null;
 
   const isDeclaringAttackers = state.phase === 'declare_attackers' && (soloControl || state.activePlayerId === yourPlayerId);
   const isDeclaringBlockers = state.phase === 'declare_blockers' && (soloControl || state.activePlayerId !== yourPlayerId);
+  const showCombatZones = isDeclaringAttackers || isDeclaringBlockers || state.phase === 'combat_damage';
+
+  function blockersFor(attackerId: string): string[] {
+    if (isDeclaringBlockers) return blockerAssignments[attackerId] || [];
+    return state.combatAssignments.find((a) => a.attackerInstanceId === attackerId)?.blockerInstanceIds || [];
+  }
+
+  /** True if this card is currently sitting in the attack/block zone rather
+   * than its normal battlefield row - purely a display concern, the card is
+   * still on the battlefield as far as the actual rules are concerned. */
+  function isInCombatZone(ownerPlayerId: string, instanceId: string): boolean {
+    if (ownerPlayerId === state.activePlayerId) {
+      if (isDeclaringAttackers && selectedAttackers.has(instanceId)) return true;
+      if (state.declaredAttackers.includes(instanceId)) return true;
+    } else {
+      if (Object.values(blockerAssignments).flat().includes(instanceId)) return true;
+      if (state.combatAssignments.some((a) => a.blockerInstanceIds.includes(instanceId))) return true;
+    }
+    return false;
+  }
 
   function orderedHand(hand: CardInstance[]): CardInstance[] {
     const byId = new Map(hand.map((c) => [c.instanceId, c]));
@@ -151,21 +195,30 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     setDraggedInstanceId(null);
   }
 
+  function enqueueManaChoice(instanceId: string, options: ManaColor[]) {
+    setManaChoiceQueue((prev) => [...prev, { instanceId, options }]);
+  }
+
+  function resolveManaChoice(color: ManaColor) {
+    const [current, ...rest] = manaChoiceQueue;
+    if (!current) return;
+    onAction({ type: 'TOGGLE_TAP', instanceId: current.instanceId, chosenColor: color });
+    setManaChoiceQueue(rest);
+  }
+
+  function cancelManaChoice() {
+    setManaChoiceQueue((prev) => prev.slice(1));
+  }
+
   function handleToggleTap(card: CardInstance) {
     const def = getCardDefinition(card.defId);
     if (!card.tapped && def.type === 'land' && def.producesMana) {
       if (Array.isArray(def.producesMana)) {
-        const choice = window.prompt(`Choose a colour to produce (${def.producesMana.join(', ')}):`, def.producesMana[0]);
-        const upper = (choice ?? '').trim().toUpperCase();
-        if (!def.producesMana.includes(upper as ManaColor)) return;
-        onAction({ type: 'TOGGLE_TAP', instanceId: card.instanceId, chosenColor: upper as ManaColor });
+        enqueueManaChoice(card.instanceId, def.producesMana);
         return;
       }
       if (def.producesMana === 'any') {
-        const choice = window.prompt('Choose a colour to produce (W, U, B, R, G, or C for colourless):', 'C');
-        const upper = (choice ?? '').trim().toUpperCase();
-        if (!['W', 'U', 'B', 'R', 'G', 'C'].includes(upper)) return;
-        onAction({ type: 'TOGGLE_TAP', instanceId: card.instanceId, chosenColor: upper as ManaColor });
+        enqueueManaChoice(card.instanceId, ALL_MANA_COLORS);
         return;
       }
     }
@@ -231,7 +284,6 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     const assignments = Object.entries(blockerAssignments).map(([attackerInstanceId, blockerInstanceIds]) => ({ attackerInstanceId, blockerInstanceIds }));
     const defenderId = state.players.find((p) => p.id !== state.activePlayerId)!.id;
     onAction({ type: 'DECLARE_BLOCKERS', assignments }, defenderId);
-    setBlockerAssignments({});
   }
 
   function startSelection(e: React.MouseEvent, enabled: boolean) {
@@ -266,7 +318,11 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   function tapMultiSelected() {
     for (const id of multiSelected) {
       const found = findCard(state, id);
-      if (found && found.zone === 'battlefield' && !found.card.tapped) {
+      if (!found || found.zone !== 'battlefield' || found.card.tapped) continue;
+      const def = getCardDefinition(found.card.defId);
+      if (def.type === 'land' && (Array.isArray(def.producesMana) || def.producesMana === 'any')) {
+        enqueueManaChoice(id, Array.isArray(def.producesMana) ? def.producesMana : ALL_MANA_COLORS);
+      } else {
         onAction({ type: 'TOGGLE_TAP', instanceId: id });
       }
     }
@@ -297,19 +353,18 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     window.removeEventListener('mouseup', onPhaseDragEnd);
   }
 
-  function renderCreatureCard(c: CardInstance, isOpponentSide: boolean, rowCards: CardInstance[]) {
+  function renderCreatureCard(c: CardInstance, isOpponentSide: boolean, rowCards: CardInstance[], ownerId: string) {
     const isDead = state.pendingDeaths.includes(c.instanceId);
-    const isAttacker = state.declaredAttackers.includes(c.instanceId);
     const def = getCardDefinition(c.defId);
-    const canBeBlockTarget = !isDead && isDeclaringBlockers && isOpponentSide && isAttacker;
+    const canBeBlockTarget = !isDead && isDeclaringBlockers && isOpponentSide && state.declaredAttackers.includes(c.instanceId);
     const canAttackThis = !isDead && isDeclaringAttackers && !isOpponentSide && !c.tapped && !c.summoningSick;
     const canBeBlocker = !isDead && isDeclaringBlockers && !isOpponentSide && !c.tapped;
     const combatDraggable = canAttackThis || canBeBlocker;
     const reorderAllowed = !isDead && !isDeclaringAttackers && !isDeclaringBlockers && (!isOpponentSide || !!soloControl);
-    const selected = selectedAttackers.has(c.instanceId) || pendingBlocker === c.instanceId || multiSelected.has(c.instanceId);
+    const selected = pendingBlocker === c.instanceId || multiSelected.has(c.instanceId);
 
     return (
-      <div key={c.instanceId} className={`${isAttacker ? 'attacking-creature' : ''} ${isDead ? 'destroyed-card-wrapper' : ''}`} ref={(el) => registerCardRef(c.instanceId, el)}>
+      <div key={c.instanceId} className={isDead ? 'destroyed-card-wrapper' : ''} ref={(el) => registerCardRef(c.instanceId, el)}>
         <div
           draggable={combatDraggable || reorderAllowed}
           onDragStart={() => setDraggedInstanceId(c.instanceId)}
@@ -319,13 +374,13 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
               assignBlocker(c.instanceId, draggedInstanceId);
               setDraggedInstanceId(null);
             } else if (reorderAllowed && draggedInstanceId) {
-              handleRowDrop(isOpponentSide ? opponent.id : you.id, 'creatures', rowCards, c.instanceId);
+              handleRowDrop(ownerId, 'creatures', rowCards, c.instanceId);
             }
           }}
         >
           <Card
             definition={def}
-            instance={c}
+            instance={displayInstance(c)}
             selected={selected}
             onClick={() => {
               if (isDead) return;
@@ -343,7 +398,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
 
   function renderPlainCard(c: CardInstance, playerId: string, rowKey: string, rowCards: CardInstance[], reorderAllowed: boolean) {
     const def = getCardDefinition(c.defId);
-    const isAttachTarget = false;
+    const isPendingManaChoice = manaChoiceQueue.length > 0 && manaChoiceQueue[0].instanceId === c.instanceId;
     return (
       <div key={c.instanceId} ref={(el) => registerCardRef(c.instanceId, el)}>
         <div
@@ -354,8 +409,8 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
         >
           <Card
             definition={def}
-            instance={c}
-            selected={multiSelected.has(c.instanceId) || isAttachTarget}
+            instance={displayInstance(c)}
+            selected={multiSelected.has(c.instanceId) || isPendingManaChoice}
             onClick={() => setOpenPanelId(c.instanceId)}
             onDoubleClick={() => handleToggleTap(c)}
           />
@@ -366,13 +421,15 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
 
   function renderPlayerZone(player: PlayerState, isOpponentSide: boolean) {
     const { creatures, others, lands } = splitBattlefield(player.zones.battlefield);
-    const orderedCreatures = orderedRow(player.id, 'creatures', creatures);
+    const visibleCreatures = creatures.filter((c) => !isInCombatZone(player.id, c.instanceId));
+    const orderedCreatures = orderedRow(player.id, 'creatures', visibleCreatures);
     const orderedOthers = orderedRow(player.id, 'others', others);
     const orderedLands = orderedRow(player.id, 'lands', lands);
     const commanderCard = player.zones.commander[0];
     const isDrawStep = state.phase === 'draw' && state.activePlayerId === player.id && !player.hasDrawnThisTurn;
     const canDrawHere = player.id === yourPlayerId || (soloControl && isOpponentSide);
     const selectEnabled = !isOpponentSide || !!soloControl;
+    const isControllersTurn = state.activePlayerId === player.id;
 
     const commanderColumn = (
       <div className="corner-column">
@@ -414,11 +471,11 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
       <>
         <div className="battlefield-row lands-row">{orderedLands.map((c) => renderPlainCard(c, player.id, 'lands', lands, selectEnabled))}</div>
         <div className="battlefield-row others-row">{orderedOthers.map((c) => renderPlainCard(c, player.id, 'others', others, selectEnabled))}</div>
-        <div className="battlefield-row creatures-row">{orderedCreatures.map((c) => renderCreatureCard(c, isOpponentSide, creatures))}</div>
+        <div className="battlefield-row creatures-row">{orderedCreatures.map((c) => renderCreatureCard(c, isOpponentSide, visibleCreatures, player.id))}</div>
       </>
     ) : (
       <>
-        <div className="battlefield-row creatures-row">{orderedCreatures.map((c) => renderCreatureCard(c, isOpponentSide, creatures))}</div>
+        <div className="battlefield-row creatures-row">{orderedCreatures.map((c) => renderCreatureCard(c, isOpponentSide, visibleCreatures, player.id))}</div>
         <div className="battlefield-row others-row">{orderedOthers.map((c) => renderPlainCard(c, player.id, 'others', others, selectEnabled))}</div>
         <div className="battlefield-row lands-row">{orderedLands.map((c) => renderPlainCard(c, player.id, 'lands', lands, selectEnabled))}</div>
       </>
@@ -445,6 +502,8 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           : orderedHand(player.zones.hand).map((c, i, arr) => {
               const def = getCardDefinition(c.defId);
               const affordable = def.type === 'land' || canPay(player.manaPool, parseCostLabel(def.costLabel), 0);
+              const isInstantSpeed = def.type === 'instant' || hasKeyword(def.text, 'flash');
+              const dimmed = !(isControllersTurn || isInstantSpeed) || !affordable;
               const mid = (arr.length - 1) / 2;
               const offset = i - mid;
               return (
@@ -457,7 +516,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={() => handleHandDrop(player.id, c.instanceId)}
                 >
-                  <Card definition={def} instance={c} dimmed={!affordable} onClick={() => setOpenPanelId(c.instanceId)} />
+                  <Card definition={def} instance={c} dimmed={dimmed} onClick={() => setOpenPanelId(c.instanceId)} />
                 </div>
               );
             })}
@@ -510,6 +569,81 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     );
   }
 
+  const nextLabel = isDeclaringAttackers
+    ? selectedAttackers.size > 0
+      ? `Attack with ${selectedAttackers.size}`
+      : 'Declare no attackers'
+    : isDeclaringBlockers
+    ? 'Confirm blockers'
+    : state.phase === 'combat_damage'
+    ? 'Resolve Combat'
+    : undefined;
+
+  const youAreAttacker = state.activePlayerId === yourPlayerId;
+
+  const attackZoneEl = showCombatZones && (
+    <div
+      className="combat-zone combat-zone-attack"
+      onDragOver={(e) => isDeclaringAttackers && e.preventDefault()}
+      onDrop={() => {
+        if (isDeclaringAttackers && draggedInstanceId) {
+          addAttackerFromDrag(draggedInstanceId);
+          setDraggedInstanceId(null);
+        }
+      }}
+    >
+      <div className="combat-zone-label combat-zone-label-attack">{isDeclaringAttackers ? 'Attacking \u2014 drag your creatures here' : 'Attacking'}</div>
+      <div className="combat-zone-row">
+        {(isDeclaringAttackers ? Array.from(selectedAttackers) : state.declaredAttackers).map((id) => {
+          const found = findCard(state, id);
+          if (!found) return null;
+          const blockers = isDeclaringAttackers ? [] : blockersFor(id);
+          return (
+            <div
+              key={id}
+              className="combat-attacker-slot"
+              onDragOver={(e) => isDeclaringBlockers && e.preventDefault()}
+              onDrop={() => {
+                if (isDeclaringBlockers && draggedInstanceId) {
+                  assignBlocker(id, draggedInstanceId);
+                  setDraggedInstanceId(null);
+                }
+              }}
+            >
+              <Card definition={getCardDefinition(found.card.defId)} instance={found.card} onClick={() => isDeclaringAttackers && toggleAttacker(id)} />
+              {blockers.length > 0 && (
+                <div className="combat-blockers-row">
+                  {blockers.map((bId) => {
+                    const bf = findCard(state, bId);
+                    return bf ? <Card key={bId} definition={getCardDefinition(bf.card.defId)} instance={bf.card} /> : null;
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {isDeclaringAttackers && selectedAttackers.size === 0 && <p className="combat-zone-empty">Nothing here yet</p>}
+      </div>
+    </div>
+  );
+
+  const blockZoneEl = isDeclaringBlockers && (
+    <div className="combat-zone combat-zone-block">
+      <div className="combat-zone-label combat-zone-label-block">Blocking {'\u2014'} drag your creatures onto an attacker</div>
+      <div className="combat-zone-row">
+        {state.players
+          .find((p) => p.id !== state.activePlayerId)!
+          .zones.battlefield.filter((c) => getCardDefinition(c.defId).type === 'creature' && !c.tapped)
+          .filter((c) => !Object.values(blockerAssignments).flat().includes(c.instanceId))
+          .map((c) => (
+            <div key={c.instanceId} draggable onDragStart={() => setDraggedInstanceId(c.instanceId)}>
+              <Card definition={getCardDefinition(c.defId)} instance={c} onClick={() => handleBlockerCandidateClick(c.instanceId)} selected={pendingBlocker === c.instanceId} />
+            </div>
+          ))}
+      </div>
+    </div>
+  );
+
   return (
     <div className="game-board-layout">
       {selectionBox && <div className="selection-box" style={{ left: selectionBox.x, top: selectionBox.y, width: selectionBox.w, height: selectionBox.h }} />}
@@ -519,6 +653,22 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           <span>{multiSelected.size} selected</span>
           <button onClick={tapMultiSelected}>Tap</button>
           <button onClick={() => setMultiSelected(new Set())}>Clear</button>
+        </div>
+      )}
+
+      {manaChoiceQueue.length > 0 && (
+        <div className="mana-choice-toolbar">
+          <span>Choose which mana to add</span>
+          <div className="mana-choice-buttons">
+            {manaChoiceQueue[0].options.map((color) => (
+              <button key={color} className={`mana-choice-button mana-${color}`} onClick={() => resolveManaChoice(color)}>
+                {color}
+              </button>
+            ))}
+          </div>
+          <button className="mana-choice-cancel" onClick={cancelManaChoice}>
+            Cancel
+          </button>
         </div>
       )}
 
@@ -534,85 +684,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
 
         {renderPlayerZone(opponent, true)}
 
-        {isDeclaringAttackers && (
-          <div
-            className="combat-zone combat-zone-attack"
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={() => {
-              if (draggedInstanceId) {
-                addAttackerFromDrag(draggedInstanceId);
-                setDraggedInstanceId(null);
-              }
-            }}
-          >
-            <div className="combat-zone-label combat-zone-label-attack">Attacking {'\u2014'} drag your creatures here</div>
-            <div className="combat-zone-row">
-              {Array.from(selectedAttackers).map((id) => {
-                const found = findCard(state, id);
-                if (!found) return null;
-                return <Card key={id} definition={getCardDefinition(found.card.defId)} instance={found.card} onClick={() => toggleAttacker(id)} />;
-              })}
-              {selectedAttackers.size === 0 && <p className="combat-zone-empty">Nothing here yet</p>}
-            </div>
-            <button className="phase-bar-compact-button" onClick={confirmAttackers}>
-              {selectedAttackers.size > 0 ? `Attack with ${selectedAttackers.size}` : 'Declare no attackers'}
-            </button>
-          </div>
-        )}
-
-        {isDeclaringBlockers && (
-          <>
-            <div className="combat-zone combat-zone-attack">
-              <div className="combat-zone-label combat-zone-label-attack">Attacking</div>
-              <div className="combat-zone-row">
-                {state.declaredAttackers.map((id) => {
-                  const found = findCard(state, id);
-                  if (!found) return null;
-                  const blockers = blockerAssignments[id] || [];
-                  return (
-                    <div
-                      key={id}
-                      className="combat-attacker-slot"
-                      onDragOver={(e) => e.preventDefault()}
-                      onDrop={() => {
-                        if (draggedInstanceId) {
-                          assignBlocker(id, draggedInstanceId);
-                          setDraggedInstanceId(null);
-                        }
-                      }}
-                    >
-                      <Card definition={getCardDefinition(found.card.defId)} instance={found.card} />
-                      <div className="combat-blockers-row">
-                        {blockers.map((bId) => {
-                          const bf = findCard(state, bId);
-                          return bf ? <Card key={bId} definition={getCardDefinition(bf.card.defId)} instance={bf.card} /> : null;
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="combat-zone combat-zone-block">
-              <div className="combat-zone-label combat-zone-label-block">Blocking {'\u2014'} drag your creatures onto an attacker above</div>
-              <div className="combat-zone-row">
-                {state.players
-                  .find((p) => p.id !== state.activePlayerId)!
-                  .zones.battlefield.filter((c) => getCardDefinition(c.defId).type === 'creature' && !c.tapped)
-                  .filter((c) => !Object.values(blockerAssignments).flat().includes(c.instanceId))
-                  .map((c) => (
-                    <div key={c.instanceId} draggable onDragStart={() => setDraggedInstanceId(c.instanceId)}>
-                      <Card definition={getCardDefinition(c.defId)} instance={c} onClick={() => handleBlockerCandidateClick(c.instanceId)} selected={pendingBlocker === c.instanceId} />
-                    </div>
-                  ))}
-              </div>
-              <button className="phase-bar-compact-button" onClick={confirmBlockers}>
-                Confirm blockers
-              </button>
-            </div>
-          </>
-        )}
+        {showCombatZones && (youAreAttacker ? <>{blockZoneEl}{attackZoneEl}</> : <>{attackZoneEl}{blockZoneEl}</>)}
 
         {renderPlayerZone(you, false)}
       </div>
@@ -645,8 +717,13 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           phase={state.phase}
           turnNumber={state.turnNumber}
           isYourTurn={isYourTurn}
-          hideControls={isDeclaringAttackers || isDeclaringBlockers}
-          onNextPhase={() => onAction({ type: 'NEXT_PHASE' }, state.activePlayerId)}
+          nextLabel={nextLabel}
+          hideEndTurn={isDeclaringAttackers || isDeclaringBlockers || state.phase === 'combat_damage'}
+          onNextPhase={() => {
+            if (isDeclaringAttackers) confirmAttackers();
+            else if (isDeclaringBlockers) confirmBlockers();
+            else onAction({ type: 'NEXT_PHASE' }, state.activePlayerId);
+          }}
           onEndTurn={() => onAction({ type: 'END_TURN' }, state.activePlayerId)}
         />
         {phaseBoxPos && (
@@ -669,7 +746,21 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           attachedToName={
             openCard.card.attachedToInstanceId ? getCardDefinition(findCard(state, openCard.card.attachedToInstanceId)?.card.defId ?? '')?.name ?? null : null
           }
-          onToggleTap={() => handleToggleTap(openCard.card)}
+          manaOptions={(() => {
+            const def = getCardDefinition(openCard.card.defId);
+            if (def.type !== 'land' || !def.producesMana) return undefined;
+            if (Array.isArray(def.producesMana)) return def.producesMana;
+            if (def.producesMana === 'any') return ALL_MANA_COLORS;
+            return undefined;
+          })()}
+          onToggleTap={() => {
+            onAction({ type: 'TOGGLE_TAP', instanceId: openCard.card.instanceId });
+            setOpenPanelId(null);
+          }}
+          onChooseTapColor={(color) => {
+            onAction({ type: 'TOGGLE_TAP', instanceId: openCard.card.instanceId, chosenColor: color });
+            setOpenPanelId(null);
+          }}
           onFlip={() => onAction({ type: 'FLIP_CARD', instanceId: openCard.card.instanceId })}
           onCast={() => handleCast(openCard.card)}
           onActivateAbility={(abilityId) => onAction({ type: 'ACTIVATE_ABILITY', instanceId: openCard.card.instanceId, abilityId })}

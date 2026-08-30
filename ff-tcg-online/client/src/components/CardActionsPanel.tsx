@@ -1,5 +1,5 @@
-import React from 'react';
-import { CardDefinition, CardInstance, ManaPool, ZoneName } from '../types';
+import React, { useState } from 'react';
+import { CardDefinition, CardInstance, ManaColor, ManaPool, ZoneName } from '../types';
 import { parseCostLabel, canPay } from '../engine/mana';
 
 interface CardActionsPanelProps {
@@ -12,7 +12,9 @@ interface CardActionsPanelProps {
   isMyTurn: boolean;
   alreadyPlayedLand: boolean;
   attachedToName: string | null;
+  manaOptions?: ManaColor[];
   onToggleTap: () => void;
+  onChooseTapColor: (color: ManaColor) => void;
   onFlip: () => void;
   onCast: () => void;
   onActivateAbility: (abilityId: string) => void;
@@ -44,7 +46,9 @@ export default function CardActionsPanel({
   isMyTurn,
   alreadyPlayedLand,
   attachedToName,
+  manaOptions,
   onToggleTap,
+  onChooseTapColor,
   onFlip,
   onCast,
   onActivateAbility,
@@ -54,16 +58,28 @@ export default function CardActionsPanel({
   onDetach,
   onClose,
 }: CardActionsPanelProps) {
+  const [showManaChoice, setShowManaChoice] = useState(false);
+
   const commanderTax = currentZone === 'commander' ? instance.counters.find((c) => c.label === 'Commander Tax')?.amount ?? 0 : 0;
   const parsedCost = parseCostLabel(definition.costLabel);
   const isLand = definition.type === 'land';
   const canPlay = mutualActive || (isLand ? isMyTurn && !alreadyPlayedLand : canPay(ownerManaPool, parsedCost, commanderTax));
   const canPlayHere = currentZone === 'hand' || (currentZone === 'commander' && !isLand);
   const isActualCommander = ownerCommanderDefId === definition.id;
+  const isOnBattlefield = currentZone === 'battlefield';
+  const needsManaChoice = !instance.tapped && !!manaOptions && manaOptions.length > 0;
 
   const availableZones = ALL_ZONES.filter((z) => z !== currentZone)
     .filter((z) => z !== 'commander' || isActualCommander)
     .filter((z) => z !== 'battlefield' || mutualActive);
+
+  function handleTapClick() {
+    if (needsManaChoice) {
+      setShowManaChoice(true);
+      return;
+    }
+    onToggleTap();
+  }
 
   return (
     <div className="card-drawer-overlay" onClick={onClose}>
@@ -83,19 +99,7 @@ export default function CardActionsPanel({
 
         {mutualActive && <p className="mutual-active-note">Mutual Adjustment is active - normal cost/timing rules are suspended.</p>}
 
-        {currentZone === 'battlefield' && (
-          <button className="card-action-button" onClick={onToggleTap}>
-            {instance.tapped ? 'Untap' : 'Tap'}
-          </button>
-        )}
-
-        {currentZone === 'battlefield' && definition.transformsInto && (
-          <button className="card-action-button" onClick={onFlip}>
-            Flip / Transform
-          </button>
-        )}
-
-        {definition.attachesTo && currentZone === 'battlefield' && (
+        {definition.attachesTo && isOnBattlefield && (
           <div className="card-actions-section">
             <div className="card-actions-label">Attachment</div>
             {attachedToName ? (
@@ -163,6 +167,32 @@ export default function CardActionsPanel({
         )}
 
         <div className="card-actions-spacer" />
+
+        {isOnBattlefield && (
+          <div className="card-actions-bottom-row">
+            {showManaChoice ? (
+              <div className="mana-choice-inline">
+                <div className="mana-choice-inline-label">Choose which mana to add</div>
+                <div className="mana-choice-buttons">
+                  {manaOptions!.map((color) => (
+                    <button key={color} className={`mana-choice-button mana-${color}`} onClick={() => onChooseTapColor(color)}>
+                      {color}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <button className="card-action-button-play secondary" onClick={handleTapClick}>
+                {instance.tapped ? 'Untap' : 'Tap'}
+              </button>
+            )}
+            {definition.transformsInto && (
+              <button className="card-action-button-play secondary" onClick={onFlip}>
+                Flip / Transform
+              </button>
+            )}
+          </div>
+        )}
 
         {canPlayHere && (
           <button className="card-action-button card-action-button-play" disabled={!canPlay} onClick={onCast} title={canPlay ? '' : isLand ? 'Already played a land, or not your turn' : 'Not enough mana'}>
