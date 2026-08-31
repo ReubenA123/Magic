@@ -118,6 +118,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   }, [state.winnerId]);
 
   // Clear all local selection state whenever the turn changes.
+  // Clear all local selection state whenever the turn changes.
   useEffect(() => {
     setSelectedAttackers(new Set());
     setBlockerAssignments({});
@@ -126,10 +127,24 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     setDraggedInstanceId(null);
   }, [state.turnNumber]);
 
+  // Also clear blocker assignments the moment a fresh combat starts (new
+  // attackers just got declared) - without this, leftover assignments from
+  // an earlier combat this same turn could carry over and look like the
+  // game auto-chose blockers for you.
+  useEffect(() => {
+    setBlockerAssignments({});
+    setPendingBlocker(null);
+  }, [state.declaredAttackers]);
+
   const openCard = openPanelId ? findCard(state, openPanelId) : null;
 
-  const isDeclaringAttackers = state.phase === 'declare_attackers' && (soloControl || state.activePlayerId === yourPlayerId);
-  const isDeclaringBlockers = state.phase === 'declare_blockers' && (soloControl || state.activePlayerId !== yourPlayerId);
+  // Deliberately NOT gated by soloControl - in VS AI mode, the AI declares
+  // its own attackers/blockers automatically (see hooks/useLocalGame.ts).
+  // Letting the human also see that UI on the AI's turn was racing against
+  // the AI's own decisions and causing exactly the "it's blocking for me"
+  // confusion this was built to fix.
+  const isDeclaringAttackers = state.phase === 'declare_attackers' && state.activePlayerId === yourPlayerId;
+  const isDeclaringBlockers = state.phase === 'declare_blockers' && state.activePlayerId !== yourPlayerId;
   const showCombatZones = isDeclaringAttackers || isDeclaringBlockers || state.phase === 'combat_damage';
 
   function blockersFor(attackerId: string): string[] {
@@ -261,6 +276,14 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     setSelectedAttackers((prev) => new Set(prev).add(instanceId));
   }
 
+  function removeAttacker(instanceId: string) {
+    setSelectedAttackers((prev) => {
+      const next = new Set(prev);
+      next.delete(instanceId);
+      return next;
+    });
+  }
+
   function confirmAttackers() {
     onAction({ type: 'DECLARE_ATTACKERS', instanceIds: Array.from(selectedAttackers) }, state.activePlayerId);
     setSelectedAttackers(new Set());
@@ -284,6 +307,8 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     const assignments = Object.entries(blockerAssignments).map(([attackerInstanceId, blockerInstanceIds]) => ({ attackerInstanceId, blockerInstanceIds }));
     const defenderId = state.players.find((p) => p.id !== state.activePlayerId)!.id;
     onAction({ type: 'DECLARE_BLOCKERS', assignments }, defenderId);
+    setBlockerAssignments({});
+    setPendingBlocker(null);
   }
 
   function startSelection(e: React.MouseEvent, enabled: boolean) {
@@ -361,6 +386,9 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     const canBeBlocker = !isDead && isDeclaringBlockers && !isOpponentSide && !c.tapped;
     const combatDraggable = canAttackThis || canBeBlocker;
     const reorderAllowed = !isDead && !isDeclaringAttackers && !isDeclaringBlockers && (!isOpponentSide || !!soloControl);
+    // A row can also accept a drop of an already-selected attacker being
+    // dragged back out to un-declare it, right up until "Attack with X" is pressed.
+    const acceptsAttackerRemoval = isDeclaringAttackers && !isOpponentSide;
     const selected = pendingBlocker === c.instanceId || multiSelected.has(c.instanceId);
 
     return (
@@ -368,10 +396,13 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
         <div
           draggable={combatDraggable || reorderAllowed}
           onDragStart={() => setDraggedInstanceId(c.instanceId)}
-          onDragOver={(e) => (canBeBlockTarget || reorderAllowed) && e.preventDefault()}
+          onDragOver={(e) => (canBeBlockTarget || reorderAllowed || acceptsAttackerRemoval) && e.preventDefault()}
           onDrop={() => {
             if (canBeBlockTarget && draggedInstanceId) {
               assignBlocker(c.instanceId, draggedInstanceId);
+              setDraggedInstanceId(null);
+            } else if (acceptsAttackerRemoval && draggedInstanceId && selectedAttackers.has(draggedInstanceId)) {
+              removeAttacker(draggedInstanceId);
               setDraggedInstanceId(null);
             } else if (reorderAllowed && draggedInstanceId) {
               handleRowDrop(ownerId, 'creatures', rowCards, c.instanceId);
@@ -500,26 +531,26 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
         {isOpponentSide
           ? player.zones.hand.map((c) => <Card key={c.instanceId} definition={getCardDefinition(c.defId)} faceDown />)
           : orderedHand(player.zones.hand).map((c, i, arr) => {
-              const def = getCardDefinition(c.defId);
-              const affordable = def.type === 'land' || canPay(player.manaPool, parseCostLabel(def.costLabel), 0);
-              const isInstantSpeed = def.type === 'instant' || hasKeyword(def.text, 'flash');
-              const dimmed = !(isControllersTurn || isInstantSpeed) || !affordable;
-              const mid = (arr.length - 1) / 2;
-              const offset = i - mid;
-              return (
-                <div
-                  key={c.instanceId}
-                  className="hand-fan-card"
-                  style={{ transform: `rotate(${offset * 4}deg) translateY(${Math.abs(offset) * 6}px)`, zIndex: i }}
-                  draggable
-                  onDragStart={() => setDraggedInstanceId(c.instanceId)}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={() => handleHandDrop(player.id, c.instanceId)}
-                >
-                  <Card definition={def} instance={c} dimmed={dimmed} onClick={() => setOpenPanelId(c.instanceId)} />
-                </div>
-              );
-            })}
+            const def = getCardDefinition(c.defId);
+            const affordable = def.type === 'land' || canPay(player.manaPool, parseCostLabel(def.costLabel), 0);
+            const isInstantSpeed = def.type === 'instant' || hasKeyword(def.text, 'flash');
+            const dimmed = !(isControllersTurn || isInstantSpeed) || !affordable;
+            const mid = (arr.length - 1) / 2;
+            const offset = i - mid;
+            return (
+              <div
+                key={c.instanceId}
+                className="hand-fan-card"
+                style={{ transform: `rotate(${offset * 4}deg) translateY(${Math.abs(offset) * 6}px)`, zIndex: i }}
+                draggable
+                onDragStart={() => setDraggedInstanceId(c.instanceId)}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={() => handleHandDrop(player.id, c.instanceId)}
+              >
+                <Card definition={def} instance={c} dimmed={dimmed} onClick={() => setOpenPanelId(c.instanceId)} />
+              </div>
+            );
+          })}
       </div>
     );
 
@@ -569,15 +600,18 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     );
   }
 
+  const youAreReadyForCombat = state.combatReadyPlayers.includes(yourPlayerId);
   const nextLabel = isDeclaringAttackers
     ? selectedAttackers.size > 0
       ? `Attack with ${selectedAttackers.size}`
       : 'Declare no attackers'
     : isDeclaringBlockers
-    ? 'Confirm blockers'
-    : state.phase === 'combat_damage'
-    ? 'Resolve Combat'
-    : undefined;
+      ? 'Confirm blockers'
+      : state.phase === 'combat_damage'
+        ? youAreReadyForCombat
+          ? 'Waiting on opponent\u2026'
+          : 'Resolve Combat'
+        : undefined;
 
   const youAreAttacker = state.activePlayerId === yourPlayerId;
 
@@ -602,6 +636,8 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
             <div
               key={id}
               className="combat-attacker-slot"
+              draggable={isDeclaringAttackers}
+              onDragStart={() => isDeclaringAttackers && setDraggedInstanceId(id)}
               onDragOver={(e) => isDeclaringBlockers && e.preventDefault()}
               onDrop={() => {
                 if (isDeclaringBlockers && draggedInstanceId) {
@@ -610,7 +646,11 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                 }
               }}
             >
-              <Card definition={getCardDefinition(found.card.defId)} instance={found.card} onClick={() => isDeclaringAttackers && toggleAttacker(id)} />
+              <Card
+                definition={getCardDefinition(found.card.defId)}
+                instance={found.card}
+                onClick={() => isDeclaringAttackers && toggleAttacker(id)}
+              />
               {blockers.length > 0 && (
                 <div className="combat-blockers-row">
                   {blockers.map((bId) => {
@@ -716,13 +756,14 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
         <PhaseBar
           phase={state.phase}
           turnNumber={state.turnNumber}
-          isYourTurn={isYourTurn}
+          isYourTurn={isYourTurn || state.phase === 'combat_damage'}
           nextLabel={nextLabel}
           hideEndTurn={isDeclaringAttackers || isDeclaringBlockers || state.phase === 'combat_damage'}
+          nextDisabled={state.phase === 'combat_damage' && youAreReadyForCombat}
           onNextPhase={() => {
             if (isDeclaringAttackers) confirmAttackers();
             else if (isDeclaringBlockers) confirmBlockers();
-            else onAction({ type: 'NEXT_PHASE' }, state.activePlayerId);
+            else onAction({ type: 'NEXT_PHASE' }, yourPlayerId);
           }}
           onEndTurn={() => onAction({ type: 'END_TURN' }, state.activePlayerId)}
         />

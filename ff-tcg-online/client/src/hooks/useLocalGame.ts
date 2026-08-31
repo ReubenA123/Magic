@@ -43,18 +43,7 @@ export function useLocalGame(initialState: GameState) {
     });
   }, []);
 
-  useEffect(() => {
-    const ma = state.mutualAdjustment;
-    const pendingOnAi = (ma.status === 'requested' || ma.status === 'exit_requested') && ma.requestedBy !== AI_PLAYER_ID && !ma.agreedBy.includes(AI_PLAYER_ID);
-    if (!pendingOnAi) return;
-    const timer = setTimeout(() => {
-      if (ma.status === 'requested') dispatch({ type: 'RESPOND_MUTUAL_ADJUSTMENT', accept: true }, AI_PLAYER_ID);
-      else dispatch({ type: 'RESPOND_EXIT_MUTUAL_ADJUSTMENT', accept: true }, AI_PLAYER_ID);
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [state.mutualAdjustment, dispatch]);
-
-  useEffect(() => {
+   useEffect(() => {
     if (state.winnerId) return;
     if (state.phase !== 'declare_blockers') return;
     if (state.mutualAdjustment.status !== 'inactive') return;
@@ -72,6 +61,24 @@ export function useLocalGame(initialState: GameState) {
     }, 800);
     return () => clearTimeout(timer);
   }, [state.phase, state.declaredAttackers, state.activePlayerId, state.mutualAdjustment.status, state.winnerId, dispatch]);
+
+  // --- AI: mark itself ready to resolve combat -------------------------
+  // Deliberately NOT gated by "is it the AI's turn" - combat_damage can
+  // happen during YOUR turn (when you're attacking and the AI is
+  // defending), and the AI still needs to agree to resolve. Without this
+  // separate effect, the AI would never respond in that situation, leaving
+  // the game stuck waiting on a "ready" that never comes.
+  useEffect(() => {
+    if (state.winnerId) return;
+    if (state.phase !== 'combat_damage') return;
+    if (state.mutualAdjustment.status !== 'inactive') return;
+    if (state.combatReadyPlayers.includes(AI_PLAYER_ID)) return;
+
+    const timer = setTimeout(() => {
+      dispatch({ type: 'NEXT_PHASE' }, AI_PLAYER_ID);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [state.phase, state.combatReadyPlayers, state.mutualAdjustment.status, state.winnerId, dispatch]);
 
   // --- AI: step through its own turn -----------------------------------
   // Main phase logic: play a land if it hasn't yet, then tap untapped
@@ -93,6 +100,8 @@ export function useLocalGame(initialState: GameState) {
         case 'combat_begin':
         case 'combat_end':
         case 'combat_damage':
+          dispatch({ type: 'NEXT_PHASE' }, AI_PLAYER_ID);
+          break;
         case 'main2':
         case 'end':
           dispatch({ type: 'NEXT_PHASE' }, AI_PLAYER_ID);

@@ -22,12 +22,13 @@ interface PhaseBarProps {
   turnNumber: number;
   isYourTurn: boolean;
   nextLabel?: string;
+  nextDisabled?: boolean;
   hideEndTurn?: boolean;
   onNextPhase: () => void;
   onEndTurn: () => void;
 }
 
-export default function PhaseBar({ phase, turnNumber, isYourTurn, nextLabel, hideEndTurn, onNextPhase, onEndTurn }: PhaseBarProps) {
+export default function PhaseBar({ phase, turnNumber, isYourTurn, nextLabel, nextDisabled, hideEndTurn, onNextPhase, onEndTurn }: PhaseBarProps) {
   return (
     <div className="phase-bar-compact">
       <span className="phase-bar-compact-info">
@@ -35,7 +36,7 @@ export default function PhaseBar({ phase, turnNumber, isYourTurn, nextLabel, hid
       </span>
       {isYourTurn && (
         <>
-          <button className="phase-bar-compact-button secondary" onClick={onNextPhase} disabled={phase === 'end'}>
+          <button className="phase-bar-compact-button secondary" onClick={onNextPhase} disabled={phase === 'end' || nextDisabled}>
             {nextLabel ?? 'Next'}
           </button>
           {!hideEndTurn && (

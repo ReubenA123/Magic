@@ -434,6 +434,7 @@ function declareAttackers(state: GameState, playerId: string, instanceIds: strin
     declaredAttackers: instanceIds,
     combatAssignments: instanceIds.map((id) => ({ attackerInstanceId: id, blockerInstanceIds: [] })),
     phase: skipBlockers ? 'combat_end' : 'declare_blockers',
+    combatReadyPlayers: [],
     log: [...next.log, instanceIds.length > 0 ? `${player.name} attacks with ${instanceIds.length} creature(s).` : `${player.name} declares no attackers - skipping straight past blocking.`],
   };
 
@@ -476,14 +477,20 @@ function declareBlockers(state: GameState, playerId: string, assignments: Combat
     ...state,
     combatAssignments: state.combatAssignments.map((existing) => assignments.find((a) => a.attackerInstanceId === existing.attackerInstanceId) ?? existing),
     phase: 'combat_damage',
-    log: [...state.log, `${blockerPlayer.name} declares blockers. Press Resolve Combat when ready - cast an instant first if you want.`],
+    combatReadyPlayers: [],
+    log: [...state.log, `${blockerPlayer.name} declares blockers. Both players must press Resolve Combat before damage happens - cast an instant first if you want.`],
   };
 
   return { ok: true, state: next };
 }
 
 function nextPhase(state: GameState, playerId: string): ActionResult {
-  if (state.activePlayerId !== playerId) return { ok: false, error: 'Only the active player advances the phase.' };
+  // combat_damage is the one step BOTH players can call this on - each
+  // marks themselves ready to resolve, and damage only actually happens
+  // once both have. Every other phase still requires the active player.
+  if (state.phase !== 'combat_damage' && state.activePlayerId !== playerId) {
+    return { ok: false, error: 'Only the active player advances the phase.' };
+  }
   if (state.phase === 'declare_attackers') return { ok: false, error: 'Declare your attackers (even zero) to move past this step.' };
   if (state.phase === 'declare_blockers') return { ok: false, error: "Waiting on the defending player's blocks." };
   if (state.phase === 'draw' && !isMutualActive(state) && !getPlayer(state, playerId).hasDrawnThisTurn) {
@@ -491,9 +498,26 @@ function nextPhase(state: GameState, playerId: string): ActionResult {
   }
 
   if (state.phase === 'combat_damage') {
-    let next = resolveCombatDamage(state);
-    next = { ...next, phase: 'combat_end' };
-    return { ok: true, state: emptyManaPools(next) };
+    if (isMutualActive(state)) {
+      let next = resolveCombatDamage(state);
+      next = { ...next, phase: 'combat_end', combatReadyPlayers: [] };
+      return { ok: true, state: emptyManaPools(next) };
+    }
+
+    if (state.combatReadyPlayers.includes(playerId)) {
+      return { ok: false, error: 'Already marked ready - waiting on the other player.' };
+    }
+
+    const readyNow = [...state.combatReadyPlayers, playerId];
+    const actor = getPlayer(state, playerId);
+
+    if (readyNow.length >= 2) {
+      let next = resolveCombatDamage({ ...state, combatReadyPlayers: [] });
+      next = { ...next, phase: 'combat_end' };
+      return { ok: true, state: emptyManaPools(next) };
+    }
+
+    return { ok: true, state: { ...state, combatReadyPlayers: readyNow, log: [...state.log, `${actor.name} is ready to resolve combat.`] } };
   }
 
   const currentIndex = PHASE_ORDER.indexOf(state.phase as Phase);

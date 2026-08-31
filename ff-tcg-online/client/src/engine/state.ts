@@ -130,7 +130,7 @@ export function createStateFromDeck(deck: SavedDeck, humanName: string): GameSta
   const you = buildPlayer(humanId, humanName);
   const ai = buildPlayer(aiId, 'AI Opponent');
 
-   return {
+  return {
     players: [you, ai],
     activePlayerId: humanId,
     phase: 'untap',
@@ -141,5 +141,7 @@ export function createStateFromDeck(deck: SavedDeck, humanName: string): GameSta
     combatAssignments: [],
     mutualAdjustment: { status: 'inactive', agreedBy: [] },
     pendingDeaths: [],
+    combatReadyPlayers: [],
   };
 }
+
