@@ -1511,21 +1511,6 @@ button {
   padding: 4px;
 }
 
-.battlefield-row .card {
-  width: 150px;
-  height: 200px;
-}
-
-.hand-row .card,
-.hand-fan .card {
-  width: 165px;
-  height: 220px;
-}
-
-.corner-column {
-  width: 165px;
-}
-
 .card-tapped {
   transform: rotate(90deg);
   opacity: 0.85;
@@ -1690,10 +1675,6 @@ button {
   margin-left: 0;
 }
 
-.zone-modal-grid .card {
-  width: 110px;
-  height: 148px;
-}
 
 .combat-zone-row {
   display: flex;
@@ -1758,28 +1739,6 @@ button {
   margin-top: 8px;
 }
 
-
-.battlefield-row .card {
-  width: 140px;
-  height: 188px;
-}
-
-.hand-row .card,
-.hand-fan .card {
-  width: 150px;
-  height: 202px;
-}
-
-.corner-column .card {
-  width: 165px;
-  height: 220px;
-}
-
-.zone-modal-grid .card {
-  width: 130px;
-  height: 175px;
-}
-
 .deckbuilder-pool-item .card {
   width: 100%;
   height: 340px;
@@ -1815,26 +1774,6 @@ button {
   margin-bottom: 6px;
   text-align: center;
 }
-
-.battlefield-row .card {
-  width: 160px;
-  height: 214px;
-}
-
-.hand-row .card,
-.hand-fan .card {
-  width: 175px;
-  height: 234px;
-}
-
-.corner-column .card {
-  width: 160px;
-  height: 214px;
-}
-
-.corner-column {
-  width: 160px;
-} 
 
 .combat-zone-merged {
   background: var(--panel);
@@ -1895,4 +1834,25 @@ button {
 
 .combat-blocker-stacked {
   cursor: pointer;
+}
+
+/* ===== Final override: one consistent card size everywhere on the board ===== */
+.battlefield-row .card,
+.hand-row .card,
+.hand-fan .card,
+.corner-column .card,
+.combat-attacker-cell .card,
+.combat-blocker-stacked .card,
+.zone-modal-grid .card {
+  width: 185px;
+  height: 248px;
+}
+
+.corner-column {
+  width: 185px;
+}
+
+.combat-blocker-slot {
+  min-width: 205px;
+  min-height: 268px;
 }

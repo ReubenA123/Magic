@@ -536,9 +536,14 @@ function nextPhase(state: GameState, playerId: string): ActionResult {
   next = emptyManaPools(next);
 
   // Leaving End Combat: now that both players have seen the outcome,
-  // actually move anything that died to the graveyard.
+  // actually move anything that died to the graveyard, and clear the
+  // combat bookkeeping so surviving attackers/blockers reappear in their
+  // normal battlefield row for the rest of the turn (previously this only
+  // cleared at END_TURN, so survivors stayed invisible all the way through
+  // main phase 2).
   if (state.phase === 'combat_end') {
     next = resolvePendingDeaths(next);
+    next = { ...next, declaredAttackers: [], combatAssignments: [] };
   }
 
   if (next.phase === 'cleanup') {
