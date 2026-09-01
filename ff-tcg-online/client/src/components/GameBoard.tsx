@@ -45,8 +45,6 @@ function splitBattlefield(cards: CardInstance[]) {
   return { creatures, others, lands };
 }
 
-/** Hides the Commander Tax counter on the battlefield - it's only relevant
- * while the card is sitting in the commander zone waiting to be recast. */
 function displayInstance(instance: CardInstance): CardInstance {
   if (!instance.counters.some((c) => c.label === 'Commander Tax')) return instance;
   return { ...instance, counters: instance.counters.filter((c) => c.label !== 'Commander Tax') };
@@ -117,8 +115,6 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     if (!state.winnerId) setWinnerDismissed(false);
   }, [state.winnerId]);
 
-  // Clear all local selection state whenever the turn changes.
-  // Clear all local selection state whenever the turn changes.
   useEffect(() => {
     setSelectedAttackers(new Set());
     setBlockerAssignments({});
@@ -127,10 +123,8 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     setDraggedInstanceId(null);
   }, [state.turnNumber]);
 
-  // Also clear blocker assignments the moment a fresh combat starts (new
-  // attackers just got declared) - without this, leftover assignments from
-  // an earlier combat this same turn could carry over and look like the
-  // game auto-chose blockers for you.
+  // A fresh combat starting (new attackers declared) always clears any
+  // leftover blocker assignments from an earlier combat this same turn.
   useEffect(() => {
     setBlockerAssignments({});
     setPendingBlocker(null);
@@ -138,11 +132,6 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
 
   const openCard = openPanelId ? findCard(state, openPanelId) : null;
 
-  // Deliberately NOT gated by soloControl - in VS AI mode, the AI declares
-  // its own attackers/blockers automatically (see hooks/useLocalGame.ts).
-  // Letting the human also see that UI on the AI's turn was racing against
-  // the AI's own decisions and causing exactly the "it's blocking for me"
-  // confusion this was built to fix.
   const isDeclaringAttackers = state.phase === 'declare_attackers' && state.activePlayerId === yourPlayerId;
   const isDeclaringBlockers = state.phase === 'declare_blockers' && state.activePlayerId !== yourPlayerId;
   const showCombatZones = isDeclaringAttackers || isDeclaringBlockers || state.phase === 'combat_damage';
@@ -152,9 +141,9 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     return state.combatAssignments.find((a) => a.attackerInstanceId === attackerId)?.blockerInstanceIds || [];
   }
 
-  /** True if this card is currently sitting in the attack/block zone rather
-   * than its normal battlefield row - purely a display concern, the card is
-   * still on the battlefield as far as the actual rules are concerned. */
+  /** True if this card is currently a declared attacker or an assigned
+   * blocker - purely a display concern (it moves into the combat zone
+   * visually), it's still on the battlefield as far as the rules go. */
   function isInCombatZone(ownerPlayerId: string, instanceId: string): boolean {
     if (ownerPlayerId === state.activePlayerId) {
       if (isDeclaringAttackers && selectedAttackers.has(instanceId)) return true;
@@ -289,18 +278,35 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     setSelectedAttackers(new Set());
   }
 
-  function handleBlockerCandidateClick(instanceId: string) {
-    setPendingBlocker(instanceId === pendingBlocker ? null : instanceId);
+  /** Assigns a blocker to an attacker, removing it from any other attacker
+   * it might currently be assigned to first - a creature can only block
+   * one attacker at a time. */
+  function assignBlocker(attackerInstanceId: string, blockerInstanceId: string) {
+    setBlockerAssignments((prev) => {
+      const next: Record<string, string[]> = {};
+      for (const [atkId, blockers] of Object.entries(prev)) {
+        next[atkId] = blockers.filter((id) => id !== blockerInstanceId);
+      }
+      next[attackerInstanceId] = [...(next[attackerInstanceId] || []), blockerInstanceId];
+      return next;
+    });
   }
 
-  function assignBlocker(attackerInstanceId: string, blockerInstanceId: string) {
-    setBlockerAssignments((prev) => ({ ...prev, [attackerInstanceId]: [...(prev[attackerInstanceId] || []), blockerInstanceId] }));
+  function removeBlockerAssignment(attackerInstanceId: string, blockerInstanceId: string) {
+    setBlockerAssignments((prev) => ({
+      ...prev,
+      [attackerInstanceId]: (prev[attackerInstanceId] || []).filter((id) => id !== blockerInstanceId),
+    }));
   }
 
   function handleAttackerClickForBlocking(attackerInstanceId: string) {
     if (!pendingBlocker) return;
     assignBlocker(attackerInstanceId, pendingBlocker);
     setPendingBlocker(null);
+  }
+
+  function handleBlockerCandidateClick(instanceId: string) {
+    setPendingBlocker(instanceId === pendingBlocker ? null : instanceId);
   }
 
   function confirmBlockers() {
@@ -381,7 +387,6 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   function renderCreatureCard(c: CardInstance, isOpponentSide: boolean, rowCards: CardInstance[], ownerId: string) {
     const isDead = state.pendingDeaths.includes(c.instanceId);
     const def = getCardDefinition(c.defId);
-    const canBeBlockTarget = !isDead && isDeclaringBlockers && isOpponentSide && state.declaredAttackers.includes(c.instanceId);
     const canAttackThis = !isDead && isDeclaringAttackers && !isOpponentSide && !c.tapped && !c.summoningSick;
     const canBeBlocker = !isDead && isDeclaringBlockers && !isOpponentSide && !c.tapped;
     const combatDraggable = canAttackThis || canBeBlocker;
@@ -396,12 +401,9 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
         <div
           draggable={combatDraggable || reorderAllowed}
           onDragStart={() => setDraggedInstanceId(c.instanceId)}
-          onDragOver={(e) => (canBeBlockTarget || reorderAllowed || acceptsAttackerRemoval) && e.preventDefault()}
+          onDragOver={(e) => (reorderAllowed || acceptsAttackerRemoval) && e.preventDefault()}
           onDrop={() => {
-            if (canBeBlockTarget && draggedInstanceId) {
-              assignBlocker(c.instanceId, draggedInstanceId);
-              setDraggedInstanceId(null);
-            } else if (acceptsAttackerRemoval && draggedInstanceId && selectedAttackers.has(draggedInstanceId)) {
+            if (acceptsAttackerRemoval && draggedInstanceId && selectedAttackers.has(draggedInstanceId)) {
               removeAttacker(draggedInstanceId);
               setDraggedInstanceId(null);
             } else if (reorderAllowed && draggedInstanceId) {
@@ -415,8 +417,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
             selected={selected}
             onClick={() => {
               if (isDead) return;
-              if (canBeBlockTarget) handleAttackerClickForBlocking(c.instanceId);
-              else if (canAttackThis) toggleAttacker(c.instanceId);
+              if (canAttackThis) toggleAttacker(c.instanceId);
               else if (canBeBlocker) handleBlockerCandidateClick(c.instanceId);
               else setOpenPanelId(c.instanceId);
             }}
@@ -531,26 +532,26 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
         {isOpponentSide
           ? player.zones.hand.map((c) => <Card key={c.instanceId} definition={getCardDefinition(c.defId)} faceDown />)
           : orderedHand(player.zones.hand).map((c, i, arr) => {
-            const def = getCardDefinition(c.defId);
-            const affordable = def.type === 'land' || canPay(player.manaPool, parseCostLabel(def.costLabel), 0);
-            const isInstantSpeed = def.type === 'instant' || hasKeyword(def.text, 'flash');
-            const dimmed = !(isControllersTurn || isInstantSpeed) || !affordable;
-            const mid = (arr.length - 1) / 2;
-            const offset = i - mid;
-            return (
-              <div
-                key={c.instanceId}
-                className="hand-fan-card"
-                style={{ transform: `rotate(${offset * 4}deg) translateY(${Math.abs(offset) * 6}px)`, zIndex: i }}
-                draggable
-                onDragStart={() => setDraggedInstanceId(c.instanceId)}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={() => handleHandDrop(player.id, c.instanceId)}
-              >
-                <Card definition={def} instance={c} dimmed={dimmed} onClick={() => setOpenPanelId(c.instanceId)} />
-              </div>
-            );
-          })}
+              const def = getCardDefinition(c.defId);
+              const affordable = def.type === 'land' || canPay(player.manaPool, parseCostLabel(def.costLabel), 0);
+              const isInstantSpeed = def.type === 'instant' || hasKeyword(def.text, 'flash');
+              const dimmed = !(isControllersTurn || isInstantSpeed) || !affordable;
+              const mid = (arr.length - 1) / 2;
+              const offset = i - mid;
+              return (
+                <div
+                  key={c.instanceId}
+                  className="hand-fan-card"
+                  style={{ transform: `rotate(${offset * 4}deg) translateY(${Math.abs(offset) * 6}px)`, zIndex: i }}
+                  draggable
+                  onDragStart={() => setDraggedInstanceId(c.instanceId)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => handleHandDrop(player.id, c.instanceId)}
+                >
+                  <Card definition={def} instance={c} dimmed={dimmed} onClick={() => setOpenPanelId(c.instanceId)} />
+                </div>
+              );
+            })}
       </div>
     );
 
@@ -606,80 +607,86 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
       ? `Attack with ${selectedAttackers.size}`
       : 'Declare no attackers'
     : isDeclaringBlockers
-      ? 'Confirm blockers'
-      : state.phase === 'combat_damage'
-        ? youAreReadyForCombat
-          ? 'Waiting on opponent\u2026'
-          : 'Resolve Combat'
-        : undefined;
+    ? 'Confirm blockers'
+    : state.phase === 'combat_damage'
+    ? youAreReadyForCombat
+      ? 'Waiting on opponent\u2026'
+      : 'Resolve Combat'
+    : undefined;
 
-  const youAreAttacker = state.activePlayerId === yourPlayerId;
-
-  const attackZoneEl = showCombatZones && (
-    <div
-      className="combat-zone combat-zone-attack"
-      onDragOver={(e) => isDeclaringAttackers && e.preventDefault()}
-      onDrop={() => {
-        if (isDeclaringAttackers && draggedInstanceId) {
-          addAttackerFromDrag(draggedInstanceId);
-          setDraggedInstanceId(null);
-        }
-      }}
-    >
-      <div className="combat-zone-label combat-zone-label-attack">{isDeclaringAttackers ? 'Attacking \u2014 drag your creatures here' : 'Attacking'}</div>
-      <div className="combat-zone-row">
+  // --- Combat zone: attacker cards on top, an empty (until you drop
+  // something into it) blocker slot directly below each one. Nothing is
+  // pre-populated - the only way a card appears in a slot is you dragging
+  // it there yourself from the battlefield. Multiple blockers on one
+  // attacker stack visually in the same slot. ---------------------------
+  const combatZoneEl = showCombatZones && (
+    <div className="combat-zone-merged">
+      <div className="combat-zone-label">
+        {isDeclaringAttackers
+          ? 'Attacking \u2014 drag your creatures here'
+          : isDeclaringBlockers
+          ? 'Combat \u2014 drag your creatures onto the empty slot below an attacker to block it'
+          : 'Combat'}
+      </div>
+      <div
+        className="combat-columns-row"
+        onDragOver={(e) => isDeclaringAttackers && e.preventDefault()}
+        onDrop={() => {
+          if (isDeclaringAttackers && draggedInstanceId) {
+            addAttackerFromDrag(draggedInstanceId);
+            setDraggedInstanceId(null);
+          }
+        }}
+      >
         {(isDeclaringAttackers ? Array.from(selectedAttackers) : state.declaredAttackers).map((id) => {
           const found = findCard(state, id);
           if (!found) return null;
           const blockers = isDeclaringAttackers ? [] : blockersFor(id);
           return (
-            <div
-              key={id}
-              className="combat-attacker-slot"
-              draggable={isDeclaringAttackers}
-              onDragStart={() => isDeclaringAttackers && setDraggedInstanceId(id)}
-              onDragOver={(e) => isDeclaringBlockers && e.preventDefault()}
-              onDrop={() => {
-                if (isDeclaringBlockers && draggedInstanceId) {
-                  assignBlocker(id, draggedInstanceId);
-                  setDraggedInstanceId(null);
-                }
-              }}
-            >
-              <Card
-                definition={getCardDefinition(found.card.defId)}
-                instance={found.card}
-                onClick={() => isDeclaringAttackers && toggleAttacker(id)}
-              />
-              {blockers.length > 0 && (
-                <div className="combat-blockers-row">
-                  {blockers.map((bId) => {
-                    const bf = findCard(state, bId);
-                    return bf ? <Card key={bId} definition={getCardDefinition(bf.card.defId)} instance={bf.card} /> : null;
-                  })}
+            <div key={id} className="combat-column">
+              <div className="combat-attacker-cell" draggable={isDeclaringAttackers} onDragStart={() => isDeclaringAttackers && setDraggedInstanceId(id)}>
+                <Card definition={getCardDefinition(found.card.defId)} instance={found.card} onClick={() => isDeclaringAttackers && toggleAttacker(id)} />
+              </div>
+              {isDeclaringBlockers && (
+                <div
+                  className="combat-blocker-slot"
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => {
+                    if (draggedInstanceId) {
+                      assignBlocker(id, draggedInstanceId);
+                      setDraggedInstanceId(null);
+                    }
+                  }}
+                  onClick={() => handleAttackerClickForBlocking(id)}
+                >
+                  {blockers.length === 0 ? (
+                    <span className="combat-blocker-slot-empty">Drop blocker here</span>
+                  ) : (
+                    blockers.map((bId, i) => {
+                      const bf = findCard(state, bId);
+                      if (!bf) return null;
+                      return (
+                        <div
+                          key={bId}
+                          className="combat-blocker-stacked"
+                          style={{ marginTop: i > 0 ? -170 : 0, zIndex: i }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeBlockerAssignment(id, bId);
+                          }}
+                          title="Click to remove this blocker"
+                        >
+                          <Card definition={getCardDefinition(bf.card.defId)} instance={bf.card} />
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
               )}
             </div>
           );
         })}
         {isDeclaringAttackers && selectedAttackers.size === 0 && <p className="combat-zone-empty">Nothing here yet</p>}
-      </div>
-    </div>
-  );
-
-  const blockZoneEl = isDeclaringBlockers && (
-    <div className="combat-zone combat-zone-block">
-      <div className="combat-zone-label combat-zone-label-block">Blocking {'\u2014'} drag your creatures onto an attacker</div>
-      <div className="combat-zone-row">
-        {state.players
-          .find((p) => p.id !== state.activePlayerId)!
-          .zones.battlefield.filter((c) => getCardDefinition(c.defId).type === 'creature' && !c.tapped)
-          .filter((c) => !Object.values(blockerAssignments).flat().includes(c.instanceId))
-          .map((c) => (
-            <div key={c.instanceId} draggable onDragStart={() => setDraggedInstanceId(c.instanceId)}>
-              <Card definition={getCardDefinition(c.defId)} instance={c} onClick={() => handleBlockerCandidateClick(c.instanceId)} selected={pendingBlocker === c.instanceId} />
-            </div>
-          ))}
       </div>
     </div>
   );
@@ -724,7 +731,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
 
         {renderPlayerZone(opponent, true)}
 
-        {showCombatZones && (youAreAttacker ? <>{blockZoneEl}{attackZoneEl}</> : <>{attackZoneEl}{blockZoneEl}</>)}
+        {combatZoneEl}
 
         {renderPlayerZone(you, false)}
       </div>
