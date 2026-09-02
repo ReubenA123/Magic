@@ -392,7 +392,7 @@ export const CARD_POOL: CardDefinition[] = [
     text: "Deathtouch \n Darkness \u2014 Whenever Cecil deals damage, you lose that much life. Then if your life total is less than or equal to half your starting life " +
       "toal, untap Cecil and transform it.",
     imagePath: '/assets/cards/cecil-dark-knight.webp',
-    transformsInto: 'Cecil, Redeemed Paladin'
+    transformsInto: 'cecil-redeemed-paladin'
   },
   {
     id: 'cecil-redeemed-paladin',
@@ -478,7 +478,7 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'When Clive enters, you may discard your hand, then draw cards equal to your devotion to red. (Each R in the mana costs of permanents you control counts toward your devotion to red.)' +
       "4RR, T: Exile Clive, then return it to the battlefield transformed under its owner\u2019s control. Activate only as a sorcery.",
     imagePath: '/assets/cards/clive-ifrit-s-dominant.webp',
-    transformsInto: "Ifrit, Warden of Inferno",
+    transformsInto: 'ifrit-warden-of-inferno',
   },
   {
     id: 'ifrit-warden-of-inferno',
@@ -619,7 +619,7 @@ export const CARD_POOL: CardDefinition[] = [
     type: 'artifact',
     subtype: 'equipment',
     costLabel: 'W',
-    text: "Equipped creature gets +1/+1. \n5WW: Exile this Equipment, then return it to the battlefield transformed under its owner’s control. Activate only as a sorcery. \nEquip 1",
+    text: "Equipped creature gets +1/+1. \n5WW: Exile this Equipment, then return it to the battlefield transformed under its owner\u2019s control. Activate only as a sorcery. \nEquip 1",
     imagePath: '/assets/cards/crystal-fragments.webp'
   },
   {
@@ -698,7 +698,7 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'Dragonfire Dive — During your turn, Dion and other Knights you control have flying.\nWhen Dion enters, create a 2/2 white Knight creature token.' +
       "4WW, Tap: Exile Dion, then return it to the battlefield transformed under its owner\u2019s control. Activate only as a sorcery.",
     imagePath: '/assets/cards/dion-bahamut-s-dominant.webp',
-    transformsInto: 'Bahamut, Warden of Light'
+    transformsInto: 'bahamut-warden-of-light'
   },
   {
     id: 'bahamut-warden-of-light',
@@ -801,7 +801,7 @@ export const CARD_POOL: CardDefinition[] = [
     text: "Vigilance \nWhenever Emet-Selch enters or attacks, draw a card, then discard a card.\n" +
       "At the beginning of your upkeep, if there are fourteen or more cards in your graveyard, you may transform Emet-Selch.",
     imagePath: '/assets/cards/emet-selch-unsundered.webp',
-    transformsInto: 'Hades, Sorcerer of Eld'
+    transformsInto: 'hades-sorcerer-of-eld'
   },
   {
     id: 'hades-sorcerer-of-eld',
@@ -858,7 +858,7 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 3,
     text: "When Exdeath enters, you gain 3 life.\nAt the beginning of your end step, if there are six or more permanent cards in your graveyard, transform Exdeath.",
     imagePath: "/assets/cards/exdeath-void-warlock.webp",
-    transformsInto: "Neo Exdeath, Dimension's End"
+    transformsInto: "neo-exdeath-dimension-s-end"
   },
   {
     id: "neo-exdeath-dimension-s-end",
@@ -979,7 +979,7 @@ export const CARD_POOL: CardDefinition[] = [
     text: "Whenever you cast a noncreature spell, surveil 1. (Look at the top card of your library. You may put it into your graveyard.)" +
       "\n3BBRR: Return this card from your graveyard to the battlefield transformed. Activate only as a sorcery.",
     imagePath: '/assets/cards/garland-knight-of-cornelia.webp',
-    transformsInto: 'Chaos, the Endless'
+    transformsInto: 'chaos-the-endless'
   },
   {
     id: 'chaos-the-endless',
@@ -1301,7 +1301,7 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 3,
     text: 'Menace \n Whenever Jecht deals combat damage to a player, you may exile it, then return it to the battlefield transformed under its owner\u2019s control.',
     imagePath: '/assets/cards/jecht-reluctant-guardian.webp',
-    transformsInto: "Braska's Final Aeon"
+    transformsInto: 'braska-s-final-aeon'
   }, {
     id: 'braska-s-final-aeon',
     name: "Braska's Final Aeon",
@@ -1346,7 +1346,7 @@ export const CARD_POOL: CardDefinition[] = [
     text: "When Jill enters, return up to one other target nonland permanent to its owner\u2019s hand.\n" +
       "3UU, Tap: Exile Jill, then return it to the battlefield transformed under its owner\u2019s control. Activate only as a sorcery.",
     imagePath: '/assets/cards/jill-shiva-s-dominant.webp',
-    transformsInto: 'Shiva, Warden of Ice'
+    transformsInto: 'shiva-warden-of-ice'
   },
   {
     id: 'shiva-warden-of-ice',
@@ -1370,7 +1370,7 @@ export const CARD_POOL: CardDefinition[] = [
     text: "When Joshua enters, discard up to two cards, then draw that many cards. \n" +
       "3RW, Tap: Exile Joshua, then return it to the battlefield transformed under its owner\u2019s control. Activate only as a sorcery.",
     imagePath: '/assets/cards/joshua-phoenix-s-dominant.webp',
-    transformsInto: 'Phoenix, Warden of Fire'
+    transformsInto: 'phoenix-warden-of-fire'
   },
   {
     id: 'phoenix-warden-of-fire',
@@ -1437,7 +1437,7 @@ export const CARD_POOL: CardDefinition[] = [
     text: "Whenever Kefka enters or attacks, each player discards a card. Then you draw a card for each card type among cards discarded this way.\n" +
       "8: Each opponent sacrifices a permanent of their choice. Transform Kefka. Activate only as a sorcery.",
     imagePath: '/assets/cards/kefka-court-mage.webp',
-    transformsInto: "Kefka, Court Mage"
+    transformsInto: 'kefka-ruler-of-ruin'
   },
   {
     id: 'kefka-ruler-of-ruin',
@@ -1460,7 +1460,7 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'At the beginning of your end step, create a tapped 0/1 black Wizard creature token with ' +
       '“Whenever you cast a noncreature spell, this token deals 1 damage to each opponent.” Then if you control four or more Wizards, transform Kuja.',
     imagePath: '/assets/cards/kuja-genome-sorcerer.webp',
-    transformsInto: 'Trance Kuja, Fate Defied'
+    transformsInto: 'trance-kuja-fate-defied'
   },
   {
     id: 'trance-kuja-fate-defied',
@@ -2263,7 +2263,7 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'Whenever Sephiroth enters or attacks, you may sacrifice another creature. If you do, draw a card.\n' +
       'Whenever another creature dies, target opponent loses 1 life and you gain 1 life. If this is the fourth time this ability has resolved this turn, transform Sephiroth.',
     imagePath: '/assets/cards/sephiroth-fabled-soldier.webp',
-    transformsInto: 'Sephiroth, One-Winged Angel',
+    transformsInto: 'sephiroth-one-winged-angel',
   },
   {
     id: 'sephiroth-one-winged-angel',
@@ -2310,7 +2310,7 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'The first legendary creature spell you cast each turn costs 2 less to cast. \n' +
       'At the beginning of combat on your turn, if you control two or more other legendary creatures, you may transform Serah Farron.',
     imagePath: '/assets/cards/serah-farron.webp',
-    transformsInto: 'Crystallized Serah'
+    transformsInto: 'crystallized-serah'
   },
   {
     id: 'crystallized-serah',
@@ -2391,7 +2391,7 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'At the beginning of your upkeep, look at the top card of your library. If it\u2019s an artifact or creature card, ' +
       'you may reveal it and put it into your hand. If you put a card into your hand this way, create a Food token and transform this enchantment.',
     imagePath: '/assets/cards/sidequest-catch-a-fish.webp',
-    transformsInto: 'Cooking Campsite'
+    transformsInto: 'cooking-campsite'
   },
   {
     id: 'cooking-campsite',
@@ -2412,7 +2412,7 @@ export const CARD_POOL: CardDefinition[] = [
       'At the beginning of your end step, if a creature died under an opponent\u2019s control this turn, ' +
       'create a Treasure token. Then if you control three or more Treasures, transform this enchantment.',
     imagePath: '/assets/cards/sidequest-hunt-the-mark.webp',
-    transformsInto: 'Yiazmat, Ultimate Mark'
+    transformsInto: 'yiazmat-ultimate-mark'
   },
   {
     id: 'yiazmat-ultimate-mark',
@@ -2431,7 +2431,7 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'At the beginning of combat on your turn, target creature you control gets +2/+0 until end of turn.\n' +
       'At the end of combat on your turn, if a player was dealt 6 or more combat damage this turn, transform this enchantment, then attach it to a creature you control.',
     imagePath: '/assets/cards/sidequest-play-blitzball.webp',
-    transformsInto: 'World Champion, Celestial Weapon'
+    transformsInto: 'world-champion-celestial-weapon'
   },
   {
     id: 'world-champion-celestial-weapon',
@@ -2451,7 +2451,7 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'When this enchantment enters, create a 2/2 green Bird creature token with “Whenever a land you control enters, this token gets +1/+0 until end of turn.”\n' +
       'At the beginning of your first main phase, if you control four or more Birds, transform this enchantment.',
     imagePath: '/assets/cards/sidequest-raise-a-chocobo.webp',
-    transformsInto: 'Black Chocobo'
+    transformsInto: 'black-chocobo'
   },
   {
     id: 'black-chocobo',
@@ -2844,7 +2844,7 @@ export const CARD_POOL: CardDefinition[] = [
   text: 'When Terra enters, mill five cards. Put up to one enchantment card milled this way into your hand. \n' +
   'Trance — 4RG, Tap: Exile Terra, then return it to the battlefield transformed under its owner\u2019s control. Activate only as a sorcery.',
   imagePath: '/assets/cards/terra-magical-adept.webp',
-  transformsInto: 'Esper Terra'
+  transformsInto: 'esper-terra'
   },
   {
   id: 'esper-terra',
@@ -2901,7 +2901,7 @@ export const CARD_POOL: CardDefinition[] = [
   'Whenever you cast a noncreature spell, if at least four mana was spent to cast it, put a +1/+1 counter on The Emperor of Palamecia. ' +
   'Then if it has three or more +1/+1 counters on it, transform it.',
   imagePath: '/assets/cards/the-emperor-of-palamecia.webp',
-  transformsInto: 'The Lord Master of Hell'
+  transformsInto: 'the-lord-master-of-hell'
   },
    {
   id: 'the-lord-master-of-hell',
@@ -3213,7 +3213,7 @@ export const CARD_POOL: CardDefinition[] = [
   'then put any number of them into your graveyard and the rest on top of your library in any order.) \n' +
   'At the beginning of your end step, you may pay {4}{U}{U}{B}{B} and exile eight cards from your graveyard. If you do, transform Ultimecia.',
   imagePath: '/assets/cards/ultimecia-time-sorceress.webp',
-  transformsInto: 'Ultimecia, Omnipotent',
+  transformsInto: 'ultimecia-omnipotent',
   },
   {
   id: 'ultimecia-omnipotent',
@@ -3328,7 +3328,7 @@ export const CARD_POOL: CardDefinition[] = [
   text: 'Whenever you cast a legendary spell, draw a card. This ability triggers only once each turn. \n' +
   'Hero\u2019s Sundering — {7}, {T}: Exile target nonland permanent. Transform Venat. Activate only as a sorcery.',
   imagePath: '/assets/cards/venat-heart-of-hydaelyn.webp',
-  transformsInto: 'Hydaelyn, the Mothercrystal',
+  transformsInto: 'hydaelyn-the-mothercrystal',
   },
   {
   id: 'hydaelyn-the-mothercrystal',
@@ -3367,7 +3367,7 @@ export const CARD_POOL: CardDefinition[] = [
   text: 'Whenever a creature an opponent controls dies, put a number of +1/+1 counters on Vincent Valentine equal to that creature\u2019s power.\n' +
   'Whenever Vincent Valentine attacks, you may transform it.',
   imagePath: '/assets/cards/vincent-valentine.webp',
-  transformsInto: 'Galian Beast'
+  transformsInto: 'galian-beast'
   },
   {
   id: 'galian-beast',
@@ -3555,7 +3555,7 @@ export const CARD_POOL: CardDefinition[] = [
   'creatures other than Zenos yae Galvus and the chosen creature get -2/-2. \n' +
   'When the chosen creature leaves the battlefield, transform Zenos yae Galvus.',
   imagePath: '/assets/cards/zenos-yae-galvus.webp',
-  transformsInto:'Shinryu, Transcendent Rival'
+  transformsInto:'shinryu-transcendent-rival'
   },
   {
   id: 'shinryu-transcendent-rival',

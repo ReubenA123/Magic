@@ -171,17 +171,39 @@ function toggleTap(state: GameState, playerId: string, instanceId: string, chose
   const def = getCardDefinition(found.card.defId);
   const wasTapped = found.card.tapped;
 
-  let next = updatePlayer(state, found.ownerPlayerId, (p) => ({
-    ...p,
-    zones: { ...p.zones, battlefield: p.zones.battlefield.map((c) => (c.instanceId === instanceId ? { ...c, tapped: !c.tapped } : c)) },
-  }));
+  // Untapping: hand back whatever mana this specific land produced, if it's
+  // still sitting unspent in the pool - clamped at 0 so it can't go negative
+  // if that mana was already spent on something else.
+  if (wasTapped) {
+    const producedColor = found.card.producedManaColor;
+    let next = updatePlayer(state, found.ownerPlayerId, (p) => ({
+      ...p,
+      zones: {
+        ...p.zones,
+        battlefield: p.zones.battlefield.map((c) => (c.instanceId === instanceId ? { ...c, tapped: false, producedManaColor: undefined } : c)),
+      },
+      manaPool: producedColor ? { ...p.manaPool, [producedColor]: Math.max(0, p.manaPool[producedColor] - 1) } : p.manaPool,
+    }));
+    if (producedColor) next = { ...next, log: [...next.log, `${def.name} is untapped, returning ${producedColor} mana to the pool.`] };
+    return { ok: true, state: next };
+  }
 
-  if (!wasTapped && def.type === 'land' && def.producesMana) {
+  let resolvedColor: ManaColor | undefined;
+  if (def.type === 'land' && def.producesMana) {
     const resolved = resolveTapColor(def.producesMana, chosenColor);
     if (!resolved.ok) return resolved;
-    next = updatePlayer(next, found.ownerPlayerId, (p) => ({ ...p, manaPool: { ...p.manaPool, [resolved.color]: p.manaPool[resolved.color] + 1 } }));
-    next = { ...next, log: [...next.log, `${def.name} adds ${resolved.color} to mana pool.`] };
+    resolvedColor = resolved.color;
   }
+
+  let next = updatePlayer(state, found.ownerPlayerId, (p) => ({
+    ...p,
+    zones: {
+      ...p.zones,
+      battlefield: p.zones.battlefield.map((c) => (c.instanceId === instanceId ? { ...c, tapped: true, producedManaColor: resolvedColor } : c)),
+    },
+    manaPool: resolvedColor ? { ...p.manaPool, [resolvedColor]: p.manaPool[resolvedColor] + 1 } : p.manaPool,
+  }));
+  if (resolvedColor) next = { ...next, log: [...next.log, `${def.name} adds ${resolvedColor} to mana pool.`] };
 
   return { ok: true, state: next };
 }
@@ -571,7 +593,7 @@ function runUntapStep(state: GameState, playerId: string): GameState {
         if (stun && stun.amount > 0) {
           return { ...c, counters: c.counters.map((ctr) => (ctr.label.toLowerCase() === 'stun' ? { ...ctr, amount: ctr.amount - 1 } : ctr)).filter((ctr) => ctr.amount > 0) };
         }
-        return { ...c, tapped: false, summoningSick: false };
+        return { ...c, tapped: false, summoningSick: false, producedManaColor: undefined };
       }),
     },
   }));

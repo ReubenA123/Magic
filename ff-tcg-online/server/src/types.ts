@@ -58,6 +58,10 @@ export interface CardInstance {
    * permanent with this instanceId. Cleared automatically if either card
    * leaves the battlefield - see engine/actions.ts and engine/combat.ts. */
   attachedToInstanceId?: string;
+  /** Set while tapped, if tapping this card added mana to its owner's pool -
+   * records which color, so untapping (before it's spent) correctly gives it
+   * back instead of leaving phantom mana in the pool. See engine/actions.ts: toggleTap. */
+  producedManaColor?: ManaColor;
 }
 
 export type ZoneName = 'library' | 'hand' | 'battlefield' | 'graveyard' | 'exile' | 'commander';

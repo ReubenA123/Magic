@@ -50,6 +50,33 @@ function displayInstance(instance: CardInstance): CardInstance {
   return { ...instance, counters: instance.counters.filter((c) => c.label !== 'Commander Tax') };
 }
 
+/**
+ * Groups battlefield permanents that share a name into stacks, purely for
+ * display - each CardInstance stays independent in game state. A card with
+ * any counter, or one excluded by the caller (e.g. mid-death), always stays
+ * its own singleton group so it's never hidden inside a pile. Order follows
+ * each group's first member, so stacks stay put where they first appeared.
+ */
+function groupForStacking(cards: CardInstance[], isExcluded?: (c: CardInstance) => boolean): CardInstance[][] {
+  const groups: CardInstance[][] = [];
+  const byName = new Map<string, CardInstance[]>();
+  for (const c of cards) {
+    if (c.counters.length > 0 || isExcluded?.(c)) {
+      groups.push([c]);
+      continue;
+    }
+    const name = getCardDefinition(c.defId).name;
+    let group = byName.get(name);
+    if (!group) {
+      group = [];
+      byName.set(name, group);
+      groups.push(group);
+    }
+    group.push(c);
+  }
+  return groups;
+}
+
 function ManaRow({ player }: { player: PlayerState }) {
   const total = Object.values(player.manaPool).reduce((a, b) => a + b, 0);
   if (total === 0) return <div className="mana-row mana-row-empty">No mana</div>;
@@ -69,6 +96,83 @@ function ManaRow({ player }: { player: PlayerState }) {
   );
 }
 
+/**
+ * The tap/untap control strip shown under a stack of 2+ identical permanents.
+ * Left = untap (both its +/- adjust how many to untap), right = tap (both
+ * its +/- adjust how many to tap) - set the amount, then press Untap/Tap to
+ * act on exactly that many at once. The middle number is the live count of
+ * cards still available to tap right now.
+ */
+function StackTapControls({
+  tappedCount,
+  untappedCount,
+  onTapN,
+  onUntapN,
+}: {
+  tappedCount: number;
+  untappedCount: number;
+  onTapN: (n: number) => void;
+  onUntapN: (n: number) => void;
+}) {
+  const [untapAmount, setUntapAmount] = useState(1);
+  const [tapAmount, setTapAmount] = useState(1);
+
+  const clampedUntap = Math.min(Math.max(untapAmount, 1), Math.max(tappedCount, 1));
+  const clampedTap = Math.min(Math.max(tapAmount, 1), Math.max(untappedCount, 1));
+
+  return (
+    <div className="stack-tap-controls">
+      <div className="stack-tap-row">
+        <div className="stack-tap-group">
+          <button className="stack-tap-step" disabled={tappedCount === 0} onClick={() => setUntapAmount((n) => Math.max(1, n - 1))} title="Fewer to untap">
+            −
+          </button>
+          <input
+            className="stack-tap-input"
+            type="number"
+            min={1}
+            max={Math.max(tappedCount, 1)}
+            value={clampedUntap}
+            disabled={tappedCount === 0}
+            onChange={(e) => setUntapAmount(Math.max(1, parseInt(e.target.value, 10) || 1))}
+          />
+          <button className="stack-tap-step" disabled={tappedCount === 0} onClick={() => setUntapAmount((n) => Math.min(tappedCount, n + 1))} title="More to untap">
+            +
+          </button>
+        </div>
+        <span className="battlefield-stack-count" title="Cards still tappable">
+          {untappedCount}
+        </span>
+        <div className="stack-tap-group">
+          <button className="stack-tap-step" disabled={untappedCount === 0} onClick={() => setTapAmount((n) => Math.max(1, n - 1))} title="Fewer to tap">
+            −
+          </button>
+          <input
+            className="stack-tap-input"
+            type="number"
+            min={1}
+            max={Math.max(untappedCount, 1)}
+            value={clampedTap}
+            disabled={untappedCount === 0}
+            onChange={(e) => setTapAmount(Math.max(1, parseInt(e.target.value, 10) || 1))}
+          />
+          <button className="stack-tap-step" disabled={untappedCount === 0} onClick={() => setTapAmount((n) => Math.min(untappedCount, n + 1))} title="More to tap">
+            +
+          </button>
+        </div>
+      </div>
+      <div className="stack-tap-row">
+        <button className="stack-tap-commit" disabled={tappedCount === 0} onClick={() => onUntapN(clampedUntap)}>
+          Untap
+        </button>
+        <button className="stack-tap-commit" disabled={untappedCount === 0} onClick={() => onTapN(clampedTap)}>
+          Tap
+        </button>
+      </div>
+    </div>
+  );
+}
+
 interface SelectionBox {
   startX: number;
   startY: number;
@@ -82,6 +186,10 @@ interface ManaChoiceItem {
   instanceId: string;
   options: ManaColor[];
 }
+
+const STACK_PEEK_STEP = 8;
+const STACK_PEEK_MAX_LAYERS = 4;
+const STACK_CONTROL_HEIGHT = 60;
 
 export default function GameBoard({ state, yourPlayerId, actionError, onAction, soloControl }: GameBoardProps) {
   const you = state.players.find((p) => p.id === yourPlayerId)!;
@@ -226,6 +334,26 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
       }
     }
     onAction({ type: 'TOGGLE_TAP', instanceId: card.instanceId });
+  }
+
+  /**
+   * A stack of 2+ identical permanents is tapped/untapped a chosen amount at
+   * a time via the stepper below the pile (not by clicking the pile itself) -
+   * that keeps exactly which instances get toggled unambiguous, so the right
+   * amount of mana is added or refunded each time instead of guessing from a click target.
+   */
+  function tapNFromGroup(group: CardInstance[], n: number) {
+    group
+      .filter((g) => !g.tapped)
+      .slice(0, n)
+      .forEach((c) => handleToggleTap(c));
+  }
+
+  function untapNFromGroup(group: CardInstance[], n: number) {
+    group
+      .filter((g) => g.tapped)
+      .slice(0, n)
+      .forEach((c) => handleToggleTap(c));
   }
 
   function handleBoardDrop(playerId: string) {
@@ -383,13 +511,69 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     window.removeEventListener('mouseup', onPhaseDragEnd);
   }
 
-  function renderCreatureCard(c: CardInstance, isOpponentSide: boolean, rowCards: CardInstance[], ownerId: string) {
+  /**
+   * Renders a group as either a single Card (group of 1) or a real pile of
+   * layered Cards - one per instance, each showing its own tapped state, so
+   * a stack visibly fills up with tapped (rotated) copies at the back as you
+   * use them. `front` is whichever instance is interactive (gets the click
+   * handlers); the rest are non-interactive layers peeking out behind it,
+   * with untapped ones kept nearer the front and tapped ones sinking furthest back.
+   */
+  function renderStackedCard(
+    group: CardInstance[],
+    front: CardInstance,
+    frontProps: { selected?: boolean; onClick: () => void; onDoubleClick: () => void },
+  ) {
+    if (group.length === 1) {
+      return <Card definition={getCardDefinition(front.defId)} instance={displayInstance(front)} {...frontProps} />;
+    }
+    const behind = group.filter((g) => g.instanceId !== front.instanceId);
+    const depthOrder = [...behind.filter((g) => !g.tapped), ...behind.filter((g) => g.tapped)];
+    const footprint = Math.min(depthOrder.length, STACK_PEEK_MAX_LAYERS) * STACK_PEEK_STEP;
+    const tappedCount = group.filter((g) => g.tapped).length;
+    const untappedCount = group.length - tappedCount;
+    return (
+      <div className="battlefield-stack" style={{ width: 185 + footprint, height: 248 + footprint + STACK_CONTROL_HEIGHT }}>
+        {depthOrder.map((bc, i) => {
+          const depth = Math.min(i + 1, STACK_PEEK_MAX_LAYERS) * STACK_PEEK_STEP;
+          return (
+            <div
+              key={bc.instanceId}
+              className="battlefield-stack-layer battlefield-stack-layer-back"
+              style={{ transform: `translate(${depth}px, ${depth}px)`, zIndex: depthOrder.length - i }}
+            >
+              <Card definition={getCardDefinition(bc.defId)} instance={displayInstance(bc)} />
+            </div>
+          );
+        })}
+        {/* Stacked permanents are only tapped/untapped via this control strip,
+            a chosen amount at a time, so it's always unambiguous which
+            copies - and how much mana - is being added or refunded. */}
+        <div style={{ position: 'absolute', top: 248 + footprint, left: 0, width: 185 + footprint, zIndex: depthOrder.length + 2 }}>
+          <StackTapControls
+            tappedCount={tappedCount}
+            untappedCount={untappedCount}
+            onTapN={(n) => tapNFromGroup(group, n)}
+            onUntapN={(n) => untapNFromGroup(group, n)}
+          />
+        </div>
+        <div className="battlefield-stack-layer" style={{ zIndex: depthOrder.length + 1 }}>
+          <Card definition={getCardDefinition(front.defId)} instance={displayInstance(front)} selected={frontProps.selected} onClick={frontProps.onClick} />
+        </div>
+      </div>
+    );
+  }
+
+  function renderCreatureCard(group: CardInstance[], isOpponentSide: boolean, rowCards: CardInstance[], ownerId: string) {
+    const stackCount = group.length;
+    // Prefer showing a copy that's actually usable right now (ready to attack/block),
+    // so clicking a stack does the useful thing instead of a coin-flip instance.
+    const c = group.find((g) => !g.tapped && !g.summoningSick) ?? group.find((g) => !g.tapped) ?? group[0];
     const isDead = state.pendingDeaths.includes(c.instanceId);
-    const def = getCardDefinition(c.defId);
     const canAttackThis = !isDead && isDeclaringAttackers && !isOpponentSide && !c.tapped && !c.summoningSick;
     const canBeBlocker = !isDead && isDeclaringBlockers && !isOpponentSide && !c.tapped;
     const combatDraggable = canAttackThis || canBeBlocker;
-    const reorderAllowed = !isDead && !isDeclaringAttackers && !isDeclaringBlockers && (!isOpponentSide || !!soloControl);
+    const reorderAllowed = stackCount === 1 && !isDead && !isDeclaringAttackers && !isDeclaringBlockers && (!isOpponentSide || !!soloControl);
     // A row can also accept a drop of an already-selected attacker being
     // dragged back out to un-declare it, right up until "Attack with X" is pressed.
     const acceptsAttackerRemoval = isDeclaringAttackers && !isOpponentSide;
@@ -410,41 +594,41 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
             }
           }}
         >
-          <Card
-            definition={def}
-            instance={displayInstance(c)}
-            selected={selected}
-            onClick={() => {
+          {renderStackedCard(group, c, {
+            selected,
+            onClick: () => {
               if (isDead) return;
               if (canAttackThis) toggleAttacker(c.instanceId);
               else if (canBeBlocker) handleBlockerCandidateClick(c.instanceId);
               else setOpenPanelId(c.instanceId);
-            }}
-            onDoubleClick={() => !isDead && handleToggleTap(c)}
-          />
+            },
+            onDoubleClick: () => !isDead && stackCount === 1 && handleToggleTap(c),
+          })}
         </div>
       </div>
     );
   }
 
-  function renderPlainCard(c: CardInstance, playerId: string, rowKey: string, rowCards: CardInstance[], reorderAllowed: boolean) {
-    const def = getCardDefinition(c.defId);
+  function renderPlainCard(group: CardInstance[], playerId: string, rowKey: string, rowCards: CardInstance[], reorderAllowed: boolean) {
+    const stackCount = group.length;
+    // Prefer an untapped copy, so repeatedly double-clicking a stack (e.g. of
+    // lands) taps through them one at a time instead of always hitting the same one.
+    const c = group.find((g) => !g.tapped) ?? group[0];
     const isPendingManaChoice = manaChoiceQueue.length > 0 && manaChoiceQueue[0].instanceId === c.instanceId;
+    const canReorder = reorderAllowed && stackCount === 1;
     return (
       <div key={c.instanceId} ref={(el) => registerCardRef(c.instanceId, el)}>
         <div
-          draggable={reorderAllowed}
-          onDragStart={() => reorderAllowed && setDraggedInstanceId(c.instanceId)}
+          draggable={canReorder}
+          onDragStart={() => canReorder && setDraggedInstanceId(c.instanceId)}
           onDragOver={(e) => reorderAllowed && e.preventDefault()}
           onDrop={() => reorderAllowed && draggedInstanceId && handleRowDrop(playerId, rowKey, rowCards, c.instanceId)}
         >
-          <Card
-            definition={def}
-            instance={displayInstance(c)}
-            selected={multiSelected.has(c.instanceId) || isPendingManaChoice}
-            onClick={() => setOpenPanelId(c.instanceId)}
-            onDoubleClick={() => handleToggleTap(c)}
-          />
+          {renderStackedCard(group, c, {
+            selected: multiSelected.has(c.instanceId) || isPendingManaChoice,
+            onClick: () => setOpenPanelId(c.instanceId),
+            onDoubleClick: () => stackCount === 1 && handleToggleTap(c),
+          })}
         </div>
       </div>
     );
@@ -453,9 +637,9 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   function renderPlayerZone(player: PlayerState, isOpponentSide: boolean) {
     const { creatures, others, lands } = splitBattlefield(player.zones.battlefield);
     const visibleCreatures = creatures.filter((c) => !isInCombatZone(player.id, c.instanceId));
-    const orderedCreatures = orderedRow(player.id, 'creatures', visibleCreatures);
-    const orderedOthers = orderedRow(player.id, 'others', others);
-    const orderedLands = orderedRow(player.id, 'lands', lands);
+    const creatureGroups = groupForStacking(orderedRow(player.id, 'creatures', visibleCreatures), (c) => state.pendingDeaths.includes(c.instanceId));
+    const otherGroups = groupForStacking(orderedRow(player.id, 'others', others));
+    const landGroups = groupForStacking(orderedRow(player.id, 'lands', lands));
     const commanderCard = player.zones.commander[0];
     const isDrawStep = state.phase === 'draw' && state.activePlayerId === player.id && !player.hasDrawnThisTurn;
     const canDrawHere = player.id === yourPlayerId || (soloControl && isOpponentSide);
@@ -500,15 +684,15 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
 
     const battlefieldRows = isOpponentSide ? (
       <>
-        <div className="battlefield-row lands-row">{orderedLands.map((c) => renderPlainCard(c, player.id, 'lands', lands, selectEnabled))}</div>
-        <div className="battlefield-row others-row">{orderedOthers.map((c) => renderPlainCard(c, player.id, 'others', others, selectEnabled))}</div>
-        <div className="battlefield-row creatures-row">{orderedCreatures.map((c) => renderCreatureCard(c, isOpponentSide, visibleCreatures, player.id))}</div>
+        <div className="battlefield-row lands-row">{landGroups.map((g) => renderPlainCard(g, player.id, 'lands', lands, selectEnabled))}</div>
+        <div className="battlefield-row others-row">{otherGroups.map((g) => renderPlainCard(g, player.id, 'others', others, selectEnabled))}</div>
+        <div className="battlefield-row creatures-row">{creatureGroups.map((g) => renderCreatureCard(g, isOpponentSide, visibleCreatures, player.id))}</div>
       </>
     ) : (
       <>
-        <div className="battlefield-row creatures-row">{orderedCreatures.map((c) => renderCreatureCard(c, isOpponentSide, visibleCreatures, player.id))}</div>
-        <div className="battlefield-row others-row">{orderedOthers.map((c) => renderPlainCard(c, player.id, 'others', others, selectEnabled))}</div>
-        <div className="battlefield-row lands-row">{orderedLands.map((c) => renderPlainCard(c, player.id, 'lands', lands, selectEnabled))}</div>
+        <div className="battlefield-row creatures-row">{creatureGroups.map((g) => renderCreatureCard(g, isOpponentSide, visibleCreatures, player.id))}</div>
+        <div className="battlefield-row others-row">{otherGroups.map((g) => renderPlainCard(g, player.id, 'others', others, selectEnabled))}</div>
+        <div className="battlefield-row lands-row">{landGroups.map((g) => renderPlainCard(g, player.id, 'lands', lands, selectEnabled))}</div>
       </>
     );
 

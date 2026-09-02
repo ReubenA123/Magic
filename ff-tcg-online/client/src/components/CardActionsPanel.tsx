@@ -182,12 +182,12 @@ export default function CardActionsPanel({
                 </div>
               </div>
             ) : (
-              <button className="card-action-button-play secondary" onClick={handleTapClick}>
+              <button className="card-action-button card-action-button-play" onClick={handleTapClick}>
                 {instance.tapped ? 'Untap' : 'Tap'}
               </button>
             )}
             {definition.transformsInto && (
-              <button className="card-action-button-play secondary" onClick={onFlip}>
+              <button className="card-action-button card-action-button-play" onClick={onFlip}>
                 Flip / Transform
               </button>
             )}
