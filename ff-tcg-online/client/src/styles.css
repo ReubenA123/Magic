@@ -170,6 +170,21 @@ button {
   padding: 10px;
 }
 
+@keyframes pregame-card-draw-in {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.pregame-card-enter {
+  animation: pregame-card-draw-in 0.3s ease-out;
+}
+
 .pregame-controls {
   display: flex;
   gap: 10px;
@@ -676,6 +691,12 @@ button {
   border-bottom: 1px solid var(--border);
 }
 
+.nav-bar-pinned {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
 .nav-brand {
   font-family: 'Cinzel', serif;
   color: var(--accent);
@@ -758,6 +779,18 @@ button {
   align-items: center;
   flex-wrap: wrap;
   margin-bottom: 12px;
+}
+
+/* Library and Deck Builder both scroll a long card grid under this bar - keep
+   it in view the whole time instead of losing it above the fold. Scoped to
+   these two pages only (not the shared class inside ZoneModal's own scroll area). */
+.library-page .library-controls,
+.deckbuilder-main .library-controls {
+  position: sticky;
+  top: 56px;
+  z-index: 40;
+  background: var(--bg);
+  padding: 10px 0;
 }
 
 .library-search {
@@ -1000,13 +1033,14 @@ button {
   position: absolute;
   top: 6px;
   right: 6px;
-  width: 28px;
-  height: 28px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   border: 1px solid var(--border);
-  background: rgba(10, 10, 16, 0.75);
-  color: var(--accent);
-  font-size: 14px;
+  background: var(--accent);
+  color: #14151d;
+  font-size: 20px;
+  font-weight: 700;
   z-index: 5;
 }
 
@@ -1180,7 +1214,10 @@ button {
 .game-board-layout {
   max-width: 100%;
   width: 100%;
-  padding: 12px 20px 90px;
+  /* Bottom padding matches the Event Log/turn box's own 16px offset from the
+     viewport edge, so scrolling all the way down lands their bottom edges
+     flush with the last row of in-flow content instead of leaving a mismatched gap. */
+  padding: 12px 20px 16px;
 }
 
 .dual-mana-split {
@@ -1267,7 +1304,10 @@ button {
 
 .event-log-float {
   position: fixed;
-  bottom: 16px;
+  /* A few px above the shared 16px baseline - the Undo/Concede row is
+     shorter than the taller view-mode-toggle bubble, so lining up with the
+     bubble's bottom edge instead left the Event Log looking low against Undo. */
+  bottom: 21px;
   left: 16px;
   width: 280px;
   background: var(--panel);
@@ -1297,13 +1337,21 @@ button {
   color: var(--text-dim);
 }
 
+/* In normal document flow - only visible once scrolled down to, unlike the
+   fixed Event Log and turn box. Left margin lines its buttons up with where
+   the (fixed, always-visible) Event Log panel sits: its 16px offset + 280px
+   width, minus this row's own 20px page padding. */
+.bottom-controls-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin: 16px 0 0 292px;
+}
+
 .bottom-left-controls {
-  position: fixed;
-  bottom: 16px;
-  left: 312px;
   display: flex;
   gap: 8px;
-  z-index: 20;
   align-items: center;
 }
 
@@ -1542,6 +1590,44 @@ button {
   transform: translateX(-50%);
   z-index: 40;
 }
+
+.view-mode-toggle {
+  display: flex;
+  gap: 6px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+}
+
+.view-mode-button {
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.view-mode-button-active {
+  background: var(--panel-raised);
+  color: var(--accent);
+  border-color: var(--border);
+}
+
+.view-mode-button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* Full Board needs both entire battlefields plus both hands to fit on
+   screen at once - zoom, not transform: scale, so it actually shrinks the
+   space the board takes up instead of just shrinking how it looks. */
+.game-board-main-zoomed {
+  zoom: 0.62;
+}
 .library-stack {
   position: relative;
   width: 100%;
@@ -1593,6 +1679,8 @@ button {
 
 .hand-fan .hand-fan-card {
   margin-left: -24px;
+  /* transform-origin is set inline per-hand (GameBoard's renderHandRow) since
+     it flips depending on whether the hand sits at the top or bottom of the screen. */
   transition: transform 0.15s ease;
 }
 
@@ -1604,15 +1692,6 @@ button {
   transform: translateY(-16px) scale(1.05) !important;
   z-index: 999 !important;
 }
-
-.opponent-hand.hand-fan {
-  gap: 4px;
-}
-
-.opponent-hand.hand-fan .hand-fan-card {
-  margin-left: 0;
-}
-
 
 .combat-zone-row {
   display: flex;
@@ -1745,8 +1824,8 @@ button {
 .combat-blocker-slot {
   border: 2px dashed var(--water);
   border-radius: 8px;
-  min-width: 205px;
-  min-height: 268px;
+  min-width: 220px;
+  min-height: 288px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1762,6 +1841,135 @@ button {
 
 .combat-blocker-stacked {
   cursor: pointer;
+}
+
+/* Three or more blockers on one attacker pile up like a land stack instead
+   of overlapping invisibly - click the pile to see (and remove) any of them. */
+.combat-blocker-pile {
+  position: relative;
+  width: 216px;
+  height: 284px;
+  cursor: pointer;
+}
+
+.combat-blocker-pile-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+.combat-blocker-pile-count {
+  position: absolute;
+  bottom: 6px;
+  right: 6px;
+  z-index: 10;
+}
+
+/* --- Block damage-order modal ------------------------------------------------ */
+
+.block-order-panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  width: 100%;
+  max-width: 620px;
+  max-height: 85vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.block-order-body {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.block-order-attacker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.block-order-attacker .card {
+  width: 160px;
+  height: 214px;
+}
+
+.block-order-attacker-power {
+  font-size: 13px;
+  color: var(--accent);
+  font-weight: 700;
+  text-align: center;
+}
+
+.block-order-list {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.block-order-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.block-order-row .card {
+  width: 60px;
+  height: 80px;
+  flex-shrink: 0;
+}
+
+.block-order-rank {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #14151d;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.block-order-row-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.block-order-row-name {
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.block-order-row-damage {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.block-order-move-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 /* --- Battlefield stacking: identical permanents (no counters) pile up ------- */
@@ -1883,10 +2091,10 @@ button {
 .combat-attacker-cell .card,
 .combat-blocker-stacked .card,
 .zone-modal-grid .card {
-  width: 185px;
-  height: 248px;
+  width: 200px;
+  height: 268px;
 }
 
 .corner-column {
-  width: 185px;
+  width: 200px;
 }

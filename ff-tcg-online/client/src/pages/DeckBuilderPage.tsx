@@ -8,7 +8,8 @@ import { loadDecks, saveDeck, deleteDeck, newDeckId, SavedDeck } from '../utils/
 import { getColourIdentity, isWithinColourIdentity, ManaLetter } from '../utils/colourIdentity';
 
 // --- Static filter option lists ------------------------------------------
-const TYPE_FILTERS: (CardType | 'all')[] = ['all', 'creature', 'instant', 'sorcery', 'artifact', 'enchantment', 'land'];
+type PoolFilter = CardType | 'all' | 'commander';
+const TYPE_FILTERS: PoolFilter[] = ['all', 'commander', 'creature', 'instant', 'sorcery', 'artifact', 'enchantment', 'land'];
 const DECK_SIZE_TARGET = 99; // plus the commander = 100, standard Commander deck size
 
 const MANA_FILTERS: { id: ManaLetter | 'all' | 'multicolor' | 'colorless'; label: string }[] = [
@@ -37,9 +38,12 @@ export default function DeckBuilderPage() {
   const [cardIds, setCardIds] = useState<string[]>([]);
 
   // --- Card pool browsing/filtering state -------------------------------
-  const [filter, setFilter] = useState<CardType | 'all'>('all');
+  const [filter, setFilter] = useState<PoolFilter>('all');
   const [manaFilter, setManaFilter] = useState<(typeof MANA_FILTERS)[number]['id']>('all');
   const [query, setQuery] = useState('');
+  // Which transformable cards are currently showing their back face, keyed
+  // by the FRONT face's id (the only id ever addable to a deck).
+  const [flippedIds, setFlippedIds] = useState<Set<string>>(new Set());
 
   // --- Saved decks + the deck currently being previewed -------------------
   const [savedDecks, setSavedDecks] = useState<SavedDeck[]>(() => loadDecks());
@@ -52,7 +56,7 @@ export default function DeckBuilderPage() {
   const filteredPool = useMemo(() => {
     return CARD_POOL.filter((c) => {
       if (isTransformBackFace(c.id)) return false; // never addable/selectable directly
-      const matchesType = filter === 'all' || c.type === filter;
+      const matchesType = filter === 'all' || (filter === 'commander' ? isLegalCommander(c) : c.type === filter);
       const matchesQuery = c.name.toLowerCase().includes(query.toLowerCase());
       const matchesIdentity = !commanderColours || isWithinColourIdentity(c, commanderColours);
 
@@ -82,6 +86,15 @@ export default function DeckBuilderPage() {
     if (defId === commanderId) return; // the commander itself never goes in the 99
     if (!canAddCopy(def, cardIds)) return;
     setCardIds((prev) => [...prev, defId]);
+  }
+
+  function toggleFlip(id: string) {
+    setFlippedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   }
 
   function removeOneFromDeck(defId: string) {
@@ -172,9 +185,18 @@ export default function DeckBuilderPage() {
             const legal = isLegalCommander(def);
             const isCommander = def.id === commanderId;
             const canAdd = !isCommander && canAddCopy(def, cardIds);
+            const isFlippable = !!def.transformsInto;
+            const shownDef = isFlippable && flippedIds.has(def.id) ? getCardDefinition(def.transformsInto!) : def;
             return (
               <div key={def.id} className="deckbuilder-pool-item">
-                <Card definition={def} />
+                <div className="library-card-wrapper">
+                  <Card definition={shownDef} />
+                  {isFlippable && (
+                    <button className="flip-icon-button" onClick={() => toggleFlip(def.id)} title="Flip / show transformed side">
+                      {'↻'}
+                    </button>
+                  )}
+                </div>
                 <div className="deckbuilder-pool-actions">
                   <button disabled={!legal} onClick={() => setAsCommander(def.id)} title={legal ? '' : 'Must be a legendary creature, not a transform back face'}>
                     {isCommander ? 'Is your commander' : 'Set as Commander'}

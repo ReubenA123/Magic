@@ -7,8 +7,11 @@ import Card from './Card';
 import PhaseBar from './PhaseBar';
 import CardActionsPanel from './CardActionsPanel';
 import ZoneModal from './ZoneModal';
+import BlockOrderModal from './BlockOrderModal';
+import BlockerPileModal from './BlockerPileModal';
 import EventLog from './EventLog';
 import MutualAdjustmentControls from './MutualAdjustmentControls';
+import { useMarkGameActive } from '../context/GameActivity';
 
 interface GameBoardProps {
   state: GameState;
@@ -48,6 +51,35 @@ function splitBattlefield(cards: CardInstance[]) {
 function displayInstance(instance: CardInstance): CardInstance {
   if (!instance.counters.some((c) => c.label === 'Commander Tax')) return instance;
   return { ...instance, counters: instance.counters.filter((c) => c.label !== 'Commander Tax') };
+}
+
+/**
+ * Which tapped cards in a group could actually be untapped right now - a
+ * tapped card that never produced mana (or whose mana is untracked) is
+ * always fine, but one whose mana is already spent stays tapped until the
+ * next untap step (see engine/actions.ts: toggleTap). Walks in order,
+ * greedily claiming each color's remaining pool so cards sharing a color
+ * don't get double-counted as refundable against the same unit of mana.
+ */
+function untappableCardsInGroup(group: CardInstance[], manaPool: Record<ManaColor, number>): CardInstance[] {
+  const remainingByColor = new Map<ManaColor, number>();
+  const result: CardInstance[] = [];
+  for (const c of group) {
+    if (!c.tapped) continue;
+    if (!c.producedManaColor) {
+      result.push(c);
+      continue;
+    }
+    const color = c.producedManaColor;
+    const remaining = remainingByColor.has(color) ? remainingByColor.get(color)! : manaPool[color];
+    if (remaining > 0) {
+      result.push(c);
+      remainingByColor.set(color, remaining - 1);
+    } else {
+      remainingByColor.set(color, 0);
+    }
+  }
+  return result;
 }
 
 /**
@@ -104,39 +136,51 @@ function ManaRow({ player }: { player: PlayerState }) {
  * cards still available to tap right now.
  */
 function StackTapControls({
-  tappedCount,
   untappedCount,
+  untappableCount,
   onTapN,
   onUntapN,
 }: {
-  tappedCount: number;
   untappedCount: number;
+  /** Of the tapped cards, how many could actually be untapped right now -
+   * fewer than the tapped total once some of their mana has already been spent. */
+  untappableCount: number;
   onTapN: (n: number) => void;
   onUntapN: (n: number) => void;
 }) {
   const [untapAmount, setUntapAmount] = useState(1);
   const [tapAmount, setTapAmount] = useState(1);
 
-  const clampedUntap = Math.min(Math.max(untapAmount, 1), Math.max(tappedCount, 1));
+  const clampedUntap = Math.min(Math.max(untapAmount, 1), Math.max(untappableCount, 1));
   const clampedTap = Math.min(Math.max(tapAmount, 1), Math.max(untappedCount, 1));
 
   return (
     <div className="stack-tap-controls">
       <div className="stack-tap-row">
         <div className="stack-tap-group">
-          <button className="stack-tap-step" disabled={tappedCount === 0} onClick={() => setUntapAmount((n) => Math.max(1, n - 1))} title="Fewer to untap">
+          <button
+            className="stack-tap-step"
+            disabled={untappableCount === 0}
+            onClick={() => setUntapAmount((n) => Math.max(1, n - 1))}
+            title={untappableCount === 0 ? "This stack's mana has already been spent" : 'Fewer to untap'}
+          >
             −
           </button>
           <input
             className="stack-tap-input"
             type="number"
             min={1}
-            max={Math.max(tappedCount, 1)}
+            max={Math.max(untappableCount, 1)}
             value={clampedUntap}
-            disabled={tappedCount === 0}
+            disabled={untappableCount === 0}
             onChange={(e) => setUntapAmount(Math.max(1, parseInt(e.target.value, 10) || 1))}
           />
-          <button className="stack-tap-step" disabled={tappedCount === 0} onClick={() => setUntapAmount((n) => Math.min(tappedCount, n + 1))} title="More to untap">
+          <button
+            className="stack-tap-step"
+            disabled={untappableCount === 0}
+            onClick={() => setUntapAmount((n) => Math.min(untappableCount, n + 1))}
+            title={untappableCount === 0 ? "This stack's mana has already been spent" : 'More to untap'}
+          >
             +
           </button>
         </div>
@@ -162,7 +206,12 @@ function StackTapControls({
         </div>
       </div>
       <div className="stack-tap-row">
-        <button className="stack-tap-commit" disabled={tappedCount === 0} onClick={() => onUntapN(clampedUntap)}>
+        <button
+          className="stack-tap-commit"
+          disabled={untappableCount === 0}
+          title={untappableCount === 0 ? "This stack's mana has already been spent" : ''}
+          onClick={() => onUntapN(clampedUntap)}
+        >
           Untap
         </button>
         <button className="stack-tap-commit" disabled={untappedCount === 0} onClick={() => onTapN(clampedTap)}>
@@ -187,11 +236,16 @@ interface ManaChoiceItem {
   options: ManaColor[];
 }
 
+// Keep in sync with the "one consistent card size everywhere on the board"
+// override in styles.css.
+const CARD_WIDTH = 200;
+const CARD_HEIGHT = 268;
 const STACK_PEEK_STEP = 8;
 const STACK_PEEK_MAX_LAYERS = 4;
 const STACK_CONTROL_HEIGHT = 60;
 
 export default function GameBoard({ state, yourPlayerId, actionError, onAction, soloControl }: GameBoardProps) {
+  useMarkGameActive();
   const you = state.players.find((p) => p.id === yourPlayerId)!;
   const opponent = state.players.find((p) => p.id !== yourPlayerId)!;
   const isYourTurn = soloControl ? true : state.activePlayerId === yourPlayerId;
@@ -210,7 +264,12 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   const [multiSelected, setMultiSelected] = useState<Set<string>>(new Set());
   const [phaseBoxPos, setPhaseBoxPos] = useState<{ x: number; y: number } | null>(null);
   const [manaChoiceQueue, setManaChoiceQueue] = useState<ManaChoiceItem[]>([]);
+  const [viewMode, setViewMode] = useState<'mine' | 'opponent' | 'full'>('mine');
+  const [orderedAttackerIds, setOrderedAttackerIds] = useState<Set<string>>(new Set());
+  const [openBlockerPile, setOpenBlockerPile] = useState<string | null>(null);
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const landsRowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const focusZoneRef = useRef<HTMLElement | null>(null);
   const phaseDragRef = useRef<{ offsetX: number; offsetY: number } | null>(null);
 
   useEffect(() => {
@@ -229,6 +288,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     setPendingBlocker(null);
     setMultiSelected(new Set());
     setDraggedInstanceId(null);
+    setOpenBlockerPile(null);
   }, [state.turnNumber]);
 
   // A fresh combat starting (new attackers declared) always clears any
@@ -236,6 +296,8 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   useEffect(() => {
     setBlockerAssignments({});
     setPendingBlocker(null);
+    setOrderedAttackerIds(new Set());
+    setOpenBlockerPile(null);
   }, [state.declaredAttackers]);
 
   const openCard = openPanelId ? findCard(state, openPanelId) : null;
@@ -243,6 +305,9 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   const isDeclaringAttackers = state.phase === 'declare_attackers' && state.activePlayerId === yourPlayerId;
   const isDeclaringBlockers = state.phase === 'declare_blockers' && state.activePlayerId !== yourPlayerId;
   const showCombatZones = isDeclaringAttackers || isDeclaringBlockers || state.phase === 'combat_damage' || state.phase === 'combat_end';
+  // Combat needs both sides visible to declare attackers/blockers sensibly,
+  // so it always shows Full Board regardless of what's selected below.
+  const effectiveViewMode = showCombatZones ? 'full' : viewMode;
   function blockersFor(attackerId: string): string[] {
     if (isDeclaringBlockers) return blockerAssignments[attackerId] || [];
     return state.combatAssignments.find((a) => a.attackerInstanceId === attackerId)?.blockerInstanceIds || [];
@@ -349,9 +414,8 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
       .forEach((c) => handleToggleTap(c));
   }
 
-  function untapNFromGroup(group: CardInstance[], n: number) {
-    group
-      .filter((g) => g.tapped)
+  function untapNFromGroup(group: CardInstance[], n: number, manaPool: Record<ManaColor, number>) {
+    untappableCardsInGroup(group, manaPool)
       .slice(0, n)
       .forEach((c) => handleToggleTap(c));
   }
@@ -426,6 +490,14 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     }));
   }
 
+  /** For dragging an already-assigned blocker back out to change your mind -
+   * a blocker only ever blocks one attacker, so its current assignment can
+   * be found without the caller having to already know which attacker it's on. */
+  function removeBlockerAssignmentById(blockerInstanceId: string) {
+    const attackerId = Object.keys(blockerAssignments).find((atkId) => blockerAssignments[atkId].includes(blockerInstanceId));
+    if (attackerId) removeBlockerAssignment(attackerId, blockerInstanceId);
+  }
+
   function handleAttackerClickForBlocking(attackerInstanceId: string) {
     if (!pendingBlocker) return;
     assignBlocker(attackerInstanceId, pendingBlocker);
@@ -492,6 +564,39 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     else cardRefs.current.delete(id);
   }
 
+  function registerLandsRowRef(playerId: string, el: HTMLDivElement | null) {
+    if (el) landsRowRefs.current.set(playerId, el);
+    else landsRowRefs.current.delete(playerId);
+  }
+
+  // If you open an instant/flash card mid-combat and can't yet pay for it,
+  // pan down to your lands so you can go tap what you need before coming
+  // back to actually cast it - you can't play it without paying the cost.
+  useEffect(() => {
+    if (!openPanelId) return;
+    const combatPhase = state.phase === 'declare_attackers' || state.phase === 'declare_blockers' || state.phase === 'combat_damage' || state.phase === 'combat_end';
+    if (!combatPhase) return;
+    const found = findCard(state, openPanelId);
+    if (!found || found.zone !== 'hand') return;
+    const def = getCardDefinition(found.card.defId);
+    const isInstantSpeed = def.type === 'instant' || hasKeyword(def.text, 'flash');
+    if (!isInstantSpeed) return;
+    if (canPay(found.player.manaPool, parseCostLabel(def.costLabel), 0)) return;
+    landsRowRefs.current.get(found.player.id)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // Deliberately only re-runs when a new panel opens, not on every state
+    // tick while it's open (e.g. mana pool changes from tapping) - otherwise
+    // this would keep re-centering and fighting the player's own scrolling.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openPanelId]);
+
+  // My View / Opponent View still render both boards (the other one mirrored
+  // above, like Full Board) so scrolling up reveals it - but land on the
+  // focused player's board by default instead of starting scrolled to the top.
+  useEffect(() => {
+    if (effectiveViewMode === 'full') return;
+    focusZoneRef.current?.scrollIntoView({ block: 'start' });
+  }, [effectiveViewMode]);
+
   function startPhaseDrag(e: React.MouseEvent) {
     if ((e.target as HTMLElement).closest('button')) return;
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -532,8 +637,10 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     const footprint = Math.min(depthOrder.length, STACK_PEEK_MAX_LAYERS) * STACK_PEEK_STEP;
     const tappedCount = group.filter((g) => g.tapped).length;
     const untappedCount = group.length - tappedCount;
+    const ownerManaPool = state.players.find((p) => p.id === group[0].ownerId)!.manaPool;
+    const untappableCount = untappableCardsInGroup(group, ownerManaPool).length;
     return (
-      <div className="battlefield-stack" style={{ width: 185 + footprint, height: 248 + footprint + STACK_CONTROL_HEIGHT }}>
+      <div className="battlefield-stack" style={{ width: CARD_WIDTH + footprint, height: CARD_HEIGHT + footprint + STACK_CONTROL_HEIGHT }}>
         {depthOrder.map((bc, i) => {
           const depth = Math.min(i + 1, STACK_PEEK_MAX_LAYERS) * STACK_PEEK_STEP;
           return (
@@ -549,12 +656,12 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
         {/* Stacked permanents are only tapped/untapped via this control strip,
             a chosen amount at a time, so it's always unambiguous which
             copies - and how much mana - is being added or refunded. */}
-        <div style={{ position: 'absolute', top: 248 + footprint, left: 0, width: 185 + footprint, zIndex: depthOrder.length + 2 }}>
+        <div style={{ position: 'absolute', top: CARD_HEIGHT + footprint, left: 0, width: CARD_WIDTH + footprint, zIndex: depthOrder.length + 2 }}>
           <StackTapControls
-            tappedCount={tappedCount}
             untappedCount={untappedCount}
+            untappableCount={untappableCount}
             onTapN={(n) => tapNFromGroup(group, n)}
-            onUntapN={(n) => untapNFromGroup(group, n)}
+            onUntapN={(n) => untapNFromGroup(group, n, ownerManaPool)}
           />
         </div>
         <div className="battlefield-stack-layer" style={{ zIndex: depthOrder.length + 1 }}>
@@ -574,9 +681,11 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     const canBeBlocker = !isDead && isDeclaringBlockers && !isOpponentSide && !c.tapped;
     const combatDraggable = canAttackThis || canBeBlocker;
     const reorderAllowed = stackCount === 1 && !isDead && !isDeclaringAttackers && !isDeclaringBlockers && (!isOpponentSide || !!soloControl);
-    // A row can also accept a drop of an already-selected attacker being
-    // dragged back out to un-declare it, right up until "Attack with X" is pressed.
+    // A row can also accept a drop of an already-selected attacker, or an
+    // already-assigned blocker, being dragged back out to change your mind -
+    // right up until "Attack with X" / "Confirm blockers" is pressed.
     const acceptsAttackerRemoval = isDeclaringAttackers && !isOpponentSide;
+    const acceptsBlockerRemoval = isDeclaringBlockers && !isOpponentSide;
     const selected = pendingBlocker === c.instanceId || multiSelected.has(c.instanceId);
 
     return (
@@ -584,10 +693,13 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
         <div
           draggable={combatDraggable || reorderAllowed}
           onDragStart={() => setDraggedInstanceId(c.instanceId)}
-          onDragOver={(e) => (reorderAllowed || acceptsAttackerRemoval) && e.preventDefault()}
+          onDragOver={(e) => (reorderAllowed || acceptsAttackerRemoval || acceptsBlockerRemoval) && e.preventDefault()}
           onDrop={() => {
             if (acceptsAttackerRemoval && draggedInstanceId && selectedAttackers.has(draggedInstanceId)) {
               removeAttacker(draggedInstanceId);
+              setDraggedInstanceId(null);
+            } else if (acceptsBlockerRemoval && draggedInstanceId) {
+              removeBlockerAssignmentById(draggedInstanceId);
               setDraggedInstanceId(null);
             } else if (reorderAllowed && draggedInstanceId) {
               handleRowDrop(ownerId, 'creatures', rowCards, c.instanceId);
@@ -634,7 +746,73 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     );
   }
 
-  function renderPlayerZone(player: PlayerState, isOpponentSide: boolean) {
+  /**
+   * The hand-fan itself - same fanned/overlapping layout for both hands.
+   * Never reveals the opponent's actual cards - just face-down backs, same shape.
+   * `curveUp` picks which way the arc bows: a hand sitting at the bottom of
+   * the screen fans like a smile (center pokes up, edges droop down); a hand
+   * placed at the top instead - the opponent's, in Full Board - needs the
+   * mirror image (center dips down toward the table, edges lift up), or it
+   * reads as an upside-down frown.
+   */
+  function renderHandRow(player: PlayerState, isOpponentSide: boolean, curveUp: boolean) {
+    const isControllersTurn = state.activePlayerId === player.id;
+    // Only dim hand cards for affordability once mana's actually been tapped -
+    // at 0 mana (start of turn, or right after casting something) nothing
+    // should look unplayable yet, since the player hasn't had a chance to pay for anything.
+    const hasMana = Object.values(player.manaPool).some((amount) => amount > 0);
+    const hand = isOpponentSide ? player.zones.hand : orderedHand(player.zones.hand);
+
+    return (
+      <div className={`hand-fan ${isOpponentSide ? 'opponent-hand' : 'your-hand'}`}>
+        {hand.map((c, i, arr) => {
+          const mid = (arr.length - 1) / 2;
+          const offset = i - mid;
+          const curveY = (curveUp ? 1 : -1) * Math.abs(offset) * 6;
+          // Pivot from whichever edge the hand is "held from" - bottom for a
+          // hand at the bottom of the screen, top for one mirrored at the top.
+          const fanStyle = { transform: `rotate(${offset * 4}deg) translateY(${curveY}px)`, transformOrigin: curveUp ? 'bottom center' : 'top center', zIndex: i };
+
+          if (isOpponentSide) {
+            return (
+              <div key={c.instanceId} className="hand-fan-card" style={fanStyle}>
+                <Card definition={getCardDefinition(c.defId)} faceDown />
+              </div>
+            );
+          }
+
+          const def = getCardDefinition(c.defId);
+          const affordable = def.type === 'land' || canPay(player.manaPool, parseCostLabel(def.costLabel), 0);
+          const isInstantSpeed = def.type === 'instant' || hasKeyword(def.text, 'flash');
+          const dimmed = !(isControllersTurn || isInstantSpeed) || (hasMana && !affordable);
+          return (
+            <div
+              key={c.instanceId}
+              className="hand-fan-card"
+              style={fanStyle}
+              draggable
+              onDragStart={() => setDraggedInstanceId(c.instanceId)}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={() => handleHandDrop(player.id, c.instanceId)}
+            >
+              <Card definition={def} instance={c} dimmed={dimmed} onClick={() => setOpenPanelId(c.instanceId)} />
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  /**
+   * `isOpponentSide` is about identity - it decides whether this player's
+   * hand stays face-down and whether you're allowed to interact with their
+   * permanents, and never changes regardless of view. `mirrorLayout` is
+   * purely visual - which end of the row lands/creatures sit on - so
+   * Opponent View can render the opponent's own zone with `mirrorLayout`
+   * false, showing their board the way THEY see it instead of upside-down
+   * across the table, without granting any extra visibility or control.
+   */
+  function renderPlayerZone(player: PlayerState, isOpponentSide: boolean, mirrorLayout: boolean = isOpponentSide, sectionRef?: React.Ref<HTMLElement>) {
     const { creatures, others, lands } = splitBattlefield(player.zones.battlefield);
     const visibleCreatures = creatures.filter((c) => !isInCombatZone(player.id, c.instanceId));
     const creatureGroups = groupForStacking(orderedRow(player.id, 'creatures', visibleCreatures), (c) => state.pendingDeaths.includes(c.instanceId));
@@ -644,7 +822,6 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     const isDrawStep = state.phase === 'draw' && state.activePlayerId === player.id && !player.hasDrawnThisTurn;
     const canDrawHere = player.id === yourPlayerId || (soloControl && isOpponentSide);
     const selectEnabled = !isOpponentSide || !!soloControl;
-    const isControllersTurn = state.activePlayerId === player.id;
 
     const commanderColumn = (
       <div className="corner-column">
@@ -682,9 +859,11 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
       </div>
     );
 
-    const battlefieldRows = isOpponentSide ? (
+    const battlefieldRows = mirrorLayout ? (
       <>
-        <div className="battlefield-row lands-row">{landGroups.map((g) => renderPlainCard(g, player.id, 'lands', lands, selectEnabled))}</div>
+        <div className="battlefield-row lands-row" ref={(el) => registerLandsRowRef(player.id, el)}>
+          {landGroups.map((g) => renderPlainCard(g, player.id, 'lands', lands, selectEnabled))}
+        </div>
         <div className="battlefield-row others-row">{otherGroups.map((g) => renderPlainCard(g, player.id, 'others', others, selectEnabled))}</div>
         <div className="battlefield-row creatures-row">{creatureGroups.map((g) => renderCreatureCard(g, isOpponentSide, visibleCreatures, player.id))}</div>
       </>
@@ -692,7 +871,9 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
       <>
         <div className="battlefield-row creatures-row">{creatureGroups.map((g) => renderCreatureCard(g, isOpponentSide, visibleCreatures, player.id))}</div>
         <div className="battlefield-row others-row">{otherGroups.map((g) => renderPlainCard(g, player.id, 'others', others, selectEnabled))}</div>
-        <div className="battlefield-row lands-row">{landGroups.map((g) => renderPlainCard(g, player.id, 'lands', lands, selectEnabled))}</div>
+        <div className="battlefield-row lands-row" ref={(el) => registerLandsRowRef(player.id, el)}>
+          {landGroups.map((g) => renderPlainCard(g, player.id, 'lands', lands, selectEnabled))}
+        </div>
       </>
     );
 
@@ -710,33 +891,9 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
       </div>
     );
 
-    const handRow = (
-      <div className={`hand-fan ${isOpponentSide ? 'opponent-hand' : 'your-hand'}`}>
-        {isOpponentSide
-          ? player.zones.hand.map((c) => <Card key={c.instanceId} definition={getCardDefinition(c.defId)} faceDown />)
-          : orderedHand(player.zones.hand).map((c, i, arr) => {
-            const def = getCardDefinition(c.defId);
-            const affordable = def.type === 'land' || canPay(player.manaPool, parseCostLabel(def.costLabel), 0);
-            const isInstantSpeed = def.type === 'instant' || hasKeyword(def.text, 'flash');
-            const dimmed = !(isControllersTurn || isInstantSpeed) || !affordable;
-            const mid = (arr.length - 1) / 2;
-            const offset = i - mid;
-            return (
-              <div
-                key={c.instanceId}
-                className="hand-fan-card"
-                style={{ transform: `rotate(${offset * 4}deg) translateY(${Math.abs(offset) * 6}px)`, zIndex: i }}
-                draggable
-                onDragStart={() => setDraggedInstanceId(c.instanceId)}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={() => handleHandDrop(player.id, c.instanceId)}
-              >
-                <Card definition={def} instance={c} dimmed={dimmed} onClick={() => setOpenPanelId(c.instanceId)} />
-              </div>
-            );
-          })}
-      </div>
-    );
+    // A hand placed at the top of its zone (mirrorLayout) needs the mirrored
+    // arc - see renderHandRow.
+    const handRow = renderHandRow(player, isOpponentSide, !mirrorLayout);
 
     const lifeRow = (
       <div className="life-row">
@@ -760,11 +917,11 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     );
 
     return (
-      <section className={`player-zone ${isOpponentSide ? 'opponent-zone' : 'your-zone'}`}>
-        {isOpponentSide && lifeRow}
-        {isOpponentSide && handRow}
+      <section ref={sectionRef} className={`player-zone ${isOpponentSide ? 'opponent-zone' : 'your-zone'}`}>
+        {mirrorLayout && lifeRow}
+        {mirrorLayout && handRow}
         <div className="zone-top-row">
-          {isOpponentSide ? (
+          {mirrorLayout ? (
             <>
               {graveyardExileColumn}
               {centerColumn}
@@ -778,8 +935,8 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
             </>
           )}
         </div>
-        {!isOpponentSide && handRow}
-        {!isOpponentSide && lifeRow}
+        {!mirrorLayout && handRow}
+        {!mirrorLayout && lifeRow}
       </section>
     );
   }
@@ -803,6 +960,14 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   // it there yourself from the battlefield. Multiple blockers on one
   // attacker stack visually in the same slot. ---------------------------
   const blockerSlotsVisible = !isDeclaringAttackers && state.declaredAttackers.length > 0;
+
+  // The attacking player (not the defender) chooses the damage order once an
+  // attacker ends up with 2+ blockers - one modal per multi-blocked attacker,
+  // tracked via orderedAttackerIds so it doesn't reappear once confirmed.
+  const attackerNeedingOrder =
+    state.phase === 'combat_damage' && (soloControl || state.activePlayerId === yourPlayerId)
+      ? state.combatAssignments.find((a) => a.blockerInstanceIds.length >= 2 && !orderedAttackerIds.has(a.attackerInstanceId))
+      : undefined;
 
   const combatZoneEl = showCombatZones && (
     <div className="combat-zone-merged">
@@ -855,7 +1020,35 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                 >
                   {blockers.length === 0 ? (
                     <span className="combat-blocker-slot-empty">{isDeclaringBlockers ? 'Drop blocker here' : 'No blockers'}</span>
+                  ) : blockers.length >= 3 ? (
+                    // Three or more read better as a pile, like a land stack
+                    // on the battlefield - click it to see (and, while still
+                    // declaring blockers, remove) any of them individually.
+                    <div
+                      className="combat-blocker-pile"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenBlockerPile(id);
+                      }}
+                      title="Click to see all blockers"
+                    >
+                      {blockers.slice(0, 3).map((bId, i) => {
+                        const bf = findCard(state, bId);
+                        if (!bf) return null;
+                        return (
+                          <div
+                            key={bId}
+                            className="combat-blocker-stacked combat-blocker-pile-layer"
+                            style={{ transform: `translate(${i * 8}px, ${i * 8}px)`, zIndex: i }}
+                          >
+                            <Card definition={getCardDefinition(bf.card.defId)} instance={{ ...bf.card, tapped: false }} />
+                          </div>
+                        );
+                      })}
+                      <span className="battlefield-stack-count combat-blocker-pile-count">×{blockers.length}</span>
+                    </div>
                   ) : (
+                    // Two blockers read more clearly side by side.
                     blockers.map((bId, i) => {
                       const bf = findCard(state, bId);
                       if (!bf) return null;
@@ -864,12 +1057,17 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                         <div
                           key={bId}
                           className={`combat-blocker-stacked ${blockerIsDead ? 'destroyed-card-wrapper' : ''}`}
-                          style={{ marginTop: i > 0 ? -248 : 0, zIndex: i }}
+                          style={{ marginLeft: i > 0 ? 8 : 0, zIndex: i }}
+                          draggable={isDeclaringBlockers}
+                          onDragStart={(e) => {
+                            e.stopPropagation();
+                            if (isDeclaringBlockers) setDraggedInstanceId(bId);
+                          }}
                           onClick={(e) => {
                             e.stopPropagation();
                             if (isDeclaringBlockers) removeBlockerAssignment(id, bId);
                           }}
-                          title={isDeclaringBlockers ? 'Click to remove this blocker' : ''}
+                          title={isDeclaringBlockers ? 'Click, or drag back out, to remove this blocker' : ''}
                         >
                           <Card definition={getCardDefinition(bf.card.defId)} instance={{ ...bf.card, tapped: false }} />
                         </div>
@@ -914,7 +1112,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
         </div>
       )}
 
-      <div className="game-board-main">
+      <div className={`game-board-main ${effectiveViewMode === 'full' ? 'game-board-main-zoomed' : ''}`}>
         {state.winnerId && !winnerDismissed && (
           <div className="winner-overlay" onClick={() => setWinnerDismissed(true)}>
             <div className="winner-banner" onClick={(e) => e.stopPropagation()}>
@@ -924,31 +1122,71 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           </div>
         )}
 
-        {renderPlayerZone(opponent, true)}
+        {effectiveViewMode === 'full' ? (
+          <>
+            {renderPlayerZone(opponent, true)}
+            {combatZoneEl}
+            {renderPlayerZone(you, false)}
+          </>
+        ) : effectiveViewMode === 'mine' ? (
+          // Opponent's board still renders, mirrored above like Full Board -
+          // scrolling up reveals it. The page defaults to your board though (see effect above).
+          <>
+            {renderPlayerZone(opponent, true, true)}
+            {renderPlayerZone(you, false, false, focusZoneRef)}
+          </>
+        ) : (
+          <>
+            {renderPlayerZone(you, false, true)}
+            {renderPlayerZone(opponent, true, false, focusZoneRef)}
+          </>
+        )}
+      </div>
 
-        {combatZoneEl}
+      {/* In normal document flow (not fixed) - only comes into view once
+          scrolled down to it, unlike the Event Log which stays pinned. */}
+      <div className="bottom-controls-row">
+        <div className="bottom-left-controls">
+          <button className="undo-button" onClick={() => onAction({ type: 'UNDO' })} title="Step back through recent actions">
+            {'\u21b6'} Undo
+          </button>
+          <MutualAdjustmentControls
+            state={state}
+            yourPlayerId={yourPlayerId}
+            onRequest={() => onAction({ type: 'REQUEST_MUTUAL_ADJUSTMENT' }, yourPlayerId)}
+            onRespond={(accept) => onAction({ type: 'RESPOND_MUTUAL_ADJUSTMENT', accept }, yourPlayerId)}
+            onRequestExit={() => onAction({ type: 'REQUEST_EXIT_MUTUAL_ADJUSTMENT' }, yourPlayerId)}
+            onRespondExit={(accept) => onAction({ type: 'RESPOND_EXIT_MUTUAL_ADJUSTMENT', accept }, yourPlayerId)}
+          />
+          <button className="concede-button" onClick={() => onAction({ type: 'CONCEDE' }, yourPlayerId)}>
+            Concede
+          </button>
+        </div>
 
-        {renderPlayerZone(you, false)}
+        <div className="view-mode-toggle">
+          <button
+            className={`view-mode-button ${viewMode === 'mine' ? 'view-mode-button-active' : ''}`}
+            disabled={showCombatZones}
+            title={showCombatZones ? 'Combat shows the full board until it resolves' : ''}
+            onClick={() => setViewMode('mine')}
+          >
+            My View
+          </button>
+          <button
+            className={`view-mode-button ${viewMode === 'opponent' ? 'view-mode-button-active' : ''}`}
+            disabled={showCombatZones}
+            title={showCombatZones ? 'Combat shows the full board until it resolves' : ''}
+            onClick={() => setViewMode('opponent')}
+          >
+            Opponent View
+          </button>
+          <button className={`view-mode-button ${viewMode === 'full' ? 'view-mode-button-active' : ''}`} onClick={() => setViewMode('full')}>
+            Full Board
+          </button>
+        </div>
       </div>
 
       <EventLog log={state.log} />
-
-      <div className="bottom-left-controls">
-        <button className="undo-button" onClick={() => onAction({ type: 'UNDO' })} title="Step back through recent actions">
-          {'\u21b6'} Undo
-        </button>
-        <MutualAdjustmentControls
-          state={state}
-          yourPlayerId={yourPlayerId}
-          onRequest={() => onAction({ type: 'REQUEST_MUTUAL_ADJUSTMENT' }, yourPlayerId)}
-          onRespond={(accept) => onAction({ type: 'RESPOND_MUTUAL_ADJUSTMENT', accept }, yourPlayerId)}
-          onRequestExit={() => onAction({ type: 'REQUEST_EXIT_MUTUAL_ADJUSTMENT' }, yourPlayerId)}
-          onRespondExit={(accept) => onAction({ type: 'RESPOND_EXIT_MUTUAL_ADJUSTMENT', accept }, yourPlayerId)}
-        />
-        <button className="concede-button" onClick={() => onAction({ type: 'CONCEDE' }, yourPlayerId)}>
-          Concede
-        </button>
-      </div>
 
       <div
         className="bottom-right-controls"
@@ -1033,6 +1271,53 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
               onCardClick={(instanceId) => {
                 setOpenZone(null);
                 setOpenPanelId(instanceId);
+              }}
+            />
+          );
+        })()}
+
+      {openBlockerPile &&
+        (() => {
+          const attackerFound = findCard(state, openBlockerPile);
+          const blockerIds = blockersFor(openBlockerPile);
+          if (!attackerFound || blockerIds.length === 0) return null;
+          const blockers = blockerIds
+            .map((id) => findCard(state, id))
+            .filter((b): b is NonNullable<typeof b> => !!b)
+            .map((b) => ({ definition: getCardDefinition(b.card.defId), instance: b.card }));
+          return (
+            <BlockerPileModal
+              attackerName={getCardDefinition(attackerFound.card.defId).name}
+              blockers={blockers}
+              onRemove={
+                isDeclaringBlockers
+                  ? (instanceId) => {
+                      removeBlockerAssignment(openBlockerPile, instanceId);
+                      if (blockerIds.length <= 1) setOpenBlockerPile(null);
+                    }
+                  : undefined
+              }
+              onClose={() => setOpenBlockerPile(null)}
+            />
+          );
+        })()}
+
+      {attackerNeedingOrder &&
+        (() => {
+          const attackerFound = findCard(state, attackerNeedingOrder.attackerInstanceId);
+          if (!attackerFound) return null;
+          const blockers = attackerNeedingOrder.blockerInstanceIds
+            .map((id) => findCard(state, id))
+            .filter((b): b is NonNullable<typeof b> => !!b)
+            .map((b) => ({ definition: getCardDefinition(b.card.defId), instance: b.card }));
+          return (
+            <BlockOrderModal
+              attackerDefinition={getCardDefinition(attackerFound.card.defId)}
+              attackerInstance={attackerFound.card}
+              blockers={blockers}
+              onConfirm={(orderedBlockerIds) => {
+                onAction({ type: 'ORDER_BLOCKERS', attackerInstanceId: attackerNeedingOrder.attackerInstanceId, orderedBlockerIds }, state.activePlayerId);
+                setOrderedAttackerIds((prev) => new Set(prev).add(attackerNeedingOrder.attackerInstanceId));
               }}
             />
           );

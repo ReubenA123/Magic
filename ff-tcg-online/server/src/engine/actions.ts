@@ -42,6 +42,8 @@ export function applyAction(state: GameState, action: GameAction, playerId: stri
       return declareAttackers(state, playerId, action.instanceIds);
     case 'DECLARE_BLOCKERS':
       return declareBlockers(state, playerId, action.assignments);
+    case 'ORDER_BLOCKERS':
+      return orderBlockers(state, playerId, action.attackerInstanceId, action.orderedBlockerIds);
     case 'NEXT_PHASE':
       return nextPhase(state, playerId);
     case 'END_TURN':
@@ -87,13 +89,15 @@ function performDraw(state: GameState, playerId: string): ActionResult {
 }
 
 /** One manual draw per turn, only during your own draw step - bypassed
- * during Mutual Adjustment. Drawing during the draw step also immediately
- * advances into main phase 1, since there's nothing else to do there once
- * you've drawn. */
+ * during Mutual Adjustment and during pregame, where either player can draw
+ * freely while building their opening hand. Drawing during the draw step
+ * also immediately advances into main phase 1, since there's nothing else
+ * to do there once you've drawn. */
 function drawCard(state: GameState, playerId: string): ActionResult {
   const player = getPlayer(state, playerId);
   const mutual = isMutualActive(state);
-  if (!mutual) {
+  const pregame = state.phase === 'pregame';
+  if (!mutual && !pregame) {
     if (state.phase !== 'draw') return { ok: false, error: 'You can only draw during the draw step (until effects that grant extra draws are added).' };
     if (state.activePlayerId !== playerId) return { ok: false, error: "It's not your draw step." };
     if (player.hasDrawnThisTurn) return { ok: false, error: 'Already drew a card this turn.' };
@@ -103,7 +107,7 @@ function drawCard(state: GameState, playerId: string): ActionResult {
   if (!result.ok) return result;
 
   let next = updatePlayer(result.state, playerId, (p) => ({ ...p, hasDrawnThisTurn: true }));
-  if (!mutual && next.phase === 'draw' && next.activePlayerId === playerId) {
+  if (!mutual && !pregame && next.phase === 'draw' && next.activePlayerId === playerId) {
     next = { ...next, phase: 'main1' };
   }
   return { ok: true, state: next };
@@ -171,18 +175,22 @@ function toggleTap(state: GameState, playerId: string, instanceId: string, chose
   const def = getCardDefinition(found.card.defId);
   const wasTapped = found.card.tapped;
 
-  // Untapping: hand back whatever mana this specific land produced, if it's
-  // still sitting unspent in the pool - clamped at 0 so it can't go negative
-  // if that mana was already spent on something else.
+  // Untapping: hand back whatever mana this specific land produced - but only
+  // while that mana is still sitting unspent in the pool. Once it's been
+  // spent on something, the land stays tapped for the rest of the turn, same
+  // as it would after tapping it for any other reason.
   if (wasTapped) {
     const producedColor = found.card.producedManaColor;
+    if (producedColor && getPlayer(state, found.ownerPlayerId).manaPool[producedColor] <= 0) {
+      return { ok: false, error: `${def.name}'s mana has already been spent.` };
+    }
     let next = updatePlayer(state, found.ownerPlayerId, (p) => ({
       ...p,
       zones: {
         ...p.zones,
         battlefield: p.zones.battlefield.map((c) => (c.instanceId === instanceId ? { ...c, tapped: false, producedManaColor: undefined } : c)),
       },
-      manaPool: producedColor ? { ...p.manaPool, [producedColor]: Math.max(0, p.manaPool[producedColor] - 1) } : p.manaPool,
+      manaPool: producedColor ? { ...p.manaPool, [producedColor]: p.manaPool[producedColor] - 1 } : p.manaPool,
     }));
     if (producedColor) next = { ...next, log: [...next.log, `${def.name} is untapped, returning ${producedColor} mana to the pool.`] };
     return { ok: true, state: next };
@@ -504,6 +512,27 @@ function declareBlockers(state: GameState, playerId: string, assignments: Combat
     log: [...state.log, `${blockerPlayer.name} declares blockers. Both players must press Resolve Combat before damage happens - cast an instant first if you want.`],
   };
 
+  return { ok: true, state: next };
+}
+
+/** The attacking player chooses the order damage is assigned among multiple
+ * blockers on one attacker - the defender chose WHICH creatures block, but
+ * the attacker decides the order they take damage in (see engine/combat.ts:
+ * dealDamagePass, which assigns strictly in blockerInstanceIds order). */
+function orderBlockers(state: GameState, playerId: string, attackerInstanceId: string, orderedBlockerIds: string[]): ActionResult {
+  if (state.phase !== 'combat_damage') return { ok: false, error: 'Blocker order can only be set before combat damage resolves.' };
+  if (state.activePlayerId !== playerId) return { ok: false, error: 'Only the attacking player orders blockers.' };
+  const assignment = state.combatAssignments.find((a) => a.attackerInstanceId === attackerInstanceId);
+  if (!assignment) return { ok: false, error: 'Unknown attacker.' };
+  const current = new Set(assignment.blockerInstanceIds);
+  if (current.size !== orderedBlockerIds.length || orderedBlockerIds.some((id) => !current.has(id))) {
+    return { ok: false, error: "Blocker order must match that attacker's current blockers exactly." };
+  }
+
+  const next: GameState = {
+    ...state,
+    combatAssignments: state.combatAssignments.map((a) => (a.attackerInstanceId === attackerInstanceId ? { ...a, blockerInstanceIds: orderedBlockerIds } : a)),
+  };
   return { ok: true, state: next };
 }
 

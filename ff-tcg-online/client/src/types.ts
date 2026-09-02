@@ -148,6 +148,7 @@ export type GameAction =
   | { type: 'DETACH_CARD'; instanceId: string }
   | { type: 'DECLARE_ATTACKERS'; instanceIds: string[] }
   | { type: 'DECLARE_BLOCKERS'; assignments: CombatAssignment[] }
+  | { type: 'ORDER_BLOCKERS'; attackerInstanceId: string; orderedBlockerIds: string[] }
   | { type: 'NEXT_PHASE' }
   | { type: 'END_TURN' }
   | { type: 'READY_TO_START' }

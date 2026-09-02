@@ -4,6 +4,7 @@ import HomePage from './pages/HomePage';
 import LibraryPage from './pages/LibraryPage';
 import DeckBuilderPage from './pages/DeckBuilderPage';
 import VersusPage from './pages/VersusPage';
+import { GameActivityProvider } from './context/GameActivity';
 
 const PAGE_STORAGE_KEY = 'magic-current-page';
 const VALID_PAGES: Page[] = ['home', 'library', 'deckbuilder', 'versus'];
@@ -20,6 +21,7 @@ function loadInitialPage(): Page {
 
 export default function App() {
   const [page, setPage] = useState<Page>(loadInitialPage);
+  const [inGame, setInGame] = useState(false);
 
   function navigate(next: Page) {
     setPage(next);
@@ -31,14 +33,16 @@ export default function App() {
   }
 
   return (
-    <div className="app-shell">
-      <NavBar page={page} onNavigate={navigate} />
-      <div className="app-content">
-        {page === 'home' && <HomePage onNavigate={navigate} />}
-        {page === 'library' && <LibraryPage />}
-        {page === 'deckbuilder' && <DeckBuilderPage />}
-        {page === 'versus' && <VersusPage />}
+    <GameActivityProvider value={setInGame}>
+      <div className="app-shell">
+        <NavBar page={page} onNavigate={navigate} pinned={!inGame} />
+        <div className="app-content">
+          {page === 'home' && <HomePage onNavigate={navigate} />}
+          {page === 'library' && <LibraryPage />}
+          {page === 'deckbuilder' && <DeckBuilderPage />}
+          {page === 'versus' && <VersusPage />}
+        </div>
       </div>
-    </div>
+    </GameActivityProvider>
   );
 }
