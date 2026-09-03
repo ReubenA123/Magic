@@ -440,6 +440,15 @@ function detachCard(state: GameState, playerId: string, instanceId: string): Act
   return { ok: true, state: { ...next, log: [...next.log, `${actor.name} detaches ${def.name}.`] } };
 }
 
+/** Same legality rules declareAttackers itself enforces per creature - used to decide whether the whole combat sequence is worth entering at all. */
+function hasLegalAttacker(state: GameState, playerId: string): boolean {
+  return getPlayer(state, playerId).zones.battlefield.some((c) => {
+    if (c.tapped || c.summoningSick) return false;
+    const def = getCardDefinition(c.defId);
+    return def.type === 'creature' && !hasKeyword(def.text, 'defender');
+  });
+}
+
 function declareAttackers(state: GameState, playerId: string, instanceIds: string[]): ActionResult {
   if (state.activePlayerId !== playerId) return { ok: false, error: 'Only the active player declares attackers.' };
   if (state.phase !== 'declare_attackers') return { ok: false, error: 'Not currently the declare attackers step.' };
@@ -663,6 +672,18 @@ function nextPhase(state: GameState, playerId: string): ActionResult {
   // instant combat starts, per the "no separate attackers phase" design.
   if (nextPhaseName === 'combat_begin') nextPhaseName = 'declare_attackers';
 
+  // Nothing to declare if every creature is tapped, summoning sick, or has
+  // defender (or there are no creatures at all) - the attackers/blockers
+  // steps (and the ready-up handshake in combat_damage) couldn't do
+  // anything anyway, so skip straight to End Combat. Combat still shows as
+  // having happened - Full Board still comes up for it (showCombatZones
+  // includes combat_end) and the very next Next Phase press goes through
+  // the normal End Combat -> Main 2 handling below - it just never stops on
+  // a step with nothing to actually declare.
+  if (nextPhaseName === 'declare_attackers' && !hasLegalAttacker(state, state.activePlayerId)) {
+    nextPhaseName = 'combat_end';
+  }
+
   let next: GameState = { ...state, phase: nextPhaseName };
 
   // Leaving End Combat: now that both players have seen the outcome,
@@ -707,11 +728,35 @@ function runUntapStep(state: GameState, playerId: string): GameState {
   }));
 }
 
+/**
+ * Tapping a land only "costs" you anything once its mana is actually spent -
+ * so a land tapped this turn whose mana never got used untaps for free right
+ * at end of turn instead of sitting tapped through the opponent's turn too.
+ * Mirrors toggleTap's own spent/unspent check: walk the color's still-full
+ * pool down by one per untapped land, so with several lands of the same
+ * color only as many of them untap as actually went unspent.
+ */
+function untapUnspentManaLands(state: GameState, playerId: string): GameState {
+  const remaining: Record<ManaColor, number> = { ...getPlayer(state, playerId).manaPool };
+  return updatePlayer(state, playerId, (p) => ({
+    ...p,
+    zones: {
+      ...p.zones,
+      battlefield: p.zones.battlefield.map((c) => {
+        if (!c.tapped || !c.producedManaColor || remaining[c.producedManaColor] <= 0) return c;
+        remaining[c.producedManaColor] -= 1;
+        return { ...c, tapped: false, producedManaColor: undefined };
+      }),
+    },
+  }));
+}
+
 function endTurn(state: GameState, playerId: string): ActionResult {
   if (state.activePlayerId !== playerId) return { ok: false, error: "It's not your turn." };
   const newActivePlayer = getOpponent(state, playerId);
 
-  let next = runUntapStep(state, newActivePlayer.id);
+  let next = untapUnspentManaLands(state, playerId);
+  next = runUntapStep(next, newActivePlayer.id);
   next = { ...next, players: next.players.map((p) => ({ ...p, manaPool: emptyManaPool() })) as GameState['players'] };
   next = {
     ...next,

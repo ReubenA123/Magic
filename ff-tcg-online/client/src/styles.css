@@ -1396,7 +1396,8 @@ button {
   border: 1px solid var(--border);
   border-radius: 10px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
-  z-index: 30;
+  /* Above .docked-hand-tray (44) for the same reason as .bottom-right-controls. */
+  z-index: 48;
   overflow: hidden;
 }
 
@@ -1612,7 +1613,10 @@ button {
   position: fixed;
   bottom: 16px;
   right: 16px;
-  z-index: 20;
+  /* Above .docked-hand-tray (44) - Next Phase/End Turn need to stay
+     reachable even while the hand's peek strip is showing at the bottom of
+     the screen, not just once you've scrolled all the way down to it. */
+  z-index: 48;
   cursor: grab;
   display: flex;
   flex-direction: column;
@@ -1897,6 +1901,26 @@ button {
   /* transform-origin is set inline per-hand (GameBoard's renderHandRow) since
      it flips depending on whether the hand sits at the top or bottom of the screen. */
   transition: transform 0.15s ease;
+}
+
+/* Only mounted once you've scrolled away from the bottom of the page (see
+   GameBoard's nearPageBottom) - your actual in-flow hand is off-screen at
+   that point, so this stands in: parked mostly below the viewport, showing
+   just enough of the cards' tops to read, and sliding fully into view on hover. */
+.docked-hand-tray {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 44;
+  display: flex;
+  justify-content: center;
+  transform: translateY(80%);
+  transition: transform 0.2s ease;
+}
+
+.docked-hand-tray:hover {
+  transform: translateY(0);
 }
 
 .hand-fan .hand-fan-card:first-child {
@@ -2292,6 +2316,12 @@ button {
   cursor: not-allowed;
 }
 
+.stack-tap-nothing {
+  color: var(--text-dim);
+  font-size: 11px;
+  opacity: 0.6;
+}
+
 /* ===== Final override: one consistent card size everywhere on the board ===== */
 .battlefield-row .card,
 .hand-row .card,
@@ -2315,6 +2345,21 @@ button {
 .full-board-grid .combat-blocker-stacked .card {
   width: 150px;
   height: 201px;
+}
+
+/* Declaring attackers/blockers forces Full Board no matter what view you'd
+   picked, and legibility matters most exactly there - a creature shouldn't
+   visibly shrink the moment you drag it in to block just because combat
+   happens to be shown at Full Board's smaller card size. Same specificity as
+   the rule above (three class selectors), so source order is what makes
+   this win while combat's on. */
+.full-board-grid.full-board-combat .battlefield-row .card,
+.full-board-grid.full-board-combat .hand-row .card,
+.full-board-grid.full-board-combat .hand-fan .card,
+.full-board-grid.full-board-combat .combat-attacker-cell .card,
+.full-board-grid.full-board-combat .combat-blocker-stacked .card {
+  width: 200px;
+  height: 268px;
 }
 
 .corner-column {

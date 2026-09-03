@@ -170,13 +170,30 @@ export function resolvePendingDeaths(state: GameState): GameState {
     const dead = player.zones.battlefield.filter((c) => deadIds.includes(c.instanceId));
     if (dead.length === 0) continue;
     const survivors = player.zones.battlefield.filter((c) => !deadIds.includes(c.instanceId));
+
+    // A commander dying goes to the command zone instead of the graveyard -
+    // its Commander Tax counter (if any, from a previous cast) rides along
+    // unchanged; engine/actions.ts: castCard is what actually adds the next
+    // +2 the next time it's cast from there.
+    const toCommandZone = dead.filter((d) => player.commanderDefId && d.defId === player.commanderDefId);
+    const toGraveyard = dead.filter((d) => !(player.commanderDefId && d.defId === player.commanderDefId));
+
     next = updatePlayer(next, player.id, (p) => ({
       ...p,
-      zones: { ...p.zones, battlefield: survivors, graveyard: [...p.zones.graveyard, ...dead.map((d) => ({ ...d, damageMarked: 0 }))] },
+      zones: {
+        ...p.zones,
+        battlefield: survivors,
+        graveyard: [...p.zones.graveyard, ...toGraveyard.map((d) => ({ ...d, damageMarked: 0 }))],
+        commander: [...p.zones.commander, ...toCommandZone.map((d) => ({ ...d, damageMarked: 0 }))],
+      },
     }));
-    for (const d of dead) {
+    for (const d of toGraveyard) {
       const def = getCardDefinition(d.defId);
       next = { ...next, log: [...next.log, `${def.name} is destroyed.`] };
+    }
+    for (const d of toCommandZone) {
+      const def = getCardDefinition(d.defId);
+      next = { ...next, log: [...next.log, `${def.name} dies and returns to ${player.name}'s command zone.`] };
     }
   }
 

@@ -158,16 +158,27 @@ function ManaRow({ player }: { player: PlayerState }) {
 
 /**
  * The tap/untap control strip shown under a stack of 2+ identical permanents.
- * Left = untap (both its +/- adjust how many to untap), right = tap (both
- * its +/- adjust how many to tap) - set the amount, then press Untap/Tap to
- * act on exactly that many at once. The middle number is the live count of
- * cards still available to tap right now.
+ * For a single-color land: left = untap (its +/- adjust how many to untap),
+ * right = tap (its +/- adjust how many to tap) - set the amount, press
+ * Untap/Tap to act on exactly that many at once.
+ *
+ * For a dual/any-color land, quantity alone can't say which color each card
+ * should produce or is refunding, so both sides become color pips instead:
+ * tap-side pips are the land's full set of options (always the same,
+ * click one to tap the next untapped card for that color); untap-side pips
+ * are only the colors actually sitting tapped-and-unspent in the stack right
+ * now - tap a G, and only G shows up to untap, not the land's other color(s),
+ * since there's nothing of those to give back yet.
  */
 function StackTapControls({
   untappedCount,
   untappableCount,
   onTapN,
   onUntapN,
+  tapColorOptions,
+  onTapColor,
+  untapColorOptions,
+  onUntapColor,
 }: {
   untappedCount: number;
   /** Of the tapped cards, how many could actually be untapped right now -
@@ -175,6 +186,14 @@ function StackTapControls({
   untappableCount: number;
   onTapN: (n: number) => void;
   onUntapN: (n: number) => void;
+  /** The land's full set of mana options - always the same regardless of
+   * current state. Undefined for a single-color land (no choice to pip). */
+  tapColorOptions?: ManaColor[];
+  onTapColor?: (color: ManaColor) => void;
+  /** Which colors are actually refundable right now - a subset of
+   * tapColorOptions (or empty), recomputed as cards get tapped/spent. */
+  untapColorOptions?: ManaColor[];
+  onUntapColor?: (color: ManaColor) => void;
 }) {
   const [untapAmount, setUntapAmount] = useState(1);
   const [tapAmount, setTapAmount] = useState(1);
@@ -185,67 +204,101 @@ function StackTapControls({
   return (
     <div className="stack-tap-controls">
       <div className="stack-tap-row">
-        <div className="stack-tap-group">
-          <button
-            className="stack-tap-step"
-            disabled={untappableCount === 0}
-            onClick={() => setUntapAmount((n) => Math.max(1, n - 1))}
-            title={untappableCount === 0 ? "This stack's mana has already been spent" : 'Fewer to untap'}
-          >
-            −
-          </button>
-          <input
-            className="stack-tap-input"
-            type="number"
-            min={1}
-            max={Math.max(untappableCount, 1)}
-            value={clampedUntap}
-            disabled={untappableCount === 0}
-            onChange={(e) => setUntapAmount(Math.max(1, parseInt(e.target.value, 10) || 1))}
-          />
-          <button
-            className="stack-tap-step"
-            disabled={untappableCount === 0}
-            onClick={() => setUntapAmount((n) => Math.min(untappableCount, n + 1))}
-            title={untappableCount === 0 ? "This stack's mana has already been spent" : 'More to untap'}
-          >
-            +
-          </button>
-        </div>
+        {tapColorOptions ? (
+          <div className="stack-tap-group battlefield-mana-pips">
+            {untapColorOptions && untapColorOptions.length > 0 ? (
+              untapColorOptions.map((color) => (
+                <button key={color} className={`mana-tap-pip mana-${color}`} title={`Untap one ${color}`} onClick={() => onUntapColor?.(color)}>
+                  {color}
+                </button>
+              ))
+            ) : (
+              <span className="stack-tap-nothing" title="Nothing to untap yet">
+                {'—'}
+              </span>
+            )}
+          </div>
+        ) : (
+          <div className="stack-tap-group">
+            <button
+              className="stack-tap-step"
+              disabled={untappableCount === 0}
+              onClick={() => setUntapAmount((n) => Math.max(1, n - 1))}
+              title={untappableCount === 0 ? "This stack's mana has already been spent" : 'Fewer to untap'}
+            >
+              −
+            </button>
+            <input
+              className="stack-tap-input"
+              type="number"
+              min={1}
+              max={Math.max(untappableCount, 1)}
+              value={clampedUntap}
+              disabled={untappableCount === 0}
+              onChange={(e) => setUntapAmount(Math.max(1, parseInt(e.target.value, 10) || 1))}
+            />
+            <button
+              className="stack-tap-step"
+              disabled={untappableCount === 0}
+              onClick={() => setUntapAmount((n) => Math.min(untappableCount, n + 1))}
+              title={untappableCount === 0 ? "This stack's mana has already been spent" : 'More to untap'}
+            >
+              +
+            </button>
+          </div>
+        )}
         <span className="battlefield-stack-count" title="Cards still tappable">
           {untappedCount}
         </span>
-        <div className="stack-tap-group">
-          <button className="stack-tap-step" disabled={untappedCount === 0} onClick={() => setTapAmount((n) => Math.max(1, n - 1))} title="Fewer to tap">
-            −
+        {tapColorOptions ? (
+          <div className="stack-tap-group battlefield-mana-pips">
+            {tapColorOptions.map((color) => (
+              <button
+                key={color}
+                className={`mana-tap-pip mana-${color}`}
+                disabled={untappedCount === 0}
+                title={untappedCount === 0 ? 'Nothing left to tap' : `Tap one for ${color}`}
+                onClick={() => onTapColor?.(color)}
+              >
+                {color}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="stack-tap-group">
+            <button className="stack-tap-step" disabled={untappedCount === 0} onClick={() => setTapAmount((n) => Math.max(1, n - 1))} title="Fewer to tap">
+              −
+            </button>
+            <input
+              className="stack-tap-input"
+              type="number"
+              min={1}
+              max={Math.max(untappedCount, 1)}
+              value={clampedTap}
+              disabled={untappedCount === 0}
+              onChange={(e) => setTapAmount(Math.max(1, parseInt(e.target.value, 10) || 1))}
+            />
+            <button className="stack-tap-step" disabled={untappedCount === 0} onClick={() => setTapAmount((n) => Math.min(untappedCount, n + 1))} title="More to tap">
+              +
+            </button>
+          </div>
+        )}
+      </div>
+      {!tapColorOptions && (
+        <div className="stack-tap-row">
+          <button
+            className="stack-tap-commit"
+            disabled={untappableCount === 0}
+            title={untappableCount === 0 ? "This stack's mana has already been spent" : ''}
+            onClick={() => onUntapN(clampedUntap)}
+          >
+            Untap
           </button>
-          <input
-            className="stack-tap-input"
-            type="number"
-            min={1}
-            max={Math.max(untappedCount, 1)}
-            value={clampedTap}
-            disabled={untappedCount === 0}
-            onChange={(e) => setTapAmount(Math.max(1, parseInt(e.target.value, 10) || 1))}
-          />
-          <button className="stack-tap-step" disabled={untappedCount === 0} onClick={() => setTapAmount((n) => Math.min(untappedCount, n + 1))} title="More to tap">
-            +
+          <button className="stack-tap-commit" disabled={untappedCount === 0} onClick={() => onTapN(clampedTap)}>
+            Tap
           </button>
         </div>
-      </div>
-      <div className="stack-tap-row">
-        <button
-          className="stack-tap-commit"
-          disabled={untappableCount === 0}
-          title={untappableCount === 0 ? "This stack's mana has already been spent" : ''}
-          onClick={() => onUntapN(clampedUntap)}
-        >
-          Untap
-        </button>
-        <button className="stack-tap-commit" disabled={untappedCount === 0} onClick={() => onTapN(clampedTap)}>
-          Tap
-        </button>
-      </div>
+      )}
     </div>
   );
 }
@@ -375,6 +428,35 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     });
   }, []);
 
+  // Your hand sits at the very bottom of a page that's often much taller
+  // than the viewport - scroll away from it (say, up to look at the
+  // opponent's board) and it's gone until you scroll all the way back. The
+  // docked tray below covers that: whenever your real, in-flow hand isn't
+  // actually on screen, it takes over as a permanently-visible, mostly-
+  // collapsed strip you can hover to pull back into view without losing
+  // your place. yourHandRef is attached to that real hand (see
+  // renderHandRow) so this checks its actual on-screen position rather than
+  // just "near the bottom of the page" - a fixed distance-from-bottom
+  // threshold left both visible at once for a stretch of scroll positions
+  // right as the real hand scrolled into view.
+  const yourHandRef = useRef<HTMLDivElement>(null);
+  const [yourHandVisible, setYourHandVisible] = useState(true);
+  useEffect(() => {
+    function checkHandVisibility() {
+      const el = yourHandRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      setYourHandVisible(rect.top < window.innerHeight && rect.bottom > 0);
+    }
+    checkHandVisibility();
+    window.addEventListener('scroll', checkHandVisibility, { passive: true });
+    window.addEventListener('resize', checkHandVisibility);
+    return () => {
+      window.removeEventListener('scroll', checkHandVisibility);
+      window.removeEventListener('resize', checkHandVisibility);
+    };
+  }, []);
+
   // Switching view mode swaps in a different amount of content above the
   // fold, and Full Board also changes zoom level going in or out (each view
   // has its own) - between the content swap and the wrapper's height
@@ -440,7 +522,11 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   // pile's own container is sized from these constants via inline styles
   // (CSS can't reach them), so it has to shrink the same amount or the real
   // card ends up floating in an oversized, empty-looking box around it.
-  const isFullBoard = effectiveViewMode === 'full';
+  // Combat forces Full Board regardless of what view you'd picked, but
+  // styles.css exempts it from the 25% reduction (legibility matters most
+  // exactly when you're deciding blocks) - match that here too, or a
+  // stacked creature's container would shrink while the real card inside it doesn't.
+  const isFullBoard = effectiveViewMode === 'full' && !showCombatZones;
   const activeCardWidth = isFullBoard ? CARD_WIDTH * 0.75 : CARD_WIDTH;
   const activeCardHeight = isFullBoard ? CARD_HEIGHT * 0.75 : CARD_HEIGHT;
   const activeStackPeekStep = isFullBoard ? STACK_PEEK_STEP * 0.75 : STACK_PEEK_STEP;
@@ -591,6 +677,23 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     return null;
   }
 
+  /**
+   * What to show as clickable pips under an untapped land - unlike
+   * manaTapOptions (which is only about *ambiguous* choices needing a
+   * prompt), this also covers a plain single-color land: one pip, click it,
+   * tapped - no popup, no double-click needed. Keep this one scoped to the
+   * pip UI itself; handleToggleTap/batch stack tapping still use
+   * manaTapOptions so a single-color land in a stack keeps tapping in one step.
+   */
+  function manaPipOptions(def: CardDefinition): ManaColor[] | null {
+    const ambiguous = manaTapOptions(def);
+    if (ambiguous) return ambiguous;
+    if (def.type === 'land' && def.producesMana && !Array.isArray(def.producesMana) && def.producesMana !== 'any') {
+      return [def.producesMana];
+    }
+    return null;
+  }
+
   function handleToggleTap(card: CardInstance) {
     const def = getCardDefinition(card.defId);
     if (!card.tapped) {
@@ -620,6 +723,32 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     untappableCardsInGroup(group, manaPool)
       .slice(0, n)
       .forEach((c) => handleToggleTap(c));
+  }
+
+  /** Stacked dual/any-color lands tap one at a time, picking the color right
+   * there via the stack's own pips - no ambiguity to prompt about, so this
+   * goes straight to TOGGLE_TAP instead of through handleToggleTap's
+   * enqueueManaChoice detour. */
+  function tapOneFromGroupWithColor(group: CardInstance[], color: ManaColor) {
+    const card = group.find((g) => !g.tapped);
+    if (!card) return;
+    onAction({ type: 'TOGGLE_TAP', instanceId: card.instanceId, chosenColor: color });
+  }
+
+  /** Which colors are actually sitting tapped-and-unspent in this stack
+   * right now - the untap side's pips only ever show these, never the
+   * land's other color(s), since there's nothing of those to refund yet. */
+  function untapColorOptionsForGroup(group: CardInstance[], manaPool: Record<ManaColor, number>): ManaColor[] {
+    const colors = new Set<ManaColor>();
+    for (const c of untappableCardsInGroup(group, manaPool)) {
+      if (c.producedManaColor) colors.add(c.producedManaColor);
+    }
+    return Array.from(colors);
+  }
+
+  function untapOneFromGroupWithColor(group: CardInstance[], color: ManaColor, manaPool: Record<ManaColor, number>) {
+    const card = untappableCardsInGroup(group, manaPool).find((c) => c.producedManaColor === color);
+    if (card) handleToggleTap(card);
   }
 
   function handleBoardDrop(playerId: string) {
@@ -826,7 +955,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   ) {
     if (group.length === 1) {
       const def = getCardDefinition(front.defId);
-      const tapOptions = !front.tapped ? manaTapOptions(def) : null;
+      const tapOptions = !front.tapped ? manaPipOptions(def) : null;
       const cardEl = <Card definition={def} instance={displayInstance(front)} {...frontProps} onDoubleClick={tapOptions ? undefined : frontProps.onDoubleClick} />;
       if (!tapOptions) return cardEl;
       return (
@@ -880,6 +1009,10 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
             untappableCount={untappableCount}
             onTapN={(n) => tapNFromGroup(group, n)}
             onUntapN={(n) => untapNFromGroup(group, n, ownerManaPool)}
+            tapColorOptions={manaPipOptions(getCardDefinition(front.defId)) ?? undefined}
+            onTapColor={(color) => tapOneFromGroupWithColor(group, color)}
+            untapColorOptions={untapColorOptionsForGroup(group, ownerManaPool)}
+            onUntapColor={(color) => untapOneFromGroupWithColor(group, color, ownerManaPool)}
           />
         </div>
         <div className="battlefield-stack-layer" style={{ zIndex: depthOrder.length + 1 }}>
@@ -980,7 +1113,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
    * mirror image (center dips down toward the table, edges lift up), or it
    * reads as an upside-down frown.
    */
-  function renderHandRow(player: PlayerState, isOpponentSide: boolean, curveUp: boolean) {
+  function renderHandRow(player: PlayerState, isOpponentSide: boolean, curveUp: boolean, handRef?: React.Ref<HTMLDivElement>) {
     const isControllersTurn = state.activePlayerId === player.id;
     // Only dim hand cards for affordability once mana's actually been tapped -
     // at 0 mana (start of turn, or right after casting something) nothing
@@ -989,7 +1122,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     const hand = isOpponentSide ? player.zones.hand : orderedHand(player.zones.hand);
 
     return (
-      <div className={`hand-fan ${isOpponentSide ? 'opponent-hand' : 'your-hand'}`}>
+      <div ref={handRef} className={`hand-fan ${isOpponentSide ? 'opponent-hand' : 'your-hand'}`}>
         {hand.map((c, i, arr) => {
           const mid = (arr.length - 1) / 2;
           const offset = i - mid;
@@ -1172,8 +1305,10 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     );
 
     // A hand placed at the top of its zone (mirrorLayout) needs the mirrored
-    // arc - see renderHandRow.
-    const handRow = renderHandRow(player, isOpponentSide, !mirrorLayout);
+    // arc - see renderHandRow. Only your own real (in-flow) hand gets
+    // yourHandRef - the opponent's hand and the docked tray's own copy of
+    // yours don't represent "is my real hand on screen right now".
+    const handRow = renderHandRow(player, isOpponentSide, !mirrorLayout, isOpponentSide ? undefined : yourHandRef);
 
     const lifeRow = (
       <div className="life-row">
@@ -1457,12 +1592,16 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
         </div>
       )}
 
+      {!yourHandVisible && (
+        <div className="docked-hand-tray">{renderHandRow(you, false, true)}</div>
+      )}
+
       {effectiveViewMode === 'full' ? (
         (() => {
           const opponentPieces = buildPlayerZonePieces(opponent, true, true, true);
           const yourPieces = buildPlayerZonePieces(you, false, false, true);
           return (
-            <div className="full-board-grid">
+            <div className={`full-board-grid ${showCombatZones ? 'full-board-combat' : ''}`}>
               {/* Commander/graveyard live outside the scaled area entirely, on
                   sticky rails - zooming the middle to fit both boards can no
                   longer drag them in from the true screen edges, since they're
