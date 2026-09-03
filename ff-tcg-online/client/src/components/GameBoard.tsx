@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { CardDefinition, CardInstance, GameAction, GameState, ManaColor, PlayerState, ZoneName } from '../types';
 import { getCardDefinition } from '../data/cards';
 import { parseCostLabel, canPay } from '../engine/mana';
@@ -299,24 +299,36 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   const [phaseBoxPos, setPhaseBoxPos] = useState<{ x: number; y: number } | null>(null);
   const [manaChoiceQueue, setManaChoiceQueue] = useState<ManaChoiceItem[]>([]);
   const [viewMode, setViewMode] = useState<'mine' | 'opponent' | 'full'>('mine');
-  // Each view remembers its own zoom, all starting at natural size (100%) -
-  // shrinking uniformly pulls the corner columns in from the true screen
-  // edges (that's just what scaling down does), so Full Board doesn't
-  // auto-shrink by default anymore; it hugs the sides exactly like My
-  // View/Opponent View until the player deliberately zooms out via Edit View.
+  // Each view remembers its own zoom. My View/Opponent View start at natural
+  // size (100%). Full Board's commander/graveyard columns now live outside
+  // the scaled area entirely (see buildPlayerZonePieces/full-board-grid), so
+  // shrinking the middle no longer drags them in from the screen edges -
+  // Full Board can default to a real "see both boards" zoom again.
   const [zoomByMode, setZoomByMode] = useState<Record<'mine' | 'opponent' | 'full', number>>({
     mine: 1,
     opponent: 1,
-    full: 1,
+    full: 0.8,
   });
   const [editingZoom, setEditingZoom] = useState(false);
+  // Full Board only - lets a crowded creatures/others/lands row collapse to
+  // a thin summary strip so the two boards fit together more comfortably.
+  // Keyed "playerId:rowKey" since either player's board can be full there.
+  const [minimizedRows, setMinimizedRows] = useState<Set<string>>(new Set());
+  function toggleRowMinimized(key: string) {
+    setMinimizedRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
   const [orderedAttackerIds, setOrderedAttackerIds] = useState<Set<string>>(new Set());
   const [openBlockerPile, setOpenBlockerPile] = useState<string | null>(null);
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const landsRowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const phaseDragRef = useRef<{ offsetX: number; offsetY: number } | null>(null);
-  const gameBoardMainRef = useRef<HTMLDivElement>(null);
   const [naturalBoardHeight, setNaturalBoardHeight] = useState(0);
+  const boardResizeObserverRef = useRef<ResizeObserver | null>(null);
 
   // Full Board's zoom uses transform: scale, not the CSS `zoom` property -
   // zoom actually resizes layout, so any resize (however small) makes the
@@ -327,15 +339,40 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   // either, a ResizeObserver tracks the board's real (unscaled) height so
   // the wrapper below can be told to take up exactly `height * zoom` and
   // clip away the rest, instead of leaving a tall gap under a shrunk board.
-  useEffect(() => {
-    const el = gameBoardMainRef.current;
+  //
+  // This has to be a callback ref, not a plain useRef + one-shot effect:
+  // Full Board's wrapper sits one level deeper (inside .full-board-grid)
+  // than My View/Opponent View's, so switching into or out of Full Board
+  // unmounts and remounts this div rather than just changing its content. A
+  // `useEffect(() => {...}, [])` would only ever observe the very first
+  // instance - once that one's gone, naturalBoardHeight freezes at whatever
+  // it last was (usually My View's taller, unscaled reading), reserving too
+  // much height and leaving empty space below the shorter Full Board content.
+  const gameBoardMainRef = useCallback((el: HTMLDivElement | null) => {
+    boardResizeObserverRef.current?.disconnect();
+    boardResizeObserverRef.current = null;
     if (!el) return;
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (entry) setNaturalBoardHeight(entry.contentRect.height);
     });
     observer.observe(el);
-    return () => observer.disconnect();
+    boardResizeObserverRef.current = observer;
+  }, []);
+
+  // GameBoard mounts fresh exactly once per game (Versus swaps in from
+  // PregameSetup once both players are ready; VS AI mounts it the moment a
+  // deck is picked). Landing at the top of a much-taller-than-viewport page
+  // and having to scroll down to find your own hand felt off, so jump
+  // straight to the bottom - same target My View already uses when you
+  // switch back into it. Two frames so this runs after the first real
+  // layout (and the ResizeObserver's follow-up) settle, same as changeViewMode.
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        window.scrollTo(0, document.documentElement.scrollHeight);
+      });
+    });
   }, []);
 
   // Switching view mode swaps in a different amount of content above the
@@ -399,6 +436,14 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   // so it always shows Full Board regardless of what's selected below.
   const effectiveViewMode = showCombatZones ? 'full' : viewMode;
   const fullBoardZoom = zoomByMode[effectiveViewMode];
+  // Full Board renders actual cards 25% smaller (see styles.css) - a stacked
+  // pile's own container is sized from these constants via inline styles
+  // (CSS can't reach them), so it has to shrink the same amount or the real
+  // card ends up floating in an oversized, empty-looking box around it.
+  const isFullBoard = effectiveViewMode === 'full';
+  const activeCardWidth = isFullBoard ? CARD_WIDTH * 0.75 : CARD_WIDTH;
+  const activeCardHeight = isFullBoard ? CARD_HEIGHT * 0.75 : CARD_HEIGHT;
+  const activeStackPeekStep = isFullBoard ? STACK_PEEK_STEP * 0.75 : STACK_PEEK_STEP;
 
   function setFullBoardZoom(next: number | ((current: number) => number)) {
     setZoomByMode((prev) => ({ ...prev, [effectiveViewMode]: typeof next === 'function' ? next(prev[effectiveViewMode]) : next }));
@@ -409,6 +454,39 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   // their side without the mirrored orientation, not to act from. Combat
   // forcing Full Board already takes priority over this, same as everywhere else.
   const isOpponentViewLocked = effectiveViewMode === 'opponent';
+
+  /**
+   * The board content that actually scales with fullBoardZoom - see the
+   * ResizeObserver above naturalBoardHeight for why the wrapper needs its
+   * own reserved height.
+   *
+   * `fillWidth` (Full Board only) fixes a side effect of scaling down from a
+   * centered origin: shrinking a box toward its own middle leaves equal gaps
+   * on both sides, which is exactly what made the field look like it wasn't
+   * reaching the commander/graveyard rails anymore. Setting the unscaled
+   * width to 100/zoom% and scaling from the top-LEFT corner instead makes
+   * the visible result exactly 100% of the track width at any zoom level -
+   * the classic CSS "zoom to fit" trick. My View/Opponent View don't need
+   * this (they're not flanked by anything the content has to reach).
+   */
+  function renderZoomedBoard(children: React.ReactNode, fillWidth = false) {
+    return (
+      <div className="game-board-main-zoom-wrapper" style={naturalBoardHeight > 0 ? { height: naturalBoardHeight * fullBoardZoom, overflow: 'hidden' } : undefined}>
+        <div
+          ref={gameBoardMainRef}
+          className="game-board-main"
+          style={{
+            transform: `scale(${fullBoardZoom})`,
+            transformOrigin: fillWidth ? 'top left' : 'top center',
+            width: fillWidth ? `${100 / fullBoardZoom}%` : undefined,
+            pointerEvents: isOpponentViewLocked ? 'none' : undefined,
+          }}
+        >
+          {children}
+        </div>
+      </div>
+    );
+  }
 
   useEffect(() => {
     if (!isOpponentViewLocked) return;
@@ -774,15 +852,15 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     }
     const behind = group.filter((g) => g.instanceId !== front.instanceId);
     const depthOrder = [...behind.filter((g) => !g.tapped), ...behind.filter((g) => g.tapped)];
-    const footprint = Math.min(depthOrder.length, STACK_PEEK_MAX_LAYERS) * STACK_PEEK_STEP;
+    const footprint = Math.min(depthOrder.length, STACK_PEEK_MAX_LAYERS) * activeStackPeekStep;
     const tappedCount = group.filter((g) => g.tapped).length;
     const untappedCount = group.length - tappedCount;
     const ownerManaPool = state.players.find((p) => p.id === group[0].ownerId)!.manaPool;
     const untappableCount = untappableCardsInGroup(group, ownerManaPool).length;
     return (
-      <div className="battlefield-stack" style={{ width: CARD_WIDTH + footprint, height: CARD_HEIGHT + footprint + STACK_CONTROL_HEIGHT }}>
+      <div className="battlefield-stack" style={{ width: activeCardWidth + footprint, height: activeCardHeight + footprint + STACK_CONTROL_HEIGHT }}>
         {depthOrder.map((bc, i) => {
-          const depth = Math.min(i + 1, STACK_PEEK_MAX_LAYERS) * STACK_PEEK_STEP;
+          const depth = Math.min(i + 1, STACK_PEEK_MAX_LAYERS) * activeStackPeekStep;
           return (
             <div
               key={bc.instanceId}
@@ -796,7 +874,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
         {/* Stacked permanents are only tapped/untapped via this control strip,
             a chosen amount at a time, so it's always unambiguous which
             copies - and how much mana - is being added or refunded. */}
-        <div style={{ position: 'absolute', top: CARD_HEIGHT + footprint, left: 0, width: CARD_WIDTH + footprint, zIndex: depthOrder.length + 2 }}>
+        <div style={{ position: 'absolute', top: activeCardHeight + footprint, left: 0, width: activeCardWidth + footprint, zIndex: depthOrder.length + 2 }}>
           <StackTapControls
             untappedCount={untappedCount}
             untappableCount={untappableCount}
@@ -951,6 +1029,38 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   }
 
   /**
+   * One row of stacked creatures/others/lands, optionally collapsible to a
+   * thin summary strip. `allowMinimize` is only ever true from Full Board -
+   * see buildPlayerZonePieces - so the toggle never appears in My
+   * View/Opponent View. The ref (used to auto-pan to a player's lands when
+   * they open an uncastable instant mid-combat) stays attached to the outer
+   * wrapper either way, so it still resolves to *something* sensible even
+   * while collapsed.
+   */
+  function renderBattlefieldRow(
+    rowKey: 'creatures' | 'others' | 'lands',
+    label: string,
+    playerId: string,
+    count: number,
+    cardsEl: React.ReactNode,
+    allowMinimize: boolean,
+    refCallback?: (el: HTMLDivElement | null) => void,
+  ) {
+    const minimizeKey = `${playerId}:${rowKey}`;
+    const minimized = allowMinimize && minimizedRows.has(minimizeKey);
+    return (
+      <div className="battlefield-row-group" ref={refCallback}>
+        {allowMinimize && (
+          <button className="row-minimize-toggle" onClick={() => toggleRowMinimized(minimizeKey)}>
+            {minimized ? `▸ ${label} (${count})` : `▾ ${label}`}
+          </button>
+        )}
+        {!minimized && <div className={`battlefield-row ${rowKey}-row`}>{cardsEl}</div>}
+      </div>
+    );
+  }
+
+  /**
    * `isOpponentSide` is about identity - it decides whether this player's
    * hand stays face-down and whether you're allowed to interact with their
    * permanents, and never changes regardless of view. `mirrorLayout` is
@@ -958,8 +1068,9 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
    * Opponent View can render the opponent's own zone with `mirrorLayout`
    * false, showing their board the way THEY see it instead of upside-down
    * across the table, without granting any extra visibility or control.
+   * `allowMinimizeRows` is Full-Board-only - see renderBattlefieldRow.
    */
-  function renderPlayerZone(player: PlayerState, isOpponentSide: boolean, mirrorLayout: boolean = isOpponentSide) {
+  function buildPlayerZonePieces(player: PlayerState, isOpponentSide: boolean, mirrorLayout: boolean, allowMinimizeRows: boolean) {
     const { creatures, others, lands } = splitBattlefield(player.zones.battlefield);
     const visibleCreatures = creatures.filter((c) => !isInCombatZone(player.id, c.instanceId));
     const creatureGroups = groupForStacking(orderedRow(player.id, 'creatures', visibleCreatures), (c) => state.pendingDeaths.includes(c.instanceId));
@@ -998,30 +1109,51 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           return (
             <div key={zoneName} className="zone-pile" onClick={() => setOpenZone({ playerId: player.id, zone: zoneName })}>
               {topCard ? <Card definition={getCardDefinition(topCard.defId)} /> : <div className="card card-empty-pile" />}
-              <span className="zone-pile-label">
-                {zoneName === 'graveyard' ? 'Graveyard' : 'Exile'} ({cards.length})
-              </span>
+              <span className="zone-pile-count">{cards.length}</span>
+              <span className="zone-pile-label">{zoneName === 'graveyard' ? 'Graveyard' : 'Exile'}</span>
             </div>
           );
         })}
       </div>
     );
 
+    const creaturesRowEl = renderBattlefieldRow(
+      'creatures',
+      'Creatures',
+      player.id,
+      creatureGroups.length,
+      creatureGroups.map((g) => renderCreatureCard(g, isOpponentSide, visibleCreatures, player.id)),
+      allowMinimizeRows,
+    );
+    const othersRowEl = renderBattlefieldRow(
+      'others',
+      'Other permanents',
+      player.id,
+      otherGroups.length,
+      otherGroups.map((g) => renderPlainCard(g, player.id, 'others', others, selectEnabled)),
+      allowMinimizeRows,
+    );
+    const landsRowEl = renderBattlefieldRow(
+      'lands',
+      'Lands',
+      player.id,
+      landGroups.length,
+      landGroups.map((g) => renderPlainCard(g, player.id, 'lands', lands, selectEnabled)),
+      allowMinimizeRows,
+      (el) => registerLandsRowRef(player.id, el),
+    );
+
     const battlefieldRows = mirrorLayout ? (
       <>
-        <div className="battlefield-row lands-row" ref={(el) => registerLandsRowRef(player.id, el)}>
-          {landGroups.map((g) => renderPlainCard(g, player.id, 'lands', lands, selectEnabled))}
-        </div>
-        <div className="battlefield-row others-row">{otherGroups.map((g) => renderPlainCard(g, player.id, 'others', others, selectEnabled))}</div>
-        <div className="battlefield-row creatures-row">{creatureGroups.map((g) => renderCreatureCard(g, isOpponentSide, visibleCreatures, player.id))}</div>
+        {landsRowEl}
+        {othersRowEl}
+        {creaturesRowEl}
       </>
     ) : (
       <>
-        <div className="battlefield-row creatures-row">{creatureGroups.map((g) => renderCreatureCard(g, isOpponentSide, visibleCreatures, player.id))}</div>
-        <div className="battlefield-row others-row">{otherGroups.map((g) => renderPlainCard(g, player.id, 'others', others, selectEnabled))}</div>
-        <div className="battlefield-row lands-row" ref={(el) => registerLandsRowRef(player.id, el)}>
-          {landGroups.map((g) => renderPlainCard(g, player.id, 'lands', lands, selectEnabled))}
-        </div>
+        {creaturesRowEl}
+        {othersRowEl}
+        {landsRowEl}
       </>
     );
 
@@ -1063,6 +1195,12 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
       </div>
     );
 
+    return { commanderColumn, graveyardExileColumn, centerColumn, handRow, lifeRow };
+  }
+
+  /** My View/Opponent View - unchanged single-section layout, corner columns inline. */
+  function renderPlayerZone(player: PlayerState, isOpponentSide: boolean, mirrorLayout: boolean = isOpponentSide) {
+    const { commanderColumn, graveyardExileColumn, centerColumn, handRow, lifeRow } = buildPlayerZonePieces(player, isOpponentSide, mirrorLayout, false);
     return (
       <section className={`player-zone ${isOpponentSide ? 'opponent-zone' : 'your-zone'}`}>
         {mirrorLayout && lifeRow}
@@ -1319,36 +1457,63 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
         </div>
       )}
 
-      <div
-        className="game-board-main-zoom-wrapper"
-        style={naturalBoardHeight > 0 ? { height: naturalBoardHeight * fullBoardZoom, overflow: 'hidden' } : undefined}
-      >
-        <div
-          ref={gameBoardMainRef}
-          className="game-board-main"
-          style={{ transform: `scale(${fullBoardZoom})`, transformOrigin: 'top center', pointerEvents: isOpponentViewLocked ? 'none' : undefined }}
-        >
-          {effectiveViewMode === 'full' ? (
-            <>
-              {renderPlayerZone(opponent, true)}
-              {combatZoneEl}
-              {renderPlayerZone(you, false)}
-            </>
-          ) : effectiveViewMode === 'mine' ? (
-            // Opponent's board still renders, mirrored above like Full Board -
-            // scroll up yourself to see it; switching views never scrolls for you.
-            <>
-              {renderPlayerZone(opponent, true, true)}
-              {renderPlayerZone(you, false, false)}
-            </>
-          ) : (
-            <>
-              {renderPlayerZone(you, false, true)}
-              {renderPlayerZone(opponent, true, false)}
-            </>
-          )}
-        </div>
-      </div>
+      {effectiveViewMode === 'full' ? (
+        (() => {
+          const opponentPieces = buildPlayerZonePieces(opponent, true, true, true);
+          const yourPieces = buildPlayerZonePieces(you, false, false, true);
+          return (
+            <div className="full-board-grid">
+              {/* Commander/graveyard live outside the scaled area entirely, on
+                  sticky rails - zooming the middle to fit both boards can no
+                  longer drag them in from the true screen edges, since they're
+                  never part of what's being scaled. Mirrored left/right per
+                  player, same as the center rows already are: opponent's
+                  graveyard sits opposite their commander, and yours the same
+                  way around - not both commanders stacked on one side. */}
+              <div className="full-board-side-rail">
+                {opponentPieces.graveyardExileColumn}
+                {yourPieces.commanderColumn}
+              </div>
+              {renderZoomedBoard(
+                <>
+                  <section className="player-zone opponent-zone">
+                    {opponentPieces.lifeRow}
+                    {opponentPieces.handRow}
+                    <div className="zone-top-row">{opponentPieces.centerColumn}</div>
+                  </section>
+                  {combatZoneEl}
+                  <section className="player-zone your-zone">
+                    <div className="zone-top-row">{yourPieces.centerColumn}</div>
+                    {yourPieces.handRow}
+                    {yourPieces.lifeRow}
+                  </section>
+                </>,
+                true,
+              )}
+              <div className="full-board-side-rail">
+                {opponentPieces.commanderColumn}
+                {yourPieces.graveyardExileColumn}
+              </div>
+            </div>
+          );
+        })()
+      ) : effectiveViewMode === 'mine' ? (
+        // Opponent's board still renders, mirrored above like Full Board -
+        // scroll up yourself to see it; switching views never scrolls for you.
+        renderZoomedBoard(
+          <>
+            {renderPlayerZone(opponent, true, true)}
+            {renderPlayerZone(you, false, false)}
+          </>,
+        )
+      ) : (
+        renderZoomedBoard(
+          <>
+            {renderPlayerZone(you, false, true)}
+            {renderPlayerZone(opponent, true, false)}
+          </>,
+        )
+      )}
 
       {/* In normal document flow (not fixed) - only comes into view once
           scrolled down to it, unlike the Event Log which stays pinned. */}

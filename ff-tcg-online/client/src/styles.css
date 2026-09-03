@@ -364,6 +364,54 @@ button {
   padding: 4px;
 }
 
+.battlefield-row-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.row-minimize-toggle {
+  align-self: flex-start;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.full-board-grid {
+  display: grid;
+  /* Matches the 25% smaller full-board card (see the .full-board-grid .card
+     override below) - rails sized for the normal 200px card would leave the
+     commander/graveyard cards floating short of the true edge, with the gap
+     coming out of the center track's width instead of nowhere. */
+  grid-template-columns: 150px 1fr 150px;
+  column-gap: 16px;
+  align-items: stretch;
+}
+
+.full-board-grid .corner-column {
+  width: 150px;
+}
+
+.full-board-side-rail {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.full-board-side-rail > .corner-column:first-child {
+  position: sticky;
+  top: 16px;
+}
+
+.full-board-side-rail > .corner-column:last-child {
+  position: sticky;
+  bottom: 16px;
+  margin-top: auto;
+}
+
 .zone-counts {
   display: flex;
   gap: 10px;
@@ -1782,16 +1830,25 @@ button {
 
 .library-stack-count {
   position: absolute;
-  bottom: 4px;
-  right: 4px;
-  background: rgba(10, 10, 16, 0.8);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(10, 10, 16, 0.85);
   color: var(--accent);
-  font-size: 11px;
+  font-size: 18px;
   font-weight: 700;
-  padding: 1px 6px;
-  border-radius: 4px;
+  padding: 4px 12px;
+  border-radius: 6px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+
+.library-stack:hover .library-stack-count {
+  opacity: 1;
 }
 .zone-pile {
+  position: relative;
   cursor: pointer;
   text-align: center;
 }
@@ -1799,6 +1856,26 @@ button {
 .card-empty-pile {
   border-style: dashed;
   background: transparent;
+}
+
+.zone-pile-count {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(10, 10, 16, 0.85);
+  color: var(--accent);
+  font-size: 18px;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 6px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+
+.zone-pile:hover .zone-pile-count {
+  opacity: 1;
 }
 
 .zone-pile-label {
@@ -1816,7 +1893,7 @@ button {
 }
 
 .hand-fan .hand-fan-card {
-  margin-left: -24px;
+  margin-left: -90px;
   /* transform-origin is set inline per-hand (GameBoard's renderHandRow) since
      it flips depending on whether the hand sits at the top or bottom of the screen. */
   transition: transform 0.15s ease;
@@ -2225,6 +2302,19 @@ button {
 .zone-modal-grid .card {
   width: 200px;
   height: 268px;
+}
+
+/* Full Board only - 25% smaller (on top of whatever zoom is applied to the
+   center content), so more of the field reflows to actually fill the width
+   between the side rails instead of wrapping into extra rows. */
+.full-board-grid .battlefield-row .card,
+.full-board-grid .hand-row .card,
+.full-board-grid .hand-fan .card,
+.full-board-grid .corner-column .card,
+.full-board-grid .combat-attacker-cell .card,
+.full-board-grid .combat-blocker-stacked .card {
+  width: 150px;
+  height: 201px;
 }
 
 .corner-column {
