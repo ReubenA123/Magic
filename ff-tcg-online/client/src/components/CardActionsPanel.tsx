@@ -22,6 +22,7 @@ interface CardActionsPanelProps {
   onAdjustCounter: (label: string, delta: number) => void;
   onStartAttach: () => void;
   onDetach: () => void;
+  onCycle: () => void;
   onClose: () => void;
 }
 
@@ -56,6 +57,7 @@ export default function CardActionsPanel({
   onAdjustCounter,
   onStartAttach,
   onDetach,
+  onCycle,
   onClose,
 }: CardActionsPanelProps) {
   const [showManaChoice, setShowManaChoice] = useState(false);
@@ -65,6 +67,8 @@ export default function CardActionsPanel({
   const isLand = definition.type === 'land';
   const canPlay = mutualActive || (isLand ? isMyTurn && !alreadyPlayedLand : canPay(ownerManaPool, parsedCost, commanderTax));
   const canPlayHere = currentZone === 'hand' || (currentZone === 'commander' && !isLand);
+  const canCycleHere = currentZone === 'hand' && !!definition.cycling;
+  const canCycle = canCycleHere && (mutualActive || canPay(ownerManaPool, parseCostLabel(definition.cycling!.cost), 0));
   const isActualCommander = ownerCommanderDefId === definition.id;
   const isOnBattlefield = currentZone === 'battlefield';
   const needsManaChoice = !instance.tapped && !!manaOptions && manaOptions.length > 0;
@@ -197,6 +201,12 @@ export default function CardActionsPanel({
         {canPlayHere && (
           <button className="card-action-button card-action-button-play" disabled={!canPlay} onClick={onCast} title={canPlay ? '' : isLand ? 'Already played a land, or not your turn' : 'Not enough mana'}>
             {isLand ? `Play ${definition.name}` : `Cast (${definition.costLabel}${commanderTax > 0 ? ` +${commanderTax} tax` : ''})`}
+          </button>
+        )}
+
+        {canCycleHere && (
+          <button className="card-action-button secondary" disabled={!canCycle} onClick={onCycle} title={canCycle ? '' : 'Not enough mana'}>
+            {`Cycle (${definition.cycling!.cost})`}
           </button>
         )}
       </div>

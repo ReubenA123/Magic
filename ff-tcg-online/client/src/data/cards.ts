@@ -99,6 +99,7 @@ export const CARD_POOL: CardDefinition[] = [
     type: 'instant',
     costLabel: '2G',
     text: 'Destroy target artifact, enchantment, or creature with flying. Cycling 2 (2, Discard this card: Draw a card.)',
+    cycling: { cost: '2' },
     imagePath: '/assets/cards/airship-crash.webp',
   },
   {
@@ -162,6 +163,7 @@ export const CARD_POOL: CardDefinition[] = [
     type: 'artifact',
     costLabel: '1W',
     text: "Job select (When this Equipment enters, create a 1/1 colorless Hero creature token, then attach this to it.) Equipped creature is a Wizard in addition to its other types and has “Whenever you cast a noncreature spell and whenever you draw your third card each turn, put a +1/+1 counter on this creature. Diana — Equip {2}",
+    onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
     imagePath: '/assets/cards/astrologian-s-planisphere.webp',
   },
   {
@@ -200,6 +202,7 @@ export const CARD_POOL: CardDefinition[] = [
     power: 6,
     toughness: 6,
     text: "Trample. Whenever this creature enters, you gain 3 life. Forestcycling 2(2 Discard this card: Search your library for a forest card, reveal it, put it into your hand then shuffle)",
+    cycling: { cost: '2', searchLandName: 'Forest' },
     imagePath: '/assets/cards/balamb-t-rexaur.webp',
   },
   {
@@ -220,6 +223,7 @@ export const CARD_POOL: CardDefinition[] = [
     subtype: 'Equipment',
     costLabel: '2G',
     text: "Job select (When this Equipment enters, create a 1/1 colorless Hero creature token, then attach this to it.) Equipped creature gets +2/+2, has reach, and is a Bard in addition to its other types. Perseus’s Bow — Equip 6( 6: Attach to target creature you control. Equip only as a sorcery.)",
+    onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
     imagePath: '/assets/cards/bards-bow.webp',
   },
   {
@@ -283,6 +287,7 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'Job select (When this Equipment enters, create a 1/1 colorless Hero creature token, ' +
       'then attach this to it.) Equipped creature gets +1/+0, has “Whenever you cast a noncreature spell, ' +
       'this creature deals 1 damage to each opponent,” and is a Wizard in addition to its other types.Equip 3',
+    onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
     imagePath: '/assets/cards/black-mages-rod.webp',
   },
   {
@@ -344,7 +349,7 @@ export const CARD_POOL: CardDefinition[] = [
     id: 'cactuar',
     name: 'Cactuar',
     type: 'creature',
-    costLabel: '1G',
+    costLabel: 'G',
     power: 3,
     toughness: 3,
     text: "Trample. " +
@@ -359,6 +364,7 @@ export const CARD_POOL: CardDefinition[] = [
     text: "Search your library for a Mountain card, reveal it, put it into your hand, then shuffle. " +
       'Create a 2/2 green Bird creature token with “Whenever a land you control enters, this token gets +1/+0 until end of turn.”' +
       "Flashback {5}{R} (You may cast this card from your graveyard for its flashback cost. Then exile it.)",
+    onCast: [{ type: 'createToken', tokenId: 'token-bird' }],
     imagePath: '/assets/cards/call-the-mountain-chocobo.webp',
   },
   {
@@ -367,6 +373,7 @@ export const CARD_POOL: CardDefinition[] = [
     type: 'land',
     costLabel: '-',
     text: "Add Mana \n 1 Tap: Add one mana of any colour. \nCycling 2 (2, Discard this card: Draw a card.)",
+    cycling: { cost: '2' },
     imagePath: '/assets/cards/capital-city.webp',
     producesMana: 'C'
   },
@@ -430,6 +437,7 @@ export const CARD_POOL: CardDefinition[] = [
     type: 'sorcery',
     costLabel: 'XRR',
     text: "Choco\u2014Comet deals X damage to any target.\nCreate a 2/2 green Bird creature token with 'Whenever a land you control enters, this token gets +1/+0 until end of turn.'",
+    onCast: [{ type: 'createToken', tokenId: 'token-bird' }],
     imagePath: '/assets/cards/choco-comet.webp',
   },
   {
@@ -454,6 +462,7 @@ export const CARD_POOL: CardDefinition[] = [
     text: "You draw two cards and you lose 2 life. Create a 0/1 black Wizard creature token with " +
       "'Whenever you cast a noncreature spell, this token deals 1 damage to each opponent.'" +
       "\nWizards you control get +1/+0 and gain lifelink until end of turn.",
+    onCast: [{ type: 'createToken', tokenId: 'token-wizard' }],
     imagePath: '/assets/cards/circle-of-power.webp',
   },
   {
@@ -510,6 +519,7 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: '3WW',
     text: "Flying \n When this creature enters, put a +1/+1 counter on target creature. \n" +
       "Plainscycling 2 (2, Discard this card: Search your library for a Plains card, reveal it, put it into your hand, then shuffle.)",
+    cycling: { cost: '2', searchLandName: 'Plains' },
     imagePath: '/assets/cards/cloudbound-moogle.webp'
   },
   {
@@ -602,6 +612,7 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: '1BB',
     text: 'Target opponent sacrifices a creature of their choice. \nCreate a 0/1 black Wizard creature token with “Whenever you cast a noncreature spell, ' +
       ' this token deals 1 damage to each opponent.”',
+    onCast: [{ type: 'createToken', tokenId: 'token-wizard' }],
     imagePath: '/assets/cards/cornered-by-black-mages.webp'
   },
   {
@@ -641,6 +652,7 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: '2B',
     text: 'Job select (When this Equipment enters, create a 1/1 colorless Hero creature token, then attach this to it.) \n' +
       "Equipped creature gets +3/+0 and is a Knight in addition to its other types. \nChaosbringer — Equip—Pay 3 life. Activate only once each turn.",
+    onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
     imagePath: '/assets/cards/dark-knight-s-greatsword.webp'
   },
   {
@@ -697,6 +709,7 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 3,
     text: 'Dragonfire Dive — During your turn, Dion and other Knights you control have flying.\nWhen Dion enters, create a 2/2 white Knight creature token.' +
       "4WW, Tap: Exile Dion, then return it to the battlefield transformed under its owner\u2019s control. Activate only as a sorcery.",
+    onEnter: [{ type: 'createToken', tokenId: 'token-knight' }],
     imagePath: '/assets/cards/dion-bahamut-s-dominant.webp',
     transformsInto: 'bahamut-warden-of-light'
   },
@@ -721,6 +734,7 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'Job select (When this Equipment enters, create a 1/1 colorless Hero creature token, then attach this to it.)' +
       "\nEquipped creature gets +1/+0 and is a Knight in addition to its other types." +
       "\nDuring your turn, equipped creature has flying.\nGae Bolg — Equip 4",
+    onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
     imagePath: '/assets/cards/dragoon-s-lance.webp'
   },
   {
@@ -731,6 +745,7 @@ export const CARD_POOL: CardDefinition[] = [
     power: 2,
     toughness: 1,
     text: "Flying\n When this creature enters, create a 1/1 colorless Hero creature token.",
+    onEnter: [{ type: 'createToken', tokenId: 'token-hero' }],
     imagePath: '/assets/cards/dragoon-s-wyvern.webp'
   },
   {
@@ -1147,6 +1162,7 @@ export const CARD_POOL: CardDefinition[] = [
     type: 'sorcery',
     text: 'Create a 2/2 green Bird creature token with “Whenever a land you control enters, this token gets +1/+0 until end of turn.”' +
       "\nFlashback {6}",
+    onCast: [{ type: 'createToken', tokenId: 'token-bird' }],
     imagePath: '/assets/cards/gysahl-greens.webp'
   }, {
     id: 'haste-magic',
@@ -1174,6 +1190,7 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 4,
     text: 'Trample, haste \n' +
       'Mountaincycling 2(2, Discard this card: Search your library for a Mountain card, reveal it, put it into your hand, then shuffle.)',
+    cycling: { cost: '2', searchLandName: 'Mountain' },
     imagePath: '/assets/cards/hill-gigas.webp'
   },
   {
@@ -1198,6 +1215,8 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'When this creature enters, tap target artifact or creature an opponent controls. Put a stun counter on it. ' +
       '(If a permanent with a stun counter would become untapped, remove one from it instead.)\n' +
       'Islandcycling 2 (2, Discard this card: Search your library for an Island card, reveal it, put it into your hand, then shuffle.)',
+    onEnter: [{ type: 'tapAndStun', targetController: 'opponent', targetType: 'artifactOrCreature' }],
+    cycling: { cost: '2', searchLandName: 'Island' },
     imagePath: '/assets/cards/ice-flan.webp'
   }, {
     id: 'ice-magic',
@@ -1579,6 +1598,7 @@ export const CARD_POOL: CardDefinition[] = [
     text: "Job select (When this Equipment enters, create a 1/1 colorless Hero creature token, then attach this to it.)" +
       "Equipped creature gets +2/+2 for each artifact you control and is an Artificer in addition to its other types." +
       "Machina — Equip 4 (4: Attach to target creature you control. Equip only as a sorcery.)",
+    onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
     imagePath: '/assets/cards/machinist-s-arsenal.webp'
   },
   {
@@ -1609,6 +1629,7 @@ export const CARD_POOL: CardDefinition[] = [
     power: 4,
     toughness: 4,
     text: 'When this Vehicle enters, create a 1/1 colorless Hero creature token. \nCrew 1',
+    onEnter: [{ type: 'createToken', tokenId: 'token-hero' }],
     imagePath: '/assets/cards/magitek-armor.webp'
   },
   {
@@ -1643,6 +1664,7 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 4,
     text: "Bad Breath — When this creature enters, each opponent discards a card, loses 2 life, and exiles the top three cards of their library.\n" +
       "Swampcycling 2 (2, Discard this card: Search your library for a Swamp card, reveal it, put it into your hand, then shuffle.)",
+    cycling: { cost: '2', searchLandName: 'Swamp' },
     imagePath: '/assets/cards/malboro.webp'
   },
   {
@@ -1697,6 +1719,7 @@ export const CARD_POOL: CardDefinition[] = [
     text: "Job select (When this Equipment enters, create a 1/1 colorless Hero creature token, then attach this to it.)\n" +
       "Equipped creature gets +1/+0 and is a Monk in addition to its other types.\n" +
       "Equip 2 (2: Attach to target creature you control. Equip only as a sorcery.)",
+    onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
     imagePath: '/assets/cards/monk-s-fist.webp'
   },
   {
@@ -1705,6 +1728,7 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: '3WW',
     type: 'instant',
     text: 'For each creature you control, create a 1/2 white Moogle creature token with lifelink. Then creatures you control gain indestructible until end of turn.',
+    onCast: [{ type: 'createToken', tokenId: 'token-moogle', count: 'perCreatureYouControl' }],
     imagePath: '/assets/cards/moogles-valor.webp'
   },
   {
@@ -1724,6 +1748,7 @@ export const CARD_POOL: CardDefinition[] = [
     power: 1,
     toughness: 3,
     text: "When this creature enters, create a 0/1 black Wizard creature token with “Whenever you cast a noncreature spell, this token deals 1 damage to each opponent.”",
+    onEnter: [{ type: 'createToken', tokenId: 'token-wizard' }],
     imagePath: '/assets/cards/mysidian-elder.webp'
   },
   {
@@ -1808,6 +1833,7 @@ export const CARD_POOL: CardDefinition[] = [
     text: "Job select (When this Equipment enters, create a 1/1 colorless Hero creature token, then attach this to it.) \n" +
       "Equipped creature gets +2/+1, has ward {1}, and is a Knight in addition to its other types. \n" +
       "Lightbringer and Hero\u2019s Shield — Equip 4 (4: Attach to target creature you control. Equip only as a sorcery.)",
+    onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
     imagePath: '/assets/cards/paladin-s-arms.webp'
   },
   {
@@ -1998,6 +2024,7 @@ export const CARD_POOL: CardDefinition[] = [
     text: "Job select (When this Equipment enters, create a 1/1 colorless Hero creature token, then attach this to it.) \n" +
       "Equipped creature has “Whenever you cast a noncreature spell, this creature gets +2/+0 until end of turn” and is a Wizard in addition to its other types.\n" +
       "Equip 3",
+    onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
     imagePath: '/assets/cards/red-mage-s-rapier.webp'
   },
   {
@@ -2163,6 +2190,7 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'Job select (When this Equipment enters, create a 1/1 colorless Hero creature token, then attach this to it.) \n' +
       'Equipped creature gets +1/+0, has “Whenever this creature attacks, untap target attacking creature,” and is a Cleric in addition to its other types.\n' +
       'Hagneia — Equip 3',
+    onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
     imagePath: '/assets/cards/sage-s-nouliths.webp'
   },
   {
@@ -2184,6 +2212,7 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'Job select (When this Equipment enters, create a 1/1 colorless Hero creature token, then attach this to it.)\n' +
       'Equipped creature gets +2/+2, has trample and haste, and is a Samurai in addition to its other types. \n' +
       'Murasame — Equip 5',
+    onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
     imagePath: '/assets/cards/samurai-s-katana.webp'
   },
   {
@@ -2450,6 +2479,7 @@ export const CARD_POOL: CardDefinition[] = [
     type: 'enchantment',
     text: 'When this enchantment enters, create a 2/2 green Bird creature token with “Whenever a land you control enters, this token gets +1/+0 until end of turn.”\n' +
       'At the beginning of your first main phase, if you control four or more Birds, transform this enchantment.',
+    onEnter: [{ type: 'createToken', tokenId: 'token-bird' }],
     imagePath: '/assets/cards/sidequest-raise-a-chocobo.webp',
     transformsInto: 'black-chocobo'
   },
@@ -3039,6 +3069,7 @@ export const CARD_POOL: CardDefinition[] = [
   text: 'Job select (When this Equipment enters, create a 1/1 colorless Hero creature token, then attach this to it.)\n' +
   'Equipped creature gets +1/+1, has “Whenever this creature deals combat damage to a player, draw a card,” and is a Rogue in addition to its other types.\n' +
   'Equip {4}',
+  onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
   imagePath: '/assets/cards/thief-s-knife.webp'
   },
   {
@@ -3402,6 +3433,7 @@ export const CARD_POOL: CardDefinition[] = [
   text: 'Job select (When this Equipment enters, create a 1/1 colorless Hero creature token, then attach this to it.) \n' +
   'Equipped creature gets +3/+2 and is a Warrior in addition to its other types. \n' +
   'Equip {5} ({5}: Attach to target creature you control. Equip only as a sorcery.)',
+  onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
   imagePath: '/assets/cards/warrior-s-sword.webp'
   },
   {
@@ -3444,6 +3476,7 @@ export const CARD_POOL: CardDefinition[] = [
   text: 'Job select (When this Equipment enters, create a 1/1 colorless Hero creature token, then attach this to it.) \n ' +
   'Equipped creature gets +1/+1, has “Whenever this creature attacks, you gain 1 life,” and is a Cleric in addition to its other types.\n' +
   'Equip {3} ({3}: Attach to target creature you control. Equip only as a sorcery.)',
+  onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
   imagePath: '/assets/cards/white-mage-s-staff.webp'
   },
   {
@@ -3595,8 +3628,85 @@ export const CARD_POOL: CardDefinition[] = [
   },
 ];
 
+/**
+ * Definitions for tokens created by other cards' onEnter/onCast effects (see
+ * types.ts: CreateTokenEffect). Not part of any deck or the printed card
+ * pool - looked up the same way via getCardDefinition once a token exists on
+ * the battlefield. Keyed by the stats/text actually printed on the cards
+ * that create them, so multiple cards creating "a 2/2 green Bird" etc. share
+ * one entry.
+ */
+export const TOKEN_POOL: CardDefinition[] = [
+  {
+    id: 'token-hero',
+    name: 'Hero',
+    type: 'creature',
+    subtype: 'Hero Token',
+    costLabel: '-',
+    power: 1,
+    toughness: 1,
+    text: '',
+    imagePath: '/assets/cards/token-hero.webp',
+  },
+  {
+    id: 'token-wizard',
+    name: 'Wizard',
+    type: 'creature',
+    subtype: 'Wizard Token',
+    costLabel: '-',
+    power: 0,
+    toughness: 1,
+    text: 'Whenever you cast a noncreature spell, this token deals 1 damage to each opponent.',
+    imagePath: '/assets/cards/token-wizard.webp',
+  },
+  {
+    id: 'token-bird',
+    name: 'Bird',
+    type: 'creature',
+    subtype: 'Bird Token',
+    costLabel: '-',
+    power: 2,
+    toughness: 2,
+    text: 'Whenever a land you control enters, this token gets +1/+0 until end of turn.',
+    imagePath: '/assets/cards/token-bird.webp',
+  },
+  {
+    id: 'token-knight',
+    name: 'Knight',
+    type: 'creature',
+    subtype: 'Knight Token',
+    costLabel: '-',
+    power: 2,
+    toughness: 2,
+    text: '',
+    imagePath: '/assets/cards/token-knight.webp',
+  },
+  {
+    id: 'token-moogle',
+    name: 'Moogle',
+    type: 'creature',
+    subtype: 'Moogle Token',
+    costLabel: '-',
+    power: 1,
+    toughness: 2,
+    text: 'Lifelink',
+    imagePath: '/assets/cards/token-moogle.webp',
+  },
+  {
+    id: 'token-elemental',
+    name: 'Elemental',
+    type: 'creature',
+    subtype: 'Elemental Token',
+    costLabel: '-',
+    power: 2,
+    toughness: 2,
+    text: 'This token is all colors.',
+    imagePath: '/assets/cards/token-elemental.webp',
+  },
+];
+
 export function getCardDefinition(defId: string): CardDefinition {
-  const def = CARD_POOL.find((c) => c.id === defId);
+  const def = CARD_POOL.find((c) => c.id === defId) ?? TOKEN_POOL.find((c) => c.id === defId);
   if (!def) throw new Error(`Unknown card id: ${defId}`);
   return def;
 }

@@ -4,9 +4,10 @@
 
 import { ActionResult, CombatAssignment, GameAction, GameState, ManaColor, Phase, ZoneName } from '../types';
 import { findCardAnywhere, getOpponent, getPlayer, updatePlayer, detachEverythingFrom } from './state'; import { getCardDefinition } from '../data/cards';
-import { emptyManaPool, canPay, payCost, parseCostLabel } from './mana';
+import { canPay, payCost, parseCostLabel, emptyManaPool } from './mana';
 import { hasKeyword } from './keywords';
 import { resolveCombatDamage, resolvePendingDeaths } from './combat';
+import { resolveCardEffects } from './effects';
 
 const PHASE_ORDER: Phase[] = ['untap', 'upkeep', 'draw', 'main1', 'combat_begin', 'declare_attackers', 'declare_blockers', 'combat_damage', 'combat_end', 'main2', 'end', 'cleanup'];
 
@@ -44,6 +45,10 @@ export function applyAction(state: GameState, action: GameAction, playerId: stri
       return declareBlockers(state, playerId, action.assignments);
     case 'ORDER_BLOCKERS':
       return orderBlockers(state, playerId, action.attackerInstanceId, action.orderedBlockerIds);
+    case 'CHOOSE_TARGET':
+      return chooseTarget(state, playerId, action.targetInstanceId);
+    case 'CYCLE_CARD':
+      return cycleCard(state, playerId, action.instanceId);
     case 'NEXT_PHASE':
       return nextPhase(state, playerId);
     case 'END_TURN':
@@ -65,10 +70,6 @@ export function applyAction(state: GameState, action: GameAction, playerId: stri
     default:
       return { ok: false, error: 'Unknown action.' };
   }
-}
-
-function emptyManaPools(state: GameState): GameState {
-  return { ...state, players: state.players.map((p) => ({ ...p, manaPool: emptyManaPool() })) as GameState['players'] };
 }
 
 function shuffleArr<T>(items: T[]): T[] {
@@ -295,10 +296,18 @@ function castCard(state: GameState, playerId: string, instanceId: string, chosen
   next = updatePlayer(next, playerId, (p) => ({ ...p, zones: { ...p.zones, [targetZone]: [...p.zones[targetZone], movedCard] } }));
   next = checkLegendRule(next, playerId);
 
+  let effectLogLines: string[] = [];
+  const autoEffects = isPermanent ? def.onEnter : def.onCast;
+  if (autoEffects && autoEffects.length > 0) {
+    const resolved = resolveCardEffects(next, playerId, autoEffects, movedCard.instanceId);
+    next = resolved.state;
+    effectLogLines = resolved.logLines;
+  }
+
   const xNote = parsed.hasX ? ` (X=${chosenX ?? 0})` : '';
   const taxNote = commanderTax > 0 ? ` (+${commanderTax} commander tax paid)` : '';
   const freeNote = mutual ? ' (free - Mutual Adjustment active)' : '';
-  return { ok: true, state: { ...next, log: [...next.log, `${player.name} casts ${def.name}${xNote}${taxNote}${freeNote}.`] } };
+  return { ok: true, state: { ...next, log: [...next.log, `${player.name} casts ${def.name}${xNote}${taxNote}${freeNote}.`, ...effectLogLines] } };
 }
 
 function activateAbility(state: GameState, playerId: string, instanceId: string, abilityId: string): ActionResult {
@@ -469,7 +478,7 @@ function declareAttackers(state: GameState, playerId: string, instanceIds: strin
     log: [...next.log, instanceIds.length > 0 ? `${player.name} attacks with ${instanceIds.length} creature(s).` : `${player.name} declares no attackers - skipping straight past blocking.`],
   };
 
-  return { ok: true, state: emptyManaPools(next) };
+  return { ok: true, state: next };
 }
 
 function declareBlockers(state: GameState, playerId: string, assignments: CombatAssignment[]): ActionResult {
@@ -536,6 +545,77 @@ function orderBlockers(state: GameState, playerId: string, attackerInstanceId: s
   return { ok: true, state: next };
 }
 
+function chooseTarget(state: GameState, playerId: string, targetInstanceId: string): ActionResult {
+  const pending = state.pendingTarget;
+  if (!pending) return { ok: false, error: 'No effect is waiting for a target right now.' };
+  if (pending.controllerId !== playerId) return { ok: false, error: "It's not your target to choose." };
+
+  const opponent = getOpponent(state, playerId);
+  const target = opponent.zones.battlefield.find((c) => c.instanceId === targetInstanceId);
+  if (!target) return { ok: false, error: "That's not a legal target - it must be a permanent your opponent controls." };
+
+  const targetDef = getCardDefinition(target.defId);
+  const matchesType = pending.effect.targetType === 'artifactOrCreature' ? targetDef.type === 'artifact' || targetDef.type === 'creature' : targetDef.type === pending.effect.targetType;
+  if (!matchesType) return { ok: false, error: `${targetDef.name} is not a legal target for this ability.` };
+
+  const existingStun = target.counters.find((c) => c.label === 'Stun')?.amount ?? 0;
+  let next = updatePlayer(state, opponent.id, (p) => ({
+    ...p,
+    zones: {
+      ...p.zones,
+      battlefield: p.zones.battlefield.map((c) =>
+        c.instanceId === targetInstanceId ? { ...c, tapped: true, counters: [...c.counters.filter((ctr) => ctr.label !== 'Stun'), { label: 'Stun', amount: existingStun + 1 }] } : c
+      ),
+    },
+  }));
+  next = { ...next, pendingTarget: null };
+
+  const actor = getPlayer(next, playerId);
+  return { ok: true, state: { ...next, log: [...next.log, `${actor.name} taps ${targetDef.name} and puts a stun counter on it.`] } };
+}
+
+/** "[Land]cycling"/"Cycling" - see types.ts: CyclingAbility. A hand-only cost, so it doesn't go through castCard. */
+function cycleCard(state: GameState, playerId: string, instanceId: string): ActionResult {
+  const player = getPlayer(state, playerId);
+  const card = player.zones.hand.find((c) => c.instanceId === instanceId);
+  if (!card) return { ok: false, error: 'That card is not in your hand.' };
+  const def = getCardDefinition(card.defId);
+  if (!def.cycling) return { ok: false, error: `${def.name} has no cycling ability.` };
+
+  const mutual = isMutualActive(state);
+  const parsed = parseCostLabel(def.cycling.cost);
+  if (!mutual && !canPay(player.manaPool, parsed, 0)) {
+    return { ok: false, error: `Not enough mana to cycle ${def.name} (${def.cycling.cost}).` };
+  }
+
+  let next = state;
+  if (!mutual) next = updatePlayer(next, playerId, (p) => ({ ...p, manaPool: payCost(p.manaPool, parsed, 0) }));
+  next = updatePlayer(next, playerId, (p) => ({
+    ...p,
+    zones: { ...p.zones, hand: p.zones.hand.filter((c) => c.instanceId !== instanceId), graveyard: [...p.zones.graveyard, { ...card, tapped: false }] },
+  }));
+
+  const searchName = def.cycling.searchLandName;
+  if (!searchName) {
+    const drawn = getPlayer(next, playerId).zones.library[0];
+    if (!drawn) return { ok: true, state: { ...next, log: [...next.log, `${player.name} cycles ${def.name} - library is empty.`] } };
+    next = updatePlayer(next, playerId, (p) => ({ ...p, zones: { ...p.zones, library: p.zones.library.slice(1), hand: [...p.zones.hand, drawn] } }));
+    return { ok: true, state: { ...next, log: [...next.log, `${player.name} cycles ${def.name}, drawing a card.`] } };
+  }
+
+  const library = getPlayer(next, playerId).zones.library;
+  const foundIndex = library.findIndex((c) => getCardDefinition(c.defId).name === searchName);
+  if (foundIndex === -1) {
+    next = updatePlayer(next, playerId, (p) => ({ ...p, zones: { ...p.zones, library: shuffleArr(p.zones.library) } }));
+    return { ok: true, state: { ...next, log: [...next.log, `${player.name} cycles ${def.name} - no ${searchName} found, shuffles the library.`] } };
+  }
+
+  const found = library[foundIndex];
+  const rest = library.filter((_, i) => i !== foundIndex);
+  next = updatePlayer(next, playerId, (p) => ({ ...p, zones: { ...p.zones, library: shuffleArr(rest), hand: [...p.zones.hand, found] } }));
+  return { ok: true, state: { ...next, log: [...next.log, `${player.name} cycles ${def.name}, searching up a ${searchName}.`] } };
+}
+
 function nextPhase(state: GameState, playerId: string): ActionResult {
   // combat_damage is the one step BOTH players can call this on - each
   // marks themselves ready to resolve, and damage only actually happens
@@ -553,7 +633,7 @@ function nextPhase(state: GameState, playerId: string): ActionResult {
     if (isMutualActive(state)) {
       let next = resolveCombatDamage(state);
       next = { ...next, phase: 'combat_end', combatReadyPlayers: [] };
-      return { ok: true, state: emptyManaPools(next) };
+      return { ok: true, state: next };
     }
 
     if (state.combatReadyPlayers.includes(playerId)) {
@@ -566,7 +646,7 @@ function nextPhase(state: GameState, playerId: string): ActionResult {
     if (readyNow.length >= 2) {
       let next = resolveCombatDamage({ ...state, combatReadyPlayers: [] });
       next = { ...next, phase: 'combat_end' };
-      return { ok: true, state: emptyManaPools(next) };
+      return { ok: true, state: next };
     }
 
     return { ok: true, state: { ...state, combatReadyPlayers: readyNow, log: [...state.log, `${actor.name} is ready to resolve combat.`] } };
@@ -584,7 +664,6 @@ function nextPhase(state: GameState, playerId: string): ActionResult {
   if (nextPhaseName === 'combat_begin') nextPhaseName = 'declare_attackers';
 
   let next: GameState = { ...state, phase: nextPhaseName };
-  next = emptyManaPools(next);
 
   // Leaving End Combat: now that both players have seen the outcome,
   // actually move anything that died to the graveyard, and clear the
@@ -633,7 +712,7 @@ function endTurn(state: GameState, playerId: string): ActionResult {
   const newActivePlayer = getOpponent(state, playerId);
 
   let next = runUntapStep(state, newActivePlayer.id);
-  next = emptyManaPools(next);
+  next = { ...next, players: next.players.map((p) => ({ ...p, manaPool: emptyManaPool() })) as GameState['players'] };
   next = {
     ...next,
     activePlayerId: newActivePlayer.id,

@@ -7,7 +7,7 @@ import { buildDefaultDecklist, getCardDefinition } from '../data/cards';
 import { emptyManaPool } from './mana';
 
 let instanceCounter = 0;
-function nextInstanceId(): string {
+export function nextInstanceId(): string {
   instanceCounter += 1;
   return `inst-${instanceCounter}`;
 }
@@ -61,6 +61,7 @@ export function createInitialState(player1Name: string, player2Name: string, pla
     combatAssignments: [],
     mutualAdjustment: { status: 'inactive', agreedBy: [] },
     pendingDeaths: [],
+    pendingTarget: null,
   };
 }
 
@@ -118,4 +119,4 @@ export function detachEverythingFrom(state: GameState, anchorInstanceId: string)
   return next;
 }
 
-export { shuffle, nextInstanceId };
+export { shuffle };

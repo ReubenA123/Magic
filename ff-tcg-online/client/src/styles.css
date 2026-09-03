@@ -1153,11 +1153,16 @@ button {
   display: flex;
   gap: 4px;
   align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 6px;
 }
 
 .mana-row-empty {
   color: var(--text-dim);
   font-size: 12px;
+  text-align: center;
+  margin-top: 6px;
 }
 
 .mana-badge {
@@ -1282,6 +1287,35 @@ button {
   padding: 4px 10px;
   border-radius: 6px;
   font-size: 11px;
+}
+
+.battlefield-card-with-pips {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.battlefield-mana-pips {
+  display: flex;
+  gap: 4px;
+}
+
+.mana-tap-pip {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: none;
+  font-weight: 700;
+  font-size: 11px;
+  color: #14151d;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.mana-tap-pip:hover {
+  filter: brightness(1.15);
 }
 
 .card-actions-bottom-row {
@@ -1622,12 +1656,116 @@ button {
   cursor: not-allowed;
 }
 
-/* Full Board needs both entire battlefields plus both hands to fit on
-   screen at once - zoom, not transform: scale, so it actually shrinks the
-   space the board takes up instead of just shrinking how it looks. */
-.game-board-main-zoomed {
-  zoom: 0.62;
+.full-board-zoom-dock {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+  z-index: 40;
 }
+
+.opponent-view-lock-banner {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--panel);
+  border: 1px solid var(--danger);
+  border-radius: 8px;
+  padding: 8px 14px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+  z-index: 45;
+  color: var(--danger);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.opponent-view-exit-button {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--danger);
+  background: transparent;
+  color: var(--danger);
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.pending-target-banner {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 8px 14px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+  z-index: 45;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.full-board-zoom-button {
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.full-board-zoom-button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.full-board-zoom-level {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.full-board-zoom-input {
+  width: 46px;
+  height: 30px;
+  padding: 0 4px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  text-align: center;
+}
+
+.full-board-zoom-input::-webkit-outer-spin-button,
+.full-board-zoom-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.full-board-zoom-input[type='number'] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+/* Full Board's zoom level (see the +/- controls next to the Full Board
+   button) is applied inline in GameBoard.tsx via style={{ zoom }} - zoom,
+   not transform: scale, so it actually shrinks the space the board takes up
+   instead of just shrinking how it looks. */
 .library-stack {
   position: relative;
   width: 100%;
@@ -1802,12 +1940,6 @@ button {
   gap: 24px;
   flex-wrap: wrap;
   min-height: 100px;
-}
-
-.combat-zone-empty {
-  color: var(--text-dim);
-  font-size: 13px;
-  align-self: center;
 }
 
 .combat-column {

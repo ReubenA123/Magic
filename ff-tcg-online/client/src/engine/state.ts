@@ -7,7 +7,7 @@ import { SavedDeck } from '../utils/deckStorage';
 import { emptyManaPool } from './mana';
 
 let instanceCounter = 0;
-function nextInstanceId(): string {
+export function nextInstanceId(): string {
   instanceCounter += 1;
   return `local-inst-${instanceCounter}`;
 }
@@ -142,6 +142,7 @@ export function createStateFromDeck(deck: SavedDeck, humanName: string): GameSta
     mutualAdjustment: { status: 'inactive', agreedBy: [] },
     pendingDeaths: [],
     combatReadyPlayers: [],
+    pendingTarget: null,
   };
 }
 

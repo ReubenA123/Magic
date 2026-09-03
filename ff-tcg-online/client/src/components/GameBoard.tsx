@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { CardInstance, GameAction, GameState, ManaColor, PlayerState, ZoneName } from '../types';
+import { CardDefinition, CardInstance, GameAction, GameState, ManaColor, PlayerState, ZoneName } from '../types';
 import { getCardDefinition } from '../data/cards';
 import { parseCostLabel, canPay } from '../engine/mana';
 import { hasKeyword } from '../engine/keywords';
@@ -51,6 +51,34 @@ function splitBattlefield(cards: CardInstance[]) {
 function displayInstance(instance: CardInstance): CardInstance {
   if (!instance.counters.some((c) => c.label === 'Commander Tax')) return instance;
   return { ...instance, counters: instance.counters.filter((c) => c.label !== 'Commander Tax') };
+}
+
+function counterAdjustedStat(base: number | undefined, instance: CardInstance): number {
+  const plus = instance.counters.find((c) => c.label === '+1/+1')?.amount ?? 0;
+  const minus = instance.counters.find((c) => c.label === '-1/-1')?.amount ?? 0;
+  return (base ?? 0) + plus - minus;
+}
+
+/**
+ * A single, unambiguous blocker (no order to decide) means we already know
+ * exactly how the exchange resolves - mirrors engine/combat.ts's dealDamagePass
+ * for the one-blocker case (full power each way, no split needed) so this
+ * preview matches what actually happens once both players hit Resolve Combat.
+ * With 2+ blockers the attacker still has to choose an order (see
+ * BlockOrderModal) before any of that is decided, so callers should only use
+ * this when there's exactly one blocker.
+ */
+function previewSingleBlockDeaths(attackerDef: ReturnType<typeof getCardDefinition>, attackerInstance: CardInstance, blockerDef: ReturnType<typeof getCardDefinition>, blockerInstance: CardInstance) {
+  const attackerPower = counterAdjustedStat(attackerDef.power, attackerInstance);
+  const blockerPower = counterAdjustedStat(blockerDef.power, blockerInstance);
+  const attackerToughnessLeft = Math.max(0, counterAdjustedStat(attackerDef.toughness, attackerInstance) - attackerInstance.damageMarked);
+  const blockerToughnessLeft = Math.max(0, counterAdjustedStat(blockerDef.toughness, blockerInstance) - blockerInstance.damageMarked);
+  const attackerIndestructible = hasKeyword(attackerDef.text, 'indestructible');
+  const blockerIndestructible = hasKeyword(blockerDef.text, 'indestructible');
+  return {
+    attackerDies: !attackerIndestructible && attackerToughnessLeft > 0 && blockerPower >= attackerToughnessLeft,
+    blockerDies: !blockerIndestructible && blockerToughnessLeft > 0 && attackerPower >= blockerToughnessLeft,
+  };
 }
 
 /**
@@ -244,12 +272,18 @@ const STACK_PEEK_STEP = 8;
 const STACK_PEEK_MAX_LAYERS = 4;
 const STACK_CONTROL_HEIGHT = 60;
 
+const MIN_FULL_BOARD_ZOOM = 0.35;
+const MAX_FULL_BOARD_ZOOM = 1;
+const FULL_BOARD_ZOOM_STEP = 0.05;
+
 export default function GameBoard({ state, yourPlayerId, actionError, onAction, soloControl }: GameBoardProps) {
   useMarkGameActive();
   const you = state.players.find((p) => p.id === yourPlayerId)!;
   const opponent = state.players.find((p) => p.id !== yourPlayerId)!;
   const isYourTurn = soloControl ? true : state.activePlayerId === yourPlayerId;
   const mutualActive = state.mutualAdjustment.status === 'active';
+  const pendingTargetForYou = state.pendingTarget && (state.pendingTarget.controllerId === yourPlayerId || soloControl) ? state.pendingTarget : null;
+  const pendingTargetSourceName = pendingTargetForYou ? getCardDefinition(findCard(state, pendingTargetForYou.sourceInstanceId)?.card.defId ?? '')?.name ?? 'Ability' : '';
 
   const [openPanelId, setOpenPanelId] = useState<string | null>(null);
   const [openZone, setOpenZone] = useState<{ playerId: string; zone: 'graveyard' | 'exile' } | null>(null);
@@ -265,12 +299,68 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   const [phaseBoxPos, setPhaseBoxPos] = useState<{ x: number; y: number } | null>(null);
   const [manaChoiceQueue, setManaChoiceQueue] = useState<ManaChoiceItem[]>([]);
   const [viewMode, setViewMode] = useState<'mine' | 'opponent' | 'full'>('mine');
+  // Each view remembers its own zoom, all starting at natural size (100%) -
+  // shrinking uniformly pulls the corner columns in from the true screen
+  // edges (that's just what scaling down does), so Full Board doesn't
+  // auto-shrink by default anymore; it hugs the sides exactly like My
+  // View/Opponent View until the player deliberately zooms out via Edit View.
+  const [zoomByMode, setZoomByMode] = useState<Record<'mine' | 'opponent' | 'full', number>>({
+    mine: 1,
+    opponent: 1,
+    full: 1,
+  });
+  const [editingZoom, setEditingZoom] = useState(false);
   const [orderedAttackerIds, setOrderedAttackerIds] = useState<Set<string>>(new Set());
   const [openBlockerPile, setOpenBlockerPile] = useState<string | null>(null);
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const landsRowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
-  const focusZoneRef = useRef<HTMLElement | null>(null);
   const phaseDragRef = useRef<{ offsetX: number; offsetY: number } | null>(null);
+  const gameBoardMainRef = useRef<HTMLDivElement>(null);
+  const [naturalBoardHeight, setNaturalBoardHeight] = useState(0);
+
+  // Full Board's zoom uses transform: scale, not the CSS `zoom` property -
+  // zoom actually resizes layout, so any resize (however small) makes the
+  // player's current scroll position point at different content, which is
+  // exactly what kept "scrolling" the page out from under them. transform
+  // never touches layout at all, so there's nothing for scroll to get
+  // confused about - but since it doesn't reserve the smaller visual space
+  // either, a ResizeObserver tracks the board's real (unscaled) height so
+  // the wrapper below can be told to take up exactly `height * zoom` and
+  // clip away the rest, instead of leaving a tall gap under a shrunk board.
+  useEffect(() => {
+    const el = gameBoardMainRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) setNaturalBoardHeight(entry.contentRect.height);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  // Switching view mode swaps in a different amount of content above the
+  // fold, and Full Board also changes zoom level going in or out (each view
+  // has its own) - between the content swap and the wrapper's height
+  // catching up once the ResizeObserver above reports the new
+  // naturalBoardHeight (a render *after* the swap itself), the page's total
+  // height changes in a way scroll position can't stay meaningful across.
+  //
+  // My View/Opponent View put their controls at the very bottom of a much
+  // shorter page than Full Board's, so landing at the bottom of the page is
+  // the sensible target there; going back to Full Board just restores
+  // wherever the player was. Either way, wait two animation frames first so
+  // this runs after both the content swap and the ResizeObserver's
+  // follow-up layout settle, not just the first of the two.
+  function changeViewMode(mode: 'mine' | 'opponent' | 'full') {
+    const anchor = { x: window.scrollX, y: window.scrollY };
+    setViewMode(mode);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (mode === 'full') window.scrollTo(anchor.x, anchor.y);
+        else window.scrollTo(anchor.x, document.documentElement.scrollHeight);
+      });
+    });
+  }
 
   useEffect(() => {
     if (state.phase !== 'untap' || !isYourTurn) return;
@@ -308,6 +398,26 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   // Combat needs both sides visible to declare attackers/blockers sensibly,
   // so it always shows Full Board regardless of what's selected below.
   const effectiveViewMode = showCombatZones ? 'full' : viewMode;
+  const fullBoardZoom = zoomByMode[effectiveViewMode];
+
+  function setFullBoardZoom(next: number | ((current: number) => number)) {
+    setZoomByMode((prev) => ({ ...prev, [effectiveViewMode]: typeof next === 'function' ? next(prev[effectiveViewMode]) : next }));
+  }
+
+  // Opponent View is look-only, even at your own board/hand (which still
+  // renders, mirrored, in this mode) - it exists purely so you can read
+  // their side without the mirrored orientation, not to act from. Combat
+  // forcing Full Board already takes priority over this, same as everywhere else.
+  const isOpponentViewLocked = effectiveViewMode === 'opponent';
+
+  useEffect(() => {
+    if (!isOpponentViewLocked) return;
+    setOpenPanelId(null);
+    setOpenZone(null);
+    setManaChoiceQueue([]);
+    setMultiSelected(new Set());
+  }, [isOpponentViewLocked]);
+
   function blockersFor(attackerId: string): string[] {
     if (isDeclaringBlockers) return blockerAssignments[attackerId] || [];
     return state.combatAssignments.find((a) => a.attackerInstanceId === attackerId)?.blockerInstanceIds || [];
@@ -386,15 +496,29 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     setManaChoiceQueue((prev) => prev.slice(1));
   }
 
+  /** Is this permanent a legal choice for the ability currently waiting on a target? */
+  function isLegalPendingTarget(card: CardInstance, ownerId: string): boolean {
+    if (!pendingTargetForYou) return false;
+    if (ownerId === pendingTargetForYou.controllerId) return false;
+    const def = getCardDefinition(card.defId);
+    const t = pendingTargetForYou.effect.targetType;
+    return t === 'artifactOrCreature' ? def.type === 'artifact' || def.type === 'creature' : def.type === t;
+  }
+
+  /** The color choices an untapped land offers, or null if it only ever makes one color. */
+  function manaTapOptions(def: CardDefinition): ManaColor[] | null {
+    if (def.type !== 'land' || !def.producesMana) return null;
+    if (Array.isArray(def.producesMana)) return def.producesMana;
+    if (def.producesMana === 'any') return ALL_MANA_COLORS;
+    return null;
+  }
+
   function handleToggleTap(card: CardInstance) {
     const def = getCardDefinition(card.defId);
-    if (!card.tapped && def.type === 'land' && def.producesMana) {
-      if (Array.isArray(def.producesMana)) {
-        enqueueManaChoice(card.instanceId, def.producesMana);
-        return;
-      }
-      if (def.producesMana === 'any') {
-        enqueueManaChoice(card.instanceId, ALL_MANA_COLORS);
+    if (!card.tapped) {
+      const options = manaTapOptions(def);
+      if (options) {
+        enqueueManaChoice(card.instanceId, options);
         return;
       }
     }
@@ -550,8 +674,9 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
       const found = findCard(state, id);
       if (!found || found.zone !== 'battlefield' || found.card.tapped) continue;
       const def = getCardDefinition(found.card.defId);
-      if (def.type === 'land' && (Array.isArray(def.producesMana) || def.producesMana === 'any')) {
-        enqueueManaChoice(id, Array.isArray(def.producesMana) ? def.producesMana : ALL_MANA_COLORS);
+      const options = manaTapOptions(def);
+      if (options) {
+        enqueueManaChoice(id, options);
       } else {
         onAction({ type: 'TOGGLE_TAP', instanceId: id });
       }
@@ -589,14 +714,6 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openPanelId]);
 
-  // My View / Opponent View still render both boards (the other one mirrored
-  // above, like Full Board) so scrolling up reveals it - but land on the
-  // focused player's board by default instead of starting scrolled to the top.
-  useEffect(() => {
-    if (effectiveViewMode === 'full') return;
-    focusZoneRef.current?.scrollIntoView({ block: 'start' });
-  }, [effectiveViewMode]);
-
   function startPhaseDrag(e: React.MouseEvent) {
     if ((e.target as HTMLElement).closest('button')) return;
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -630,7 +747,30 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     frontProps: { selected?: boolean; onClick: () => void; onDoubleClick: () => void },
   ) {
     if (group.length === 1) {
-      return <Card definition={getCardDefinition(front.defId)} instance={displayInstance(front)} {...frontProps} />;
+      const def = getCardDefinition(front.defId);
+      const tapOptions = !front.tapped ? manaTapOptions(def) : null;
+      const cardEl = <Card definition={def} instance={displayInstance(front)} {...frontProps} onDoubleClick={tapOptions ? undefined : frontProps.onDoubleClick} />;
+      if (!tapOptions) return cardEl;
+      return (
+        <div className="battlefield-card-with-pips">
+          {cardEl}
+          <div className="battlefield-mana-pips">
+            {tapOptions.map((color) => (
+              <button
+                key={color}
+                className={`mana-tap-pip mana-${color}`}
+                title={`Tap for ${color}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAction({ type: 'TOGGLE_TAP', instanceId: front.instanceId, chosenColor: color });
+                }}
+              >
+                {color}
+              </button>
+            ))}
+          </div>
+        </div>
+      );
     }
     const behind = group.filter((g) => g.instanceId !== front.instanceId);
     const depthOrder = [...behind.filter((g) => !g.tapped), ...behind.filter((g) => g.tapped)];
@@ -686,7 +826,8 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     // right up until "Attack with X" / "Confirm blockers" is pressed.
     const acceptsAttackerRemoval = isDeclaringAttackers && !isOpponentSide;
     const acceptsBlockerRemoval = isDeclaringBlockers && !isOpponentSide;
-    const selected = pendingBlocker === c.instanceId || multiSelected.has(c.instanceId);
+    const isLegalTarget = isLegalPendingTarget(c, ownerId);
+    const selected = pendingBlocker === c.instanceId || multiSelected.has(c.instanceId) || isLegalTarget;
 
     return (
       <div key={c.instanceId} className={isDead ? 'destroyed-card-wrapper' : ''} ref={(el) => registerCardRef(c.instanceId, el)}>
@@ -710,7 +851,9 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
             selected,
             onClick: () => {
               if (isDead) return;
-              if (canAttackThis) toggleAttacker(c.instanceId);
+              if (isLegalTarget) {
+                onAction({ type: 'CHOOSE_TARGET', targetInstanceId: c.instanceId });
+              } else if (canAttackThis) toggleAttacker(c.instanceId);
               else if (canBeBlocker) handleBlockerCandidateClick(c.instanceId);
               else setOpenPanelId(c.instanceId);
             },
@@ -728,6 +871,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     const c = group.find((g) => !g.tapped) ?? group[0];
     const isPendingManaChoice = manaChoiceQueue.length > 0 && manaChoiceQueue[0].instanceId === c.instanceId;
     const canReorder = reorderAllowed && stackCount === 1;
+    const isLegalTarget = isLegalPendingTarget(c, playerId);
     return (
       <div key={c.instanceId} ref={(el) => registerCardRef(c.instanceId, el)}>
         <div
@@ -737,8 +881,11 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           onDrop={() => reorderAllowed && draggedInstanceId && handleRowDrop(playerId, rowKey, rowCards, c.instanceId)}
         >
           {renderStackedCard(group, c, {
-            selected: multiSelected.has(c.instanceId) || isPendingManaChoice,
-            onClick: () => setOpenPanelId(c.instanceId),
+            selected: multiSelected.has(c.instanceId) || isPendingManaChoice || isLegalTarget,
+            onClick: () => {
+              if (isLegalTarget) onAction({ type: 'CHOOSE_TARGET', targetInstanceId: c.instanceId });
+              else setOpenPanelId(c.instanceId);
+            },
             onDoubleClick: () => stackCount === 1 && handleToggleTap(c),
           })}
         </div>
@@ -812,7 +959,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
    * false, showing their board the way THEY see it instead of upside-down
    * across the table, without granting any extra visibility or control.
    */
-  function renderPlayerZone(player: PlayerState, isOpponentSide: boolean, mirrorLayout: boolean = isOpponentSide, sectionRef?: React.Ref<HTMLElement>) {
+  function renderPlayerZone(player: PlayerState, isOpponentSide: boolean, mirrorLayout: boolean = isOpponentSide) {
     const { creatures, others, lands } = splitBattlefield(player.zones.battlefield);
     const visibleCreatures = creatures.filter((c) => !isInCombatZone(player.id, c.instanceId));
     const creatureGroups = groupForStacking(orderedRow(player.id, 'creatures', visibleCreatures), (c) => state.pendingDeaths.includes(c.instanceId));
@@ -839,6 +986,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           <Card definition={{ id: '', name: '', type: 'creature', costLabel: '', text: '', imagePath: '' }} faceDown />
           <span className="library-stack-count">{player.zones.library.length}</span>
         </div>
+        <ManaRow player={player} />
       </div>
     );
 
@@ -912,12 +1060,11 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
             </div>
           )}
         </div>
-        <ManaRow player={player} />
       </div>
     );
 
     return (
-      <section ref={sectionRef} className={`player-zone ${isOpponentSide ? 'opponent-zone' : 'your-zone'}`}>
+      <section className={`player-zone ${isOpponentSide ? 'opponent-zone' : 'your-zone'}`}>
         {mirrorLayout && lifeRow}
         {mirrorLayout && handRow}
         <div className="zone-top-row">
@@ -993,93 +1140,118 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           if (!found) return null;
           const attackerIsDead = state.pendingDeaths.includes(id);
           const blockers = isDeclaringAttackers ? [] : blockersFor(id);
-          return (
-            <div key={id} className="combat-column">
-              <div
-                className={`combat-attacker-cell ${attackerIsDead ? 'destroyed-card-wrapper' : ''}`}
-                draggable={isDeclaringAttackers}
-                onDragStart={() => isDeclaringAttackers && setDraggedInstanceId(id)}
-              >
-                <Card
-                  definition={getCardDefinition(found.card.defId)}
-                  instance={{ ...found.card, tapped: false }}
-                  onClick={() => isDeclaringAttackers && toggleAttacker(id)}
-                />
-              </div>
-              {blockerSlotsVisible && (
+          // Only previewed with exactly one blocker - with more, the attacker
+          // still has to choose a damage order before it's determined at all.
+          const soleBlocker = blockers.length === 1 ? findCard(state, blockers[0]) : null;
+          const singleBlockPreview = soleBlocker
+            ? previewSingleBlockDeaths(getCardDefinition(found.card.defId), found.card, getCardDefinition(soleBlocker.card.defId), soleBlocker.card)
+            : null;
+          const attackerCellEl = (
+            <div
+              className={`combat-attacker-cell ${attackerIsDead || singleBlockPreview?.attackerDies ? 'destroyed-card-wrapper' : ''}`}
+              draggable={isDeclaringAttackers}
+              onDragStart={() => isDeclaringAttackers && setDraggedInstanceId(id)}
+            >
+              <Card
+                definition={getCardDefinition(found.card.defId)}
+                instance={{ ...found.card, tapped: false }}
+                onClick={() => isDeclaringAttackers && toggleAttacker(id)}
+              />
+            </div>
+          );
+
+          const blockerSlotEl = blockerSlotsVisible && (
+            <div
+              className="combat-blocker-slot"
+              onDragOver={(e) => isDeclaringBlockers && e.preventDefault()}
+              onDrop={() => {
+                if (isDeclaringBlockers && draggedInstanceId) {
+                  assignBlocker(id, draggedInstanceId);
+                  setDraggedInstanceId(null);
+                }
+              }}
+              onClick={() => isDeclaringBlockers && handleAttackerClickForBlocking(id)}
+            >
+              {blockers.length === 0 ? (
+                <span className="combat-blocker-slot-empty">{isDeclaringBlockers ? 'Drop blocker here' : 'No blockers'}</span>
+              ) : blockers.length >= 3 ? (
+                // Three or more read better as a pile, like a land stack
+                // on the battlefield - click it to see (and, while still
+                // declaring blockers, remove) any of them individually.
                 <div
-                  className="combat-blocker-slot"
-                  onDragOver={(e) => isDeclaringBlockers && e.preventDefault()}
-                  onDrop={() => {
-                    if (isDeclaringBlockers && draggedInstanceId) {
-                      assignBlocker(id, draggedInstanceId);
-                      setDraggedInstanceId(null);
-                    }
+                  className="combat-blocker-pile"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setOpenBlockerPile(id);
                   }}
-                  onClick={() => isDeclaringBlockers && handleAttackerClickForBlocking(id)}
+                  title="Click to see all blockers"
                 >
-                  {blockers.length === 0 ? (
-                    <span className="combat-blocker-slot-empty">{isDeclaringBlockers ? 'Drop blocker here' : 'No blockers'}</span>
-                  ) : blockers.length >= 3 ? (
-                    // Three or more read better as a pile, like a land stack
-                    // on the battlefield - click it to see (and, while still
-                    // declaring blockers, remove) any of them individually.
+                  {blockers.slice(0, 3).map((bId, i) => {
+                    const bf = findCard(state, bId);
+                    if (!bf) return null;
+                    return (
+                      <div
+                        key={bId}
+                        className="combat-blocker-stacked combat-blocker-pile-layer"
+                        style={{ transform: `translate(${i * 8}px, ${i * 8}px)`, zIndex: i }}
+                      >
+                        <Card definition={getCardDefinition(bf.card.defId)} instance={{ ...bf.card, tapped: false }} />
+                      </div>
+                    );
+                  })}
+                  <span className="battlefield-stack-count combat-blocker-pile-count">×{blockers.length}</span>
+                </div>
+              ) : (
+                // Two blockers read more clearly side by side.
+                blockers.map((bId, i) => {
+                  const bf = findCard(state, bId);
+                  if (!bf) return null;
+                  const blockerIsDead = state.pendingDeaths.includes(bId);
+                  const wouldDie = blockers.length === 1 && singleBlockPreview?.blockerDies;
+                  return (
                     <div
-                      className="combat-blocker-pile"
+                      key={bId}
+                      className={`combat-blocker-stacked ${blockerIsDead || wouldDie ? 'destroyed-card-wrapper' : ''}`}
+                      style={{ marginLeft: i > 0 ? 8 : 0, zIndex: i }}
+                      draggable={isDeclaringBlockers}
+                      onDragStart={(e) => {
+                        e.stopPropagation();
+                        if (isDeclaringBlockers) setDraggedInstanceId(bId);
+                      }}
                       onClick={(e) => {
                         e.stopPropagation();
-                        setOpenBlockerPile(id);
+                        if (isDeclaringBlockers) removeBlockerAssignment(id, bId);
                       }}
-                      title="Click to see all blockers"
+                      title={isDeclaringBlockers ? 'Click, or drag back out, to remove this blocker' : ''}
                     >
-                      {blockers.slice(0, 3).map((bId, i) => {
-                        const bf = findCard(state, bId);
-                        if (!bf) return null;
-                        return (
-                          <div
-                            key={bId}
-                            className="combat-blocker-stacked combat-blocker-pile-layer"
-                            style={{ transform: `translate(${i * 8}px, ${i * 8}px)`, zIndex: i }}
-                          >
-                            <Card definition={getCardDefinition(bf.card.defId)} instance={{ ...bf.card, tapped: false }} />
-                          </div>
-                        );
-                      })}
-                      <span className="battlefield-stack-count combat-blocker-pile-count">×{blockers.length}</span>
+                      <Card definition={getCardDefinition(bf.card.defId)} instance={{ ...bf.card, tapped: false }} />
                     </div>
-                  ) : (
-                    // Two blockers read more clearly side by side.
-                    blockers.map((bId, i) => {
-                      const bf = findCard(state, bId);
-                      if (!bf) return null;
-                      const blockerIsDead = state.pendingDeaths.includes(bId);
-                      return (
-                        <div
-                          key={bId}
-                          className={`combat-blocker-stacked ${blockerIsDead ? 'destroyed-card-wrapper' : ''}`}
-                          style={{ marginLeft: i > 0 ? 8 : 0, zIndex: i }}
-                          draggable={isDeclaringBlockers}
-                          onDragStart={(e) => {
-                            e.stopPropagation();
-                            if (isDeclaringBlockers) setDraggedInstanceId(bId);
-                          }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (isDeclaringBlockers) removeBlockerAssignment(id, bId);
-                          }}
-                          title={isDeclaringBlockers ? 'Click, or drag back out, to remove this blocker' : ''}
-                        >
-                          <Card definition={getCardDefinition(bf.card.defId)} instance={{ ...bf.card, tapped: false }} />
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
+                  );
+                })
+              )}
+            </div>
+          );
+
+          // The active (attacking) player sees their blocker coming in from
+          // above their attacker; the defending player sees it below - same
+          // two elements, just swapped depending on whose screen this is.
+          const isAttackerPerspective = state.activePlayerId === yourPlayerId;
+          return (
+            <div key={id} className="combat-column">
+              {isAttackerPerspective ? (
+                <>
+                  {blockerSlotEl}
+                  {attackerCellEl}
+                </>
+              ) : (
+                <>
+                  {attackerCellEl}
+                  {blockerSlotEl}
+                </>
               )}
             </div>
           );
         })}
-        {isDeclaringAttackers && selectedAttackers.size === 0 && <p className="combat-zone-empty">Nothing here yet</p>}
       </div>
     </div>
   );
@@ -1112,35 +1284,70 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
         </div>
       )}
 
-      <div className={`game-board-main ${effectiveViewMode === 'full' ? 'game-board-main-zoomed' : ''}`}>
-        {state.winnerId && !winnerDismissed && (
-          <div className="winner-overlay" onClick={() => setWinnerDismissed(true)}>
-            <div className="winner-banner" onClick={(e) => e.stopPropagation()}>
-              {state.winnerId === yourPlayerId ? 'You win!' : `${opponent.name} wins.`}
-              <div className="winner-dismiss-hint">Click anywhere to close</div>
-            </div>
+      {/* Rendered outside the (possibly transform: scale'd) board on purpose -
+          a `transform` on an ancestor becomes the containing block for
+          position: fixed descendants, which would shrink this to the
+          zoomed board's box instead of covering the real viewport. */}
+      {state.winnerId && !winnerDismissed && (
+        <div className="winner-overlay" onClick={() => setWinnerDismissed(true)}>
+          <div className="winner-banner" onClick={(e) => e.stopPropagation()}>
+            {state.winnerId === yourPlayerId ? 'You win!' : `${opponent.name} wins.`}
+            <div className="winner-dismiss-hint">Click anywhere to close</div>
           </div>
-        )}
+        </div>
+      )}
 
-        {effectiveViewMode === 'full' ? (
-          <>
-            {renderPlayerZone(opponent, true)}
-            {combatZoneEl}
-            {renderPlayerZone(you, false)}
-          </>
-        ) : effectiveViewMode === 'mine' ? (
-          // Opponent's board still renders, mirrored above like Full Board -
-          // scrolling up reveals it. The page defaults to your board though (see effect above).
-          <>
-            {renderPlayerZone(opponent, true, true)}
-            {renderPlayerZone(you, false, false, focusZoneRef)}
-          </>
-        ) : (
-          <>
-            {renderPlayerZone(you, false, true)}
-            {renderPlayerZone(opponent, true, false, focusZoneRef)}
-          </>
-        )}
+      {/* Pinned and impossible to miss, in the "danger" red - Opponent View
+          disables all interaction below (pointer-events: none), so a player
+          who forgets which view they're in shouldn't be left wondering why
+          nothing responds to clicks. */}
+      {isOpponentViewLocked && (
+        <div className="opponent-view-lock-banner">
+          <span>Viewing {opponent.name}'s side</span>
+          <button className="opponent-view-exit-button" onClick={() => changeViewMode('mine')}>
+            End Opponent View
+          </button>
+        </div>
+      )}
+
+      {pendingTargetForYou && (
+        <div className="pending-target-banner">
+          <span>
+            Choose a target for {pendingTargetSourceName}'s ability - click an opponent's{' '}
+            {pendingTargetForYou.effect.targetType === 'artifactOrCreature' ? 'artifact or creature' : pendingTargetForYou.effect.targetType}.
+          </span>
+        </div>
+      )}
+
+      <div
+        className="game-board-main-zoom-wrapper"
+        style={naturalBoardHeight > 0 ? { height: naturalBoardHeight * fullBoardZoom, overflow: 'hidden' } : undefined}
+      >
+        <div
+          ref={gameBoardMainRef}
+          className="game-board-main"
+          style={{ transform: `scale(${fullBoardZoom})`, transformOrigin: 'top center', pointerEvents: isOpponentViewLocked ? 'none' : undefined }}
+        >
+          {effectiveViewMode === 'full' ? (
+            <>
+              {renderPlayerZone(opponent, true)}
+              {combatZoneEl}
+              {renderPlayerZone(you, false)}
+            </>
+          ) : effectiveViewMode === 'mine' ? (
+            // Opponent's board still renders, mirrored above like Full Board -
+            // scroll up yourself to see it; switching views never scrolls for you.
+            <>
+              {renderPlayerZone(opponent, true, true)}
+              {renderPlayerZone(you, false, false)}
+            </>
+          ) : (
+            <>
+              {renderPlayerZone(you, false, true)}
+              {renderPlayerZone(opponent, true, false)}
+            </>
+          )}
+        </div>
       </div>
 
       {/* In normal document flow (not fixed) - only comes into view once
@@ -1164,27 +1371,74 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
         </div>
 
         <div className="view-mode-toggle">
-          <button
-            className={`view-mode-button ${viewMode === 'mine' ? 'view-mode-button-active' : ''}`}
-            disabled={showCombatZones}
-            title={showCombatZones ? 'Combat shows the full board until it resolves' : ''}
-            onClick={() => setViewMode('mine')}
-          >
-            My View
-          </button>
-          <button
-            className={`view-mode-button ${viewMode === 'opponent' ? 'view-mode-button-active' : ''}`}
-            disabled={showCombatZones}
-            title={showCombatZones ? 'Combat shows the full board until it resolves' : ''}
-            onClick={() => setViewMode('opponent')}
-          >
-            Opponent View
-          </button>
-          <button className={`view-mode-button ${viewMode === 'full' ? 'view-mode-button-active' : ''}`} onClick={() => setViewMode('full')}>
-            Full Board
+          {!editingZoom && (
+            <>
+              <button
+                className={`view-mode-button ${viewMode === 'mine' ? 'view-mode-button-active' : ''}`}
+                disabled={showCombatZones}
+                title={showCombatZones ? 'Combat shows the full board until it resolves' : ''}
+                onClick={() => changeViewMode('mine')}
+              >
+                My View
+              </button>
+              <button
+                className={`view-mode-button ${viewMode === 'opponent' ? 'view-mode-button-active' : ''}`}
+                disabled={showCombatZones}
+                title={showCombatZones ? 'Combat shows the full board until it resolves' : ''}
+                onClick={() => changeViewMode('opponent')}
+              >
+                Opponent View
+              </button>
+              <button className={`view-mode-button ${viewMode === 'full' ? 'view-mode-button-active' : ''}`} onClick={() => changeViewMode('full')}>
+                Full Board
+              </button>
+            </>
+          )}
+          <button className="view-mode-button" onClick={() => setEditingZoom(true)}>
+            Edit View
           </button>
         </div>
       </div>
+
+      {/* Pinned to the screen (not in normal flow) while editing, so it's
+          always reachable regardless of scroll position - Done dismisses it.
+          Whichever view is active gets its own zoom (see zoomByMode above). */}
+      {editingZoom && (
+        <div className="full-board-zoom-dock">
+          <button
+            className="full-board-zoom-button"
+            disabled={fullBoardZoom <= MIN_FULL_BOARD_ZOOM}
+            onClick={() => setFullBoardZoom((z) => Math.max(MIN_FULL_BOARD_ZOOM, +(z - FULL_BOARD_ZOOM_STEP).toFixed(2)))}
+            title="Zoom out"
+          >
+            −
+          </button>
+          <input
+            className="full-board-zoom-input"
+            type="number"
+            min={Math.round(MIN_FULL_BOARD_ZOOM * 100)}
+            max={Math.round(MAX_FULL_BOARD_ZOOM * 100)}
+            value={Math.round(fullBoardZoom * 100)}
+            onChange={(e) => {
+              const pct = parseInt(e.target.value, 10);
+              if (Number.isNaN(pct)) return;
+              setFullBoardZoom(Math.min(MAX_FULL_BOARD_ZOOM, Math.max(MIN_FULL_BOARD_ZOOM, pct / 100)));
+            }}
+          />
+          <span className="full-board-zoom-level">%</span>
+          <button
+            className="full-board-zoom-button"
+            disabled={fullBoardZoom >= MAX_FULL_BOARD_ZOOM}
+            onClick={() => setFullBoardZoom((z) => Math.min(MAX_FULL_BOARD_ZOOM, +(z + FULL_BOARD_ZOOM_STEP).toFixed(2)))}
+            title="Zoom in"
+          >
+            +
+          </button>
+          <button className="view-mode-button" onClick={() => setEditingZoom(false)}>
+            Done
+          </button>
+        </div>
+      )}
 
       <EventLog log={state.log} />
 
@@ -1227,13 +1481,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           attachedToName={
             openCard.card.attachedToInstanceId ? getCardDefinition(findCard(state, openCard.card.attachedToInstanceId)?.card.defId ?? '')?.name ?? null : null
           }
-          manaOptions={(() => {
-            const def = getCardDefinition(openCard.card.defId);
-            if (def.type !== 'land' || !def.producesMana) return undefined;
-            if (Array.isArray(def.producesMana)) return def.producesMana;
-            if (def.producesMana === 'any') return ALL_MANA_COLORS;
-            return undefined;
-          })()}
+          manaOptions={manaTapOptions(getCardDefinition(openCard.card.defId)) ?? undefined}
           onToggleTap={() => {
             onAction({ type: 'TOGGLE_TAP', instanceId: openCard.card.instanceId });
             setOpenPanelId(null);
@@ -1253,6 +1501,10 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           onStartAttach={() => setOpenPanelId(null)}
           onDetach={() => {
             onAction({ type: 'DETACH_CARD', instanceId: openCard.card.instanceId });
+            setOpenPanelId(null);
+          }}
+          onCycle={() => {
+            onAction({ type: 'CYCLE_CARD', instanceId: openCard.card.instanceId });
             setOpenPanelId(null);
           }}
           onClose={() => setOpenPanelId(null)}
