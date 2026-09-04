@@ -9,6 +9,7 @@ import CardActionsPanel from './CardActionsPanel';
 import ZoneModal from './ZoneModal';
 import BlockOrderModal from './BlockOrderModal';
 import BlockerPileModal from './BlockerPileModal';
+import RevealDivideModal from './RevealDivideModal';
 import EventLog from './EventLog';
 import MutualAdjustmentControls from './MutualAdjustmentControls';
 import { useMarkGameActive } from '../context/GameActivity';
@@ -1871,6 +1872,10 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
             onAction({ type: 'CYCLE_CARD', instanceId: openCard.card.instanceId });
             setOpenPanelId(null);
           }}
+          onFlashback={() => {
+            onAction({ type: 'CAST_FROM_GRAVEYARD', instanceId: openCard.card.instanceId });
+            setOpenPanelId(null);
+          }}
           onClose={() => setOpenPanelId(null)}
         />
       )}
@@ -1935,6 +1940,34 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                 onAction({ type: 'ORDER_BLOCKERS', attackerInstanceId: attackerNeedingOrder.attackerInstanceId, orderedBlockerIds }, state.activePlayerId);
                 setOrderedAttackerIds((prev) => new Set(prev).add(attackerNeedingOrder.attackerInstanceId));
               }}
+            />
+          );
+        })()}
+
+      {state.pendingReveal &&
+        (() => {
+          const pending = state.pendingReveal;
+          const step = pending.steps[pending.stepIndex];
+          const sourceFound = findCard(state, pending.sourceInstanceId);
+          const sourceName = sourceFound ? getCardDefinition(sourceFound.card.defId).name : 'This spell';
+          const controller = state.players.find((p) => p.id === pending.controllerId)!;
+          const opponentOfSource = state.players.find((p) => p.id !== pending.controllerId)!;
+          const expectedChooserId = !step ? null : step.chooser === 'you' ? pending.controllerId : opponentOfSource.id;
+          const isYourChoice = !!expectedChooserId && (expectedChooserId === yourPlayerId || !!soloControl);
+          const chooserName = expectedChooserId === controller.id ? controller.name : opponentOfSource.name;
+          const destinationLabel = !step
+            ? ''
+            : step.destination === 'hand'
+              ? `${controller.name}'s hand`
+              : `the bottom of ${controller.name}'s library`;
+          return (
+            <RevealDivideModal
+              sourceName={sourceName}
+              cards={pending.revealed.map((c) => ({ definition: getCardDefinition(c.defId), instance: c }))}
+              isYourChoice={isYourChoice}
+              chooserName={chooserName}
+              destinationLabel={destinationLabel}
+              onChoose={(instanceId) => onAction({ type: 'CHOOSE_REVEALED_CARD', instanceId }, expectedChooserId ?? yourPlayerId)}
             />
           );
         })()}

@@ -66,6 +66,31 @@ export function resolveCardEffects(
       } else {
         next = { ...next, pendingTarget: { sourceInstanceId, controllerId: playerId, effect } };
       }
+    } else if (effect.type === 'revealAndDivide') {
+      const player = getPlayer(next, playerId);
+      const revealed = player.zones.library.slice(0, effect.count);
+      next = updatePlayer(next, playerId, (p) => ({ ...p, zones: { ...p.zones, library: p.zones.library.slice(effect.count) } }));
+
+      if (revealed.length === 0) {
+        logLines.push(`${player.name}'s library is empty - nothing to reveal.`);
+      } else if (revealed.length === 1 || effect.steps.length === 0) {
+        // Too few cards to even go through the first pick - everything just
+        // falls straight through to the remainder destination.
+        next = updatePlayer(next, playerId, (p) => ({
+          ...p,
+          zones: {
+            ...p.zones,
+            hand: effect.remainderDestination === 'hand' ? [...p.zones.hand, ...revealed] : p.zones.hand,
+            library: effect.remainderDestination === 'bottomOfLibrary' ? [...p.zones.library, ...revealed] : p.zones.library,
+          },
+        }));
+        logLines.push(
+          `${player.name} reveals ${revealed.length} card(s) - it goes straight to ${effect.remainderDestination === 'hand' ? 'hand' : 'the bottom of the library'}.`
+        );
+      } else {
+        next = { ...next, pendingReveal: { sourceInstanceId, controllerId: playerId, revealed, stepIndex: 0, steps: effect.steps, remainderDestination: effect.remainderDestination } };
+        logLines.push(`${player.name} reveals the top ${revealed.length} card(s) of their library.`);
+      }
     }
   }
 

@@ -49,7 +49,24 @@ export interface TapAndStunEffect {
   targetType: 'artifact' | 'creature' | 'artifactOrCreature';
 }
 
-export type CardEffect = CreateTokenEffect | TapAndStunEffect;
+/**
+ * "Reveal the top N cards of your library" followed by a fixed sequence of
+ * alternating picks - each step names who chooses next and where their pick
+ * goes, consuming the revealed cards one at a time; once fewer cards remain
+ * than there are steps left, whatever's left automatically goes to
+ * `remainderDestination`. See GameState.pendingReveal and
+ * engine/actions.ts: chooseRevealedCard. "you"/"opponent" are always
+ * relative to whoever controls the source card, never to whichever player
+ * happens to be acting.
+ */
+export interface RevealAndDivideEffect {
+  type: 'revealAndDivide';
+  count: number;
+  steps: { chooser: 'you' | 'opponent'; destination: 'hand' | 'bottomOfLibrary' }[];
+  remainderDestination: 'hand' | 'bottomOfLibrary';
+}
+
+export type CardEffect = CreateTokenEffect | TapAndStunEffect | RevealAndDivideEffect;
 
 /**
  * "[Basic land type]cycling N" and plain "Cycling N" - discard this card
@@ -72,6 +89,11 @@ export interface LandCountBuff {
   minLands: number;
   power: number;
   toughness: number;
+}
+
+/** Cast this from the graveyard once, for this cost, then exile it instead of it going to the graveyard again. */
+export interface FlashbackAbility {
+  cost: string;
 }
 
 export interface CardDefinition {
@@ -103,6 +125,8 @@ export interface CardDefinition {
   cycling?: CyclingAbility;
   /** See LandCountBuff - a static, always-on-condition-met power/toughness buff. */
   landCountBuff?: LandCountBuff;
+  /** See FlashbackAbility - cast from the graveyard, see engine/actions.ts: castFromGraveyard. */
+  flashback?: FlashbackAbility;
 }
 
 export interface Counter {
@@ -200,6 +224,19 @@ export interface GameState {
    * it can resolve (e.g. Ice Flan's tap-and-stun) - cleared by CHOOSE_TARGET.
    * Null whenever nothing is waiting on a target. */
   pendingTarget: { sourceInstanceId: string; controllerId: string; effect: TapAndStunEffect } | null;
+  /** Set while a RevealAndDivideEffect is mid-sequence - cleared automatically
+   * once the last card is placed. `revealed` holds the actual cards still
+   * unassigned (public information - both players can see them), separate
+   * from the six normal zones since they're neither in the library nor
+   * anywhere else until a step places them. */
+  pendingReveal: {
+    sourceInstanceId: string;
+    controllerId: string;
+    revealed: CardInstance[];
+    stepIndex: number;
+    steps: RevealAndDivideEffect['steps'];
+    remainderDestination: 'hand' | 'bottomOfLibrary';
+  } | null;
 }
 
 export type GameAction =
@@ -219,6 +256,8 @@ export type GameAction =
   | { type: 'ORDER_BLOCKERS'; attackerInstanceId: string; orderedBlockerIds: string[] }
   | { type: 'CHOOSE_TARGET'; targetInstanceId: string }
   | { type: 'CYCLE_CARD'; instanceId: string }
+  | { type: 'CHOOSE_REVEALED_CARD'; instanceId: string }
+  | { type: 'CAST_FROM_GRAVEYARD'; instanceId: string; chosenX?: number }
   | { type: 'NEXT_PHASE' }
   | { type: 'END_TURN' }
   | { type: 'READY_TO_START' }

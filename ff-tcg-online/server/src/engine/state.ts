@@ -62,6 +62,7 @@ export function createInitialState(player1Name: string, player2Name: string, pla
     mutualAdjustment: { status: 'inactive', agreedBy: [] },
     pendingDeaths: [],
     pendingTarget: null,
+    pendingReveal: null,
   };
 }
 

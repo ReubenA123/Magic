@@ -2,7 +2,7 @@
 // engine/actions.ts
 // ============================================================================
 
-import { ActionResult, CombatAssignment, GameAction, GameState, ManaColor, Phase, ZoneName } from '../types';
+import { ActionResult, CardInstance, CombatAssignment, GameAction, GameState, ManaColor, Phase, ZoneName } from '../types';
 import { findCardAnywhere, getOpponent, getPlayer, updatePlayer, detachEverythingFrom } from './state'; import { getCardDefinition } from '../data/cards';
 import { canPay, payCost, parseCostLabel, emptyManaPool } from './mana';
 import { hasKeyword } from './keywords';
@@ -48,6 +48,10 @@ export function applyAction(state: GameState, action: GameAction, playerId: stri
       return chooseTarget(state, playerId, action.targetInstanceId);
     case 'CYCLE_CARD':
       return cycleCard(state, playerId, action.instanceId);
+    case 'CHOOSE_REVEALED_CARD':
+      return chooseRevealedCard(state, playerId, action.instanceId);
+    case 'CAST_FROM_GRAVEYARD':
+      return castFromGraveyard(state, playerId, action.instanceId, action.chosenX);
     case 'NEXT_PHASE':
       return nextPhase(state, playerId);
     case 'END_TURN':
@@ -306,6 +310,107 @@ function castCard(state: GameState, playerId: string, instanceId: string, chosen
   const taxNote = commanderTax > 0 ? ` (+${commanderTax} commander tax paid)` : '';
   const freeNote = mutual ? ' (free - Mutual Adjustment active)' : '';
   return { ok: true, state: { ...next, log: [...next.log, `${player.name} casts ${def.name}${xNote}${taxNote}${freeNote}.`, ...effectLogLines] } };
+}
+
+/** "Flashback N" - cast this once from the graveyard for its flashback cost, then it's exiled instead of going to the graveyard again. */
+function castFromGraveyard(state: GameState, playerId: string, instanceId: string, chosenX?: number): ActionResult {
+  const player = getPlayer(state, playerId);
+  const mutual = isMutualActive(state);
+
+  const card = player.zones.graveyard.find((c) => c.instanceId === instanceId);
+  if (!card) return { ok: false, error: 'That card is not in your graveyard.' };
+
+  const def = getCardDefinition(card.defId);
+  if (!def.flashback) return { ok: false, error: `${def.name} has no flashback ability.` };
+
+  if (!mutual && def.type !== 'instant' && !hasKeyword(def.text, 'flash')) {
+    if (state.activePlayerId !== playerId) return { ok: false, error: `${def.name} can only be cast on your own turn (no flash).` };
+    if (state.phase !== 'main1' && state.phase !== 'main2') return { ok: false, error: `${def.name} can only be cast during a main phase (no flash).` };
+  }
+
+  const parsed = parseCostLabel(def.flashback.cost);
+  const extraGeneric = parsed.hasX ? chosenX ?? 0 : 0;
+
+  if (!mutual && !canPay(player.manaPool, parsed, extraGeneric)) {
+    return { ok: false, error: `Not enough mana to flashback ${def.name} (${def.flashback.cost}).` };
+  }
+
+  let next = state;
+  if (!mutual) next = updatePlayer(next, playerId, (p) => ({ ...p, manaPool: payCost(p.manaPool, parsed, extraGeneric) }));
+  next = updatePlayer(next, playerId, (p) => ({ ...p, zones: { ...p.zones, graveyard: p.zones.graveyard.filter((c) => c.instanceId !== instanceId) } }));
+
+  const isPermanent = def.type === 'creature' || def.type === 'artifact' || def.type === 'enchantment';
+  const targetZone: ZoneName = isPermanent ? 'battlefield' : 'exile';
+  const hasHaste = hasKeyword(def.text, 'haste');
+  const movedCard = { ...card, tapped: false, damageMarked: 0, summoningSick: def.type === 'creature' ? !hasHaste : false };
+
+  next = updatePlayer(next, playerId, (p) => ({ ...p, zones: { ...p.zones, [targetZone]: [...p.zones[targetZone], movedCard] } }));
+  next = checkLegendRule(next, playerId);
+
+  let effectLogLines: string[] = [];
+  const autoEffects = isPermanent ? def.onEnter : def.onCast;
+  if (autoEffects && autoEffects.length > 0) {
+    const resolved = resolveCardEffects(next, playerId, autoEffects, movedCard.instanceId);
+    next = resolved.state;
+    effectLogLines = resolved.logLines;
+  }
+
+  const xNote = parsed.hasX ? ` (X=${chosenX ?? 0})` : '';
+  const freeNote = mutual ? ' (free - Mutual Adjustment active)' : '';
+  const exileNote = isPermanent ? '' : ', then it is exiled';
+  return { ok: true, state: { ...next, log: [...next.log, `${player.name} casts ${def.name} via flashback${xNote}${freeNote}${exileNote}.`, ...effectLogLines] } };
+}
+
+/**
+ * Places one of a pendingReveal's still-unassigned cards according to the
+ * current step, then either advances to the next step or - once at most one
+ * card would be left to choose between - auto-resolves everything remaining
+ * to remainderDestination and clears pendingReveal. See types.ts: RevealAndDivideEffect.
+ */
+function chooseRevealedCard(state: GameState, playerId: string, instanceId: string): ActionResult {
+  const pending = state.pendingReveal;
+  if (!pending) return { ok: false, error: 'No reveal is waiting for a choice right now.' };
+  const step = pending.steps[pending.stepIndex];
+  if (!step) return { ok: false, error: 'No more choices to make for this reveal.' };
+
+  const expectedChooserId = step.chooser === 'you' ? pending.controllerId : getOpponent(state, pending.controllerId).id;
+  if (playerId !== expectedChooserId) return { ok: false, error: "It's not your choice to make." };
+
+  const card = pending.revealed.find((c) => c.instanceId === instanceId);
+  if (!card) return { ok: false, error: 'That card is not part of the current reveal.' };
+
+  const owner = getPlayer(state, pending.controllerId);
+  const remaining = pending.revealed.filter((c) => c.instanceId !== instanceId);
+
+  function place(s: GameState, c: CardInstance, destination: 'hand' | 'bottomOfLibrary'): GameState {
+    return updatePlayer(s, pending!.controllerId, (p) => ({
+      ...p,
+      zones: {
+        ...p.zones,
+        hand: destination === 'hand' ? [...p.zones.hand, c] : p.zones.hand,
+        library: destination === 'bottomOfLibrary' ? [...p.zones.library, c] : p.zones.library,
+      },
+    }));
+  }
+
+  let next = place(state, card, step.destination);
+  const chooser = getPlayer(next, playerId);
+  const destLabel = (d: 'hand' | 'bottomOfLibrary') => (d === 'hand' ? `${owner.name}'s hand` : `the bottom of ${owner.name}'s library`);
+  const def = getCardDefinition(card.defId);
+  const logLines = [`${chooser.name} puts ${def.name} into ${destLabel(step.destination)}.`];
+
+  const nextStepIndex = pending.stepIndex + 1;
+  if (remaining.length <= 1 || nextStepIndex >= pending.steps.length) {
+    for (const c of remaining) {
+      next = place(next, c, pending.remainderDestination);
+      logLines.push(`${getCardDefinition(c.defId).name} automatically goes to ${destLabel(pending.remainderDestination)}.`);
+    }
+    next = { ...next, pendingReveal: null };
+  } else {
+    next = { ...next, pendingReveal: { ...pending, revealed: remaining, stepIndex: nextStepIndex } };
+  }
+
+  return { ok: true, state: { ...next, log: [...next.log, ...logLines] } };
 }
 
 function activateAbility(state: GameState, playerId: string, instanceId: string, abilityId: string): ActionResult {

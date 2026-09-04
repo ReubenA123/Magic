@@ -1687,6 +1687,8 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'Reveal the top five cards of your library. Put one of them into your hand. Then choose an opponent. ' +
       "They put one on the bottom of your library. Then you put one into your hand. Then they put one on the bottom of your library. Put the other into your hand.\n" +
       "Flashback 7UU",
+    onCast: [{ type: 'revealAndDivide', count: 5, steps: [{ chooser: 'you', destination: 'hand' }, { chooser: 'opponent', destination: 'bottomOfLibrary' }, { chooser: 'you', destination: 'hand' }, { chooser: 'opponent', destination: 'bottomOfLibrary' }], remainderDestination: 'hand' }],
+    flashback: { cost: '7UU' },
     imagePath: '/assets/cards/memories-returning.webp'
   },
   {

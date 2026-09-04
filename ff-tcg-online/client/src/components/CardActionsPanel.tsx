@@ -23,6 +23,7 @@ interface CardActionsPanelProps {
   onStartAttach: () => void;
   onDetach: () => void;
   onCycle: () => void;
+  onFlashback: () => void;
   onClose: () => void;
 }
 
@@ -58,6 +59,7 @@ export default function CardActionsPanel({
   onStartAttach,
   onDetach,
   onCycle,
+  onFlashback,
   onClose,
 }: CardActionsPanelProps) {
   const [showManaChoice, setShowManaChoice] = useState(false);
@@ -69,6 +71,8 @@ export default function CardActionsPanel({
   const canPlayHere = currentZone === 'hand' || (currentZone === 'commander' && !isLand);
   const canCycleHere = currentZone === 'hand' && !!definition.cycling;
   const canCycle = canCycleHere && (mutualActive || canPay(ownerManaPool, parseCostLabel(definition.cycling!.cost), 0));
+  const canFlashbackHere = currentZone === 'graveyard' && !!definition.flashback;
+  const canFlashback = canFlashbackHere && (mutualActive || canPay(ownerManaPool, parseCostLabel(definition.flashback!.cost), 0));
   const isActualCommander = ownerCommanderDefId === definition.id;
   const isOnBattlefield = currentZone === 'battlefield';
   const needsManaChoice = !instance.tapped && !!manaOptions && manaOptions.length > 0;
@@ -207,6 +211,12 @@ export default function CardActionsPanel({
         {canCycleHere && (
           <button className="card-action-button secondary" disabled={!canCycle} onClick={onCycle} title={canCycle ? '' : 'Not enough mana'}>
             {`Cycle (${definition.cycling!.cost})`}
+          </button>
+        )}
+
+        {canFlashbackHere && (
+          <button className="card-action-button card-action-button-play" disabled={!canFlashback} onClick={onFlashback} title={canFlashback ? '' : 'Not enough mana'}>
+            {`Flashback (${definition.flashback!.cost})`}
           </button>
         )}
       </div>

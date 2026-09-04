@@ -143,6 +143,7 @@ export function createStateFromDeck(deck: SavedDeck, humanName: string): GameSta
     pendingDeaths: [],
     combatReadyPlayers: [],
     pendingTarget: null,
+    pendingReveal: null,
   };
 }
 
