@@ -94,7 +94,7 @@ export function createStateFromDeck(deck: SavedDeck, humanName: string): GameSta
       defId: deck.commanderId,
       ownerId: id,
       tapped: false,
-      counters: [{ label: 'Commander', amount: 1 }],
+      counters: [],
       damageMarked: 0,
       summoningSick: false,
     };

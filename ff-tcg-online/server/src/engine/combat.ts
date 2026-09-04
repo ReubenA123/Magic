@@ -2,21 +2,34 @@
 // engine/combat.ts
 // ============================================================================
 
-import { CardInstance, GameState } from '../types';
+import { CardDefinition, CardInstance, GameState } from '../types';
 import { getCardDefinition } from '../data/cards';
 import { getOpponent, updatePlayer, detachEverythingFrom } from './state';
 import { hasKeyword } from './keywords';
 
-function effectivePower(power: number | undefined, instance: CardInstance): number {
-  const plus = instance.counters.find((c) => c.label === '+1/+1')?.amount ?? 0;
-  const minus = instance.counters.find((c) => c.label === '-1/-1')?.amount ?? 0;
-  return (power ?? 0) + plus - minus;
+function countLands(state: GameState, controllerId: string): number {
+  const player = state.players.find((p) => p.id === controllerId);
+  if (!player) return 0;
+  return player.zones.battlefield.filter((c) => getCardDefinition(c.defId).type === 'land').length;
 }
 
-function effectiveToughness(toughness: number | undefined, instance: CardInstance): number {
+/** Whether def's landCountBuff (see types.ts) is currently active for this controller. */
+function hasActiveLandCountBuff(def: CardDefinition, state: GameState, controllerId: string): boolean {
+  return !!def.landCountBuff && countLands(state, controllerId) >= def.landCountBuff.minLands;
+}
+
+function effectivePower(def: CardDefinition, instance: CardInstance, state: GameState, controllerId: string): number {
   const plus = instance.counters.find((c) => c.label === '+1/+1')?.amount ?? 0;
   const minus = instance.counters.find((c) => c.label === '-1/-1')?.amount ?? 0;
-  return (toughness ?? 0) + plus - minus;
+  const buff = hasActiveLandCountBuff(def, state, controllerId) ? def.landCountBuff!.power : 0;
+  return (def.power ?? 0) + plus - minus + buff;
+}
+
+function effectiveToughness(def: CardDefinition, instance: CardInstance, state: GameState, controllerId: string): number {
+  const plus = instance.counters.find((c) => c.label === '+1/+1')?.amount ?? 0;
+  const minus = instance.counters.find((c) => c.label === '-1/-1')?.amount ?? 0;
+  const buff = hasActiveLandCountBuff(def, state, controllerId) ? def.landCountBuff!.toughness : 0;
+  return (def.toughness ?? 0) + plus - minus + buff;
 }
 
 function findInstance(state: GameState, instanceId: string) {
@@ -76,7 +89,7 @@ function dealDamagePass(state: GameState, pass: 1 | 2): GameState {
     const isLifelink = hasKeyword(attackerDef.text, 'lifelink');
 
     if (strikesInPass(attackerDef.text, pass)) {
-      const power = effectivePower(attackerDef.power, attackerFound.instance);
+      const power = effectivePower(attackerDef, attackerFound.instance, next, attackerFound.controllerId);
 
       if (blockers.length === 0) {
         const defender = getOpponent(next, attackerFound.controllerId);
@@ -88,7 +101,7 @@ function dealDamagePass(state: GameState, pass: 1 | 2): GameState {
         for (const blocker of blockers) {
           if (remaining <= 0) break;
           const blockerDef = getCardDefinition(blocker.instance.defId);
-          const toughnessLeft = Math.max(0, effectiveToughness(blockerDef.toughness, blocker.instance) - blocker.instance.damageMarked);
+          const toughnessLeft = Math.max(0, effectiveToughness(blockerDef, blocker.instance, next, blocker.controllerId) - blocker.instance.damageMarked);
           const lethal = isDeathtouch ? 1 : toughnessLeft;
           const assigned = isTrample ? Math.min(remaining, Math.max(lethal, 0)) : remaining;
           next = markDamage(next, blocker.instance.instanceId, assigned);
@@ -108,7 +121,7 @@ function dealDamagePass(state: GameState, pass: 1 | 2): GameState {
       const blockerDef = getCardDefinition(blocker.instance.defId);
       if (!strikesInPass(blockerDef.text, pass)) continue;
       if (isPendingDeath(next, attackerFound.instance.instanceId)) continue;
-      const blockerPower = effectivePower(blockerDef.power, blocker.instance);
+      const blockerPower = effectivePower(blockerDef, blocker.instance, next, blocker.controllerId);
       next = markDamage(next, attackerFound.instance.instanceId, blockerPower);
       next = { ...next, log: [...next.log, `${blockerDef.name} deals ${blockerPower} damage to ${attackerDef.name}.`] };
       if (hasKeyword(blockerDef.text, 'lifelink')) next = updatePlayer(next, blocker.controllerId, (p) => ({ ...p, life: p.life + blockerPower }));
@@ -129,7 +142,7 @@ function markPendingDeaths(state: GameState): GameState {
       const def = getCardDefinition(c.defId);
       if (def.type !== 'creature') continue;
       const isIndestructible = hasKeyword(def.text, 'indestructible');
-      const toughness = effectiveToughness(def.toughness, c);
+      const toughness = effectiveToughness(def, c, state, player.id);
       if (!isIndestructible && toughness > 0 && c.damageMarked >= toughness) newlyDead.push(c.instanceId);
     }
   }
@@ -172,9 +185,10 @@ export function resolvePendingDeaths(state: GameState): GameState {
     const survivors = player.zones.battlefield.filter((c) => !deadIds.includes(c.instanceId));
 
     // A commander dying goes to the command zone instead of the graveyard -
-    // its Commander Tax counter (if any, from a previous cast) rides along
-    // unchanged; engine/actions.ts: castCard is what actually adds the next
-    // +2 the next time it's cast from there.
+    // untapped (tapped means nothing there), and its Commander Tax goes up
+    // by 2 right away, on the return trip rather than the next cast - so a
+    // freshly-cast commander that's never died shows no tax at all, and each
+    // death after that raises what it'll cost to bring back out again.
     const toCommandZone = dead.filter((d) => player.commanderDefId && d.defId === player.commanderDefId);
     const toGraveyard = dead.filter((d) => !(player.commanderDefId && d.defId === player.commanderDefId));
 
@@ -184,7 +198,19 @@ export function resolvePendingDeaths(state: GameState): GameState {
         ...p.zones,
         battlefield: survivors,
         graveyard: [...p.zones.graveyard, ...toGraveyard.map((d) => ({ ...d, damageMarked: 0 }))],
-        commander: [...p.zones.commander, ...toCommandZone.map((d) => ({ ...d, damageMarked: 0 }))],
+        commander: [
+          ...p.zones.commander,
+          ...toCommandZone.map((d) => {
+            const existingTax = d.counters.find((c) => c.label === 'Commander Tax')?.amount ?? 0;
+            return {
+              ...d,
+              damageMarked: 0,
+              tapped: false,
+              producedManaColor: undefined,
+              counters: [...d.counters.filter((c) => c.label !== 'Commander Tax'), { label: 'Commander Tax', amount: existingTax + 2 }],
+            };
+          }),
+        ],
       },
     }));
     for (const d of toGraveyard) {

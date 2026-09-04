@@ -578,6 +578,36 @@ button {
   white-space: nowrap;
 }
 
+/* Commander Tax - only ever shown once it's actually paid something (a
+   commander's first cast is always +0, so nothing renders then); see
+   engine/combat.ts: resolvePendingDeaths for where it actually increments. */
+.commander-tax-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  background: rgba(10, 10, 16, 0.55);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+/* A static "as long as you control N+ lands" buff - only rendered while the
+   condition is actually met (see GameBoard's activeLandCountBuff), so its
+   mere presence already tells you it's active right now. */
+.static-buff-badge {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  background: #0a0a10;
+  color: #f4d35e;
+  font-size: 17px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+
 /* --- Card actions panel & zone modal ---------------------------------------- */
 
 .card-actions-overlay {
@@ -1571,13 +1601,6 @@ button {
   gap: 16px;
   align-items: flex-start;
   justify-content: space-between;
-}
-
-.corner-label {
-  font-size: 10px;
-  text-transform: uppercase;
-  color: var(--text-dim);
-  letter-spacing: 0.05em;
 }
 
 .corner-box {

@@ -48,15 +48,32 @@ function splitBattlefield(cards: CardInstance[]) {
   return { creatures, others, lands };
 }
 
-function displayInstance(instance: CardInstance): CardInstance {
-  if (!instance.counters.some((c) => c.label === 'Commander Tax')) return instance;
-  return { ...instance, counters: instance.counters.filter((c) => c.label !== 'Commander Tax') };
+
+function countLandsForOwner(state: GameState, ownerId: string): number {
+  const player = state.players.find((p) => p.id === ownerId);
+  if (!player) return 0;
+  return player.zones.battlefield.filter((c) => getCardDefinition(c.defId).type === 'land').length;
 }
 
-function counterAdjustedStat(base: number | undefined, instance: CardInstance): number {
+/**
+ * Whether this instance's landCountBuff (see types.ts) is on right now, for
+ * the Card badge - returns the creature's actual current power/toughness
+ * (base + counters + the buff), not just the buff's own +X/+Y, so the badge
+ * reads as "here's what it is right now" rather than making the player do
+ * the addition themselves.
+ */
+function activeLandCountBuff(def: ReturnType<typeof getCardDefinition>, instance: CardInstance, state: GameState) {
+  if (!def.landCountBuff) return null;
+  if (countLandsForOwner(state, instance.ownerId) < def.landCountBuff.minLands) return null;
+  return { power: counterAdjustedStat(def, instance, 'power', state), toughness: counterAdjustedStat(def, instance, 'toughness', state) };
+}
+
+function counterAdjustedStat(def: ReturnType<typeof getCardDefinition>, instance: CardInstance, stat: 'power' | 'toughness', state: GameState): number {
+  const base = stat === 'power' ? def.power : def.toughness;
   const plus = instance.counters.find((c) => c.label === '+1/+1')?.amount ?? 0;
   const minus = instance.counters.find((c) => c.label === '-1/-1')?.amount ?? 0;
-  return (base ?? 0) + plus - minus;
+  const buff = def.landCountBuff && countLandsForOwner(state, instance.ownerId) >= def.landCountBuff.minLands ? def.landCountBuff[stat] : 0;
+  return (base ?? 0) + plus - minus + buff;
 }
 
 /**
@@ -68,11 +85,17 @@ function counterAdjustedStat(base: number | undefined, instance: CardInstance): 
  * BlockOrderModal) before any of that is decided, so callers should only use
  * this when there's exactly one blocker.
  */
-function previewSingleBlockDeaths(attackerDef: ReturnType<typeof getCardDefinition>, attackerInstance: CardInstance, blockerDef: ReturnType<typeof getCardDefinition>, blockerInstance: CardInstance) {
-  const attackerPower = counterAdjustedStat(attackerDef.power, attackerInstance);
-  const blockerPower = counterAdjustedStat(blockerDef.power, blockerInstance);
-  const attackerToughnessLeft = Math.max(0, counterAdjustedStat(attackerDef.toughness, attackerInstance) - attackerInstance.damageMarked);
-  const blockerToughnessLeft = Math.max(0, counterAdjustedStat(blockerDef.toughness, blockerInstance) - blockerInstance.damageMarked);
+function previewSingleBlockDeaths(
+  attackerDef: ReturnType<typeof getCardDefinition>,
+  attackerInstance: CardInstance,
+  blockerDef: ReturnType<typeof getCardDefinition>,
+  blockerInstance: CardInstance,
+  state: GameState,
+) {
+  const attackerPower = counterAdjustedStat(attackerDef, attackerInstance, 'power', state);
+  const blockerPower = counterAdjustedStat(blockerDef, blockerInstance, 'power', state);
+  const attackerToughnessLeft = Math.max(0, counterAdjustedStat(attackerDef, attackerInstance, 'toughness', state) - attackerInstance.damageMarked);
+  const blockerToughnessLeft = Math.max(0, counterAdjustedStat(blockerDef, blockerInstance, 'toughness', state) - blockerInstance.damageMarked);
   const attackerIndestructible = hasKeyword(attackerDef.text, 'indestructible');
   const blockerIndestructible = hasKeyword(blockerDef.text, 'indestructible');
   return {
@@ -957,7 +980,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
       const def = getCardDefinition(front.defId);
       const pipOptions = manaPipOptions(def);
       if (!pipOptions) {
-        return <Card definition={def} instance={displayInstance(front)} {...frontProps} />;
+        return <Card definition={def} instance={front} {...frontProps} staticBuff={activeLandCountBuff(def, front, state)} />;
       }
 
       // Untapped: show every color this land could produce - click one to
@@ -983,7 +1006,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
       const cardEl = (
         <Card
           definition={def}
-          instance={displayInstance(front)}
+          instance={front}
           selected={frontProps.selected}
           onClick={isSingleColor ? () => doToggle(pipOptions[0]) : frontProps.onClick}
           onDoubleClick={isSingleColor ? frontProps.onClick : undefined}
@@ -1028,7 +1051,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
               className="battlefield-stack-layer battlefield-stack-layer-back"
               style={{ transform: `translate(${depth}px, ${depth}px)`, zIndex: depthOrder.length - i }}
             >
-              <Card definition={getCardDefinition(bc.defId)} instance={displayInstance(bc)} />
+              <Card definition={getCardDefinition(bc.defId)} instance={bc} staticBuff={activeLandCountBuff(getCardDefinition(bc.defId), bc, state)} />
             </div>
           );
         })}
@@ -1048,7 +1071,13 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           />
         </div>
         <div className="battlefield-stack-layer" style={{ zIndex: depthOrder.length + 1 }}>
-          <Card definition={getCardDefinition(front.defId)} instance={displayInstance(front)} selected={frontProps.selected} onClick={frontProps.onClick} />
+          <Card
+            definition={getCardDefinition(front.defId)}
+            instance={front}
+            selected={frontProps.selected}
+            onClick={frontProps.onClick}
+            staticBuff={activeLandCountBuff(getCardDefinition(front.defId), front, state)}
+          />
         </div>
       </div>
     );
@@ -1248,7 +1277,6 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
 
     const commanderColumn = (
       <div className="corner-column">
-        <div className="corner-label">Commander</div>
         {commanderCard ? (
           <Card definition={getCardDefinition(commanderCard.defId)} instance={commanderCard} onClick={() => setOpenPanelId(commanderCard.instanceId)} />
         ) : (
@@ -1449,7 +1477,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           // still has to choose a damage order before it's determined at all.
           const soleBlocker = blockers.length === 1 ? findCard(state, blockers[0]) : null;
           const singleBlockPreview = soleBlocker
-            ? previewSingleBlockDeaths(getCardDefinition(found.card.defId), found.card, getCardDefinition(soleBlocker.card.defId), soleBlocker.card)
+            ? previewSingleBlockDeaths(getCardDefinition(found.card.defId), found.card, getCardDefinition(soleBlocker.card.defId), soleBlocker.card, state)
             : null;
           const attackerCellEl = (
             <div

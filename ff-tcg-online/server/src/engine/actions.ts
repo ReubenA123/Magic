@@ -286,12 +286,11 @@ function castCard(state: GameState, playerId: string, instanceId: string, chosen
   const isPermanent = def.type === 'creature' || def.type === 'artifact' || def.type === 'enchantment';
   const targetZone: ZoneName = isPermanent ? 'battlefield' : 'graveyard';
   const hasHaste = hasKeyword(def.text, 'haste');
-  let movedCard = { ...card, tapped: false, damageMarked: 0, summoningSick: def.type === 'creature' ? !hasHaste : false };
-
-  if (sourceZone === 'commander') {
-    const existingTax = movedCard.counters.find((c) => c.label === 'Commander Tax')?.amount ?? 0;
-    movedCard = { ...movedCard, counters: [...movedCard.counters.filter((c) => c.label !== 'Commander Tax'), { label: 'Commander Tax', amount: existingTax + 2 }] };
-  }
+  // Commander Tax itself doesn't change here - it's already sitting on the
+  // card's own counters (carried along by the spread above) and only ever
+  // goes up when the commander returns to the command zone, not when it's
+  // cast from there - see engine/combat.ts: resolvePendingDeaths.
+  const movedCard = { ...card, tapped: false, damageMarked: 0, summoningSick: def.type === 'creature' ? !hasHaste : false };
 
   next = updatePlayer(next, playerId, (p) => ({ ...p, zones: { ...p.zones, [targetZone]: [...p.zones[targetZone], movedCard] } }));
   next = checkLegendRule(next, playerId);

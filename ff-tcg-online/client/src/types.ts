@@ -61,6 +61,19 @@ export interface CyclingAbility {
   searchLandName?: 'Plains' | 'Island' | 'Swamp' | 'Mountain' | 'Forest';
 }
 
+/**
+ * A static, continuously-checked buff ("As long as you control N or more
+ * lands, this creature gets +X/+Y") - unlike onEnter/onCast, this isn't a
+ * one-time trigger; it's re-evaluated live wherever power/toughness matters
+ * (engine/combat.ts, and the client's own combat preview), so it turns on
+ * and off automatically as the land count crosses the threshold.
+ */
+export interface LandCountBuff {
+  minLands: number;
+  power: number;
+  toughness: number;
+}
+
 export interface CardDefinition {
   id: string;
   name: string;
@@ -88,6 +101,8 @@ export interface CardDefinition {
   onCast?: CardEffect[];
   /** "Cycling" family - activated from hand, see engine/actions.ts: cycleCard. */
   cycling?: CyclingAbility;
+  /** See LandCountBuff - a static, always-on-condition-met power/toughness buff. */
+  landCountBuff?: LandCountBuff;
 }
 
 export interface Counter {

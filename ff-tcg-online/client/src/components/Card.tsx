@@ -9,9 +9,13 @@ interface CardProps {
   dimmed?: boolean;
   onClick?: () => void;
   onDoubleClick?: () => void;
+  /** A currently-active static buff (see types.ts: LandCountBuff) - the
+   * caller works out whether the condition is actually met right now (it
+   * needs board state Card itself doesn't have), this just displays it. */
+  staticBuff?: { power: number; toughness: number } | null;
 }
 
-export default function Card({ definition, instance, faceDown, selected, dimmed, onClick, onDoubleClick }: CardProps) {
+export default function Card({ definition, instance, faceDown, selected, dimmed, onClick, onDoubleClick, staticBuff }: CardProps) {
   const [imageFailed, setImageFailed] = useState(false);
   const [backImageFailed, setBackImageFailed] = useState(false);
 
@@ -28,6 +32,8 @@ export default function Card({ definition, instance, faceDown, selected, dimmed,
     .join(' ');
 
   const dualMana = Array.isArray(definition.producesMana) && definition.producesMana.length === 2 ? definition.producesMana : null;
+  const commanderTax = instance?.counters.find((c) => c.label === 'Commander Tax')?.amount ?? 0;
+  const otherCounters = instance?.counters.filter((c) => c.label !== 'Commander Tax') ?? [];
 
   return (
     <div className={classNames} onClick={onClick} onDoubleClick={onDoubleClick} title={definition.text}>
@@ -52,14 +58,24 @@ export default function Card({ definition, instance, faceDown, selected, dimmed,
           <span className={`dual-mana-half mana-${dualMana[1]}`}>{dualMana[1]}</span>
         </div>
       )}
-      {instance && instance.counters.length > 0 && (
+      {commanderTax > 0 && (
+        <span className="commander-tax-badge" title={`Costs {${commanderTax}} more to cast from the command zone`}>
+          +{commanderTax}
+        </span>
+      )}
+      {otherCounters.length > 0 && (
         <div className="card-counters">
-          {instance.counters.map((c) => (
+          {otherCounters.map((c) => (
             <span key={c.label} className="counter-badge" title={`${c.amount} ${c.label} counter(s)`}>
               {c.label} {c.amount}
             </span>
           ))}
         </div>
+      )}
+      {staticBuff && (
+        <span className="static-buff-badge" title="Current power/toughness with its static ability active">
+          {staticBuff.power}/{staticBuff.toughness}
+        </span>
       )}
     </div>
   );

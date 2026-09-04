@@ -1036,6 +1036,7 @@ export const CARD_POOL: CardDefinition[] = [
     power: 4,
     toughness: 4,
     text: "As long as you control seven or more lands, this creature gets +2/+2.",
+    landCountBuff: { minLands: 7, power: 2, toughness: 2 },
     imagePath: '/assets/cards/gigantoad.webp'
   }, {
     id: "gilgamesh-master-at-arms",
@@ -2258,6 +2259,7 @@ export const CARD_POOL: CardDefinition[] = [
     power: 1,
     toughness: 4,
     text: 'As long as you control seven or more lands, this creature gets +3/+0.',
+    landCountBuff: { minLands: 7, power: 3, toughness: 0 },
     imagePath: '/assets/cards/scorpion-sentinel.webp'
   },
   {
