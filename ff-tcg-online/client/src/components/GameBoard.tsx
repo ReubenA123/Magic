@@ -208,7 +208,7 @@ function StackTapControls({
           <div className="stack-tap-group battlefield-mana-pips">
             {untapColorOptions && untapColorOptions.length > 0 ? (
               untapColorOptions.map((color) => (
-                <button key={color} className={`mana-tap-pip mana-${color}`} title={`Untap one ${color}`} onClick={() => onUntapColor?.(color)}>
+                <button key={color} className={`mana-tap-pip mana-${color} mana-tap-pip-spent`} title={`Untap one ${color}`} onClick={() => onUntapColor?.(color)}>
                   {color}
                 </button>
               ))
@@ -955,21 +955,53 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   ) {
     if (group.length === 1) {
       const def = getCardDefinition(front.defId);
-      const tapOptions = !front.tapped ? manaPipOptions(def) : null;
-      const cardEl = <Card definition={def} instance={displayInstance(front)} {...frontProps} onDoubleClick={tapOptions ? undefined : frontProps.onDoubleClick} />;
-      if (!tapOptions) return cardEl;
+      const pipOptions = manaPipOptions(def);
+      if (!pipOptions) {
+        return <Card definition={def} instance={displayInstance(front)} {...frontProps} />;
+      }
+
+      // Untapped: show every color this land could produce - click one to
+      // tap for that color. Tapped: show only the one it actually produced,
+      // greyed/transparent, so untapping (and then picking a color again if
+      // it has more than one) is still just a click away instead of needing
+      // the panel - it just never shows a color that isn't currently either
+      // choosable or the one actually in play.
+      const isSingleColor = pipOptions.length === 1;
+      const displayedPips = front.tapped ? (front.producedManaColor ? [front.producedManaColor] : []) : pipOptions;
+
+      function doToggle(color: ManaColor) {
+        if (front.tapped) handleToggleTap(front);
+        else onAction({ type: 'TOGGLE_TAP', instanceId: front.instanceId, chosenColor: color });
+      }
+
+      // Single-color lands are unambiguous either way, so the card itself
+      // becomes a second way to tap/untap - that reuses the click frontProps
+      // would otherwise spend opening the panel, so that moves to
+      // double-click instead. A dual/any-color land keeps single-click
+      // opening the panel as normal (there's a real color choice to make,
+      // so the pips are the deliberate way to act).
+      const cardEl = (
+        <Card
+          definition={def}
+          instance={displayInstance(front)}
+          selected={frontProps.selected}
+          onClick={isSingleColor ? () => doToggle(pipOptions[0]) : frontProps.onClick}
+          onDoubleClick={isSingleColor ? frontProps.onClick : undefined}
+        />
+      );
+      if (displayedPips.length === 0) return cardEl;
       return (
         <div className="battlefield-card-with-pips">
           {cardEl}
           <div className="battlefield-mana-pips">
-            {tapOptions.map((color) => (
+            {displayedPips.map((color) => (
               <button
                 key={color}
-                className={`mana-tap-pip mana-${color}`}
-                title={`Tap for ${color}`}
+                className={`mana-tap-pip mana-${color} ${front.tapped ? 'mana-tap-pip-spent' : ''}`}
+                title={front.tapped ? `Untap (refund ${color})` : `Tap for ${color}`}
                 onClick={(e) => {
                   e.stopPropagation();
-                  onAction({ type: 'TOGGLE_TAP', instanceId: front.instanceId, chosenColor: color });
+                  doToggle(color);
                 }}
               >
                 {color}

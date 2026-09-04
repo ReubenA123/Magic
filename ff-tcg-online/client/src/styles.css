@@ -1366,6 +1366,14 @@ button {
   filter: brightness(1.15);
 }
 
+/* Tapped state - the pip stays put instead of disappearing, just faded, so
+   there's still something to click to undo the tap (untap refunds the same
+   color it was tapped for, so no ambiguity in staying a single pip). */
+.mana-tap-pip-spent {
+  opacity: 0.35;
+  filter: grayscale(0.6);
+}
+
 .card-actions-bottom-row {
   display: flex;
   gap: 8px;
