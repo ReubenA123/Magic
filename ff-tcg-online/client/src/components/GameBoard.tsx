@@ -867,6 +867,19 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
 
   function handleBoardDrop(playerId: string) {
     if (!draggedInstanceId) return;
+    // A blocker can only ever be dropped onto an existing card via the
+    // per-card handlers in renderCreatureCard (acceptsBlockerRemoval) - if
+    // it's your only untapped/visible creature, or you're changing your
+    // mind about your last remaining blocker, the row it belongs in can be
+    // empty with nothing there to drop onto. Falling back to the whole
+    // zone here means the drop still lands even then. Only ever removes an
+    // instance that's actually currently assigned as a blocker, so this
+    // never interferes with dropping a hand card to cast it below.
+    if (isDeclaringBlockers && playerId === yourPlayerId && Object.values(blockerAssignments).some((ids) => ids.includes(draggedInstanceId!))) {
+      removeBlockerAssignmentById(draggedInstanceId);
+      setDraggedInstanceId(null);
+      return;
+    }
     const found = findCard(state, draggedInstanceId);
     if (!found) return;
     if (found.player.id !== playerId) return;
