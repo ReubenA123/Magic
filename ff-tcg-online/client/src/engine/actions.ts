@@ -745,6 +745,7 @@ function nextPhase(state: GameState, playerId: string): ActionResult {
     if (isMutualActive(state)) {
       let next = resolveCombatDamage(state);
       next = { ...next, phase: 'combat_end', combatReadyPlayers: [] };
+      next = clearManaAndRefundUnspentLands(next);
       return { ok: true, state: next };
     }
 
@@ -758,6 +759,7 @@ function nextPhase(state: GameState, playerId: string): ActionResult {
     if (readyNow.length >= 2) {
       let next = resolveCombatDamage({ ...state, combatReadyPlayers: [] });
       next = { ...next, phase: 'combat_end' };
+      next = clearManaAndRefundUnspentLands(next);
       return { ok: true, state: next };
     }
 
@@ -787,7 +789,7 @@ function nextPhase(state: GameState, playerId: string): ActionResult {
     nextPhaseName = 'combat_end';
   }
 
-  let next: GameState = { ...state, phase: nextPhaseName };
+  let next: GameState = clearManaAndRefundUnspentLands({ ...state, phase: nextPhaseName });
 
   // Leaving End Combat: now that both players have seen the outcome,
   // actually move anything that died to the graveyard, and clear the
@@ -833,11 +835,12 @@ function runUntapStep(state: GameState, playerId: string): GameState {
 
 /**
  * Tapping a land only "costs" you anything once its mana is actually spent -
- * so a land tapped this turn whose mana never got used untaps for free right
- * at end of turn instead of sitting tapped through the opponent's turn too.
- * Mirrors toggleTap's own spent/unspent check: walk the color's still-full
- * pool down by one per untapped land, so with several lands of the same
- * color only as many of them untap as actually went unspent.
+ * so a land tapped for mana that never got used untaps for free right when
+ * that mana disappears (see clearManaAndRefundUnspentLands) instead of
+ * sitting tapped for nothing. Mirrors toggleTap's own spent/unspent check:
+ * walk the color's still-full pool down by one per untapped land, so with
+ * several lands of the same color only as many of them untap as actually
+ * went unspent.
  */
 function untapUnspentManaLands(state: GameState, playerId: string): GameState {
   const remaining: Record<ManaColor, number> = { ...getPlayer(state, playerId).manaPool };
@@ -854,13 +857,31 @@ function untapUnspentManaLands(state: GameState, playerId: string): GameState {
   }));
 }
 
+/**
+ * Mana empties at every phase change, not just once per turn - whatever
+ * either player left unspent is gone the moment the phase moves on (an
+ * instant-speed response can tap into the non-active player's pool too, so
+ * this always runs for both players, not just whoever is advancing the
+ * phase). untapUnspentManaLands runs first so it still reads each player's
+ * about-to-be-cleared pool to know which taps were never actually spent.
+ */
+function clearManaAndRefundUnspentLands(state: GameState): GameState {
+  let next = state;
+  for (const player of state.players) {
+    next = untapUnspentManaLands(next, player.id);
+  }
+  return { ...next, players: next.players.map((p) => ({ ...p, manaPool: emptyManaPool() })) as GameState['players'] };
+}
+
 function endTurn(state: GameState, playerId: string): ActionResult {
   if (state.activePlayerId !== playerId) return { ok: false, error: "It's not your turn." };
   const newActivePlayer = getOpponent(state, playerId);
 
-  let next = untapUnspentManaLands(state, playerId);
+  // Turn end is a phase change too, so the same unspent-mana clear applies
+  // here first - runUntapStep then fully untaps the new active player
+  // regardless, making its own refund redundant for them but harmless.
+  let next = clearManaAndRefundUnspentLands(state);
   next = runUntapStep(next, newActivePlayer.id);
-  next = { ...next, players: next.players.map((p) => ({ ...p, manaPool: emptyManaPool() })) as GameState['players'] };
   next = {
     ...next,
     activePlayerId: newActivePlayer.id,

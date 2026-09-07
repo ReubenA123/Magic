@@ -12,6 +12,10 @@ interface CardActionsPanelProps {
   isMyTurn: boolean;
   alreadyPlayedLand: boolean;
   attachedToName: string | null;
+  /** Someone else's card, viewed outside Mutual Adjustment - the image and
+   * text still show, but every action button (tap, cast, abilities, attach,
+   * cycle, flashback) is hidden rather than offering something that isn't yours to do. */
+  readOnly?: boolean;
   manaOptions?: ManaColor[];
   onToggleTap: () => void;
   onChooseTapColor: (color: ManaColor) => void;
@@ -48,6 +52,7 @@ export default function CardActionsPanel({
   isMyTurn,
   alreadyPlayedLand,
   attachedToName,
+  readOnly,
   manaOptions,
   onToggleTap,
   onChooseTapColor,
@@ -107,7 +112,7 @@ export default function CardActionsPanel({
 
         {mutualActive && <p className="mutual-active-note">Mutual Adjustment is active - normal cost/timing rules are suspended.</p>}
 
-        {definition.attachesTo && isOnBattlefield && (
+        {!readOnly && definition.attachesTo && isOnBattlefield && (
           <div className="card-actions-section">
             <div className="card-actions-label">Attachment</div>
             {attachedToName ? (
@@ -125,7 +130,7 @@ export default function CardActionsPanel({
           </div>
         )}
 
-        {definition.abilities && definition.abilities.length > 0 && (
+        {!readOnly && definition.abilities && definition.abilities.length > 0 && (
           <div className="card-actions-section">
             <div className="card-actions-label">Abilities</div>
             {definition.abilities.map((ability) => {
@@ -176,7 +181,7 @@ export default function CardActionsPanel({
 
         <div className="card-actions-spacer" />
 
-        {isOnBattlefield && (
+        {!readOnly && isOnBattlefield && (
           <div className="card-actions-bottom-row">
             {showManaChoice ? (
               <div className="mana-choice-inline">
@@ -202,19 +207,19 @@ export default function CardActionsPanel({
           </div>
         )}
 
-        {canPlayHere && (
+        {!readOnly && canPlayHere && (
           <button className="card-action-button card-action-button-play" disabled={!canPlay} onClick={onCast} title={canPlay ? '' : isLand ? 'Already played a land, or not your turn' : 'Not enough mana'}>
             {isLand ? `Play ${definition.name}` : `Cast (${definition.costLabel}${commanderTax > 0 ? ` +${commanderTax} tax` : ''})`}
           </button>
         )}
 
-        {canCycleHere && (
+        {!readOnly && canCycleHere && (
           <button className="card-action-button secondary" disabled={!canCycle} onClick={onCycle} title={canCycle ? '' : 'Not enough mana'}>
             {`Cycle (${definition.cycling!.cost})`}
           </button>
         )}
 
-        {canFlashbackHere && (
+        {!readOnly && canFlashbackHere && (
           <button className="card-action-button card-action-button-play" disabled={!canFlashback} onClick={onFlashback} title={canFlashback ? '' : 'Not enough mana'}>
             {`Flashback (${definition.flashback!.cost})`}
           </button>

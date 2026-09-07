@@ -39,6 +39,15 @@ body {
   min-height: 100vh;
 }
 
+/* Toggled by GameBoard while My View/Opponent View are active (see the
+   auto-fit zoom effect there) - those views size themselves to fit the
+   viewport exactly, so there should never be anything to scroll to; this is
+   the guarantee of that even if something ever miscalculates. Full Board
+   keeps normal page scrolling. */
+body.no-page-scroll {
+  overflow: hidden;
+}
+
 h1,
 h2,
 h3,
@@ -445,21 +454,39 @@ button {
   padding: 2px 0;
 }
 
-.undo-button,
 .concede-button {
+  position: relative;
+  overflow: hidden;
   padding: 10px 16px;
   border-radius: 8px;
   border: 1px solid var(--border);
   background: var(--panel-raised);
-  color: var(--text);
+  color: var(--danger);
+  border-color: var(--danger);
   font-size: 13px;
   font-weight: 600;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
 }
 
-.concede-button {
-  color: var(--danger);
-  border-color: var(--danger);
+/* Fills left-to-right over CONCEDE_HOLD_MS while the button is held (see
+   GameBoard's startConcedeHold) - width and transition-duration are set
+   inline since they're driven by that same JS timer, not a fixed value CSS
+   could express alone. Releasing early resets the transition-duration to 0
+   so the bar snaps back instantly instead of visibly draining back down. */
+.concede-button-fill {
+  position: absolute;
+  inset: 0;
+  width: 0%;
+  background: var(--danger);
+  transition-property: width;
+  transition-timing-function: linear;
+  z-index: 0;
+}
+
+.concede-button-label {
+  position: relative;
+  z-index: 1;
+  mix-blend-mode: difference;
 }
 
 /* --- Card visuals ----------------------------------------------------------- */
@@ -760,6 +787,9 @@ button {
   flex-direction: column;
 }
 
+/* No longer conditionally sticky - NavBar itself is now unmounted entirely
+   during a game (see App.tsx's inGame check), so every remaining instance
+   of it wants the same pinned-to-top behavior. */
 .nav-bar {
   display: flex;
   align-items: center;
@@ -767,9 +797,6 @@ button {
   padding: 12px 20px;
   background: var(--panel);
   border-bottom: 1px solid var(--border);
-}
-
-.nav-bar-pinned {
   position: sticky;
   top: 0;
   z-index: 100;
@@ -1297,10 +1324,13 @@ button {
 .game-board-layout {
   max-width: 100%;
   width: 100%;
-  /* Bottom padding matches the Event Log/turn box's own 16px offset from the
-     viewport edge, so scrolling all the way down lands their bottom edges
-     flush with the last row of in-flow content instead of leaving a mismatched gap. */
-  padding: 12px 20px 16px;
+  /* Your Life total is the last in-flow element in your own zone (the hand
+     used to render below it and hold this space open; now it's docked
+     instead, so this padding does that job) - tall enough to clear the
+     fixed Options/Event Log row's own height plus its 21px offset from the
+     viewport edge, so scrolling all the way down still leaves Life visible
+     above them rather than hidden underneath. */
+  padding: 12px 20px 100px;
 }
 
 .dual-mana-split {
@@ -1422,24 +1452,85 @@ button {
   gap: 10px;
 }
 
-.event-log-float {
+/* Fixed bottom-left, Event Log then Board View side by side rather than
+   stacked - a single row sits much lower on screen than two stacked
+   bubbles, which is what keeps it clear of your Life total (the last
+   in-flow element in your own zone - see .game-board-layout's bottom
+   padding, sized to match). */
+.bottom-left-stack {
   position: fixed;
-  /* A few px above the shared 16px baseline - the Undo/Concede row is
-     shorter than the taller view-mode-toggle bubble, so lining up with the
-     bubble's bottom edge instead left the Event Log looking low against Undo. */
   bottom: 21px;
   left: 16px;
-  width: 280px;
+  z-index: 48;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+/* Stacks the opponent's-turn eye directly above the Board View bubble it
+   controls, centered over its fit-content width whatever that ends up
+   being (collapsed vs expanded). */
+.board-view-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Only rendered during someone else's turn (see GameBoard) - a deliberately
+   attention-grabbing shortcut to Opponent View, since otherwise you'd have
+   to open Board View and pick it manually just to watch what's happening. */
+.opponent-turn-eye {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--danger);
+  background: var(--panel);
+  color: var(--danger);
+  font-size: 16px;
+  line-height: 1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  animation: opponent-turn-eye-pulse 1.6s ease-in-out infinite;
+}
+
+.opponent-turn-eye:disabled {
+  opacity: 0.4;
+  animation: none;
+}
+
+@keyframes opponent-turn-eye-pulse {
+  0%,
+  100% {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4), 0 0 0 0 rgba(201, 82, 79, 0.55);
+  }
+  50% {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4), 0 0 0 6px rgba(201, 82, 79, 0);
+  }
+}
+
+/* Collapsed, each bubble hugs its header text rather than claiming the full
+   280px - the board sits right behind this corner, so there's no reason to
+   cover more of it than "Event Log" / "Board View" actually need. Expanding
+   either one is a deliberate look-at-this action, so it's fine for it to
+   widen over the board at that point. */
+.event-log-float,
+.board-view-panel-float {
+  width: fit-content;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 10px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
-  /* Above .docked-hand-tray (44) for the same reason as .bottom-right-controls. */
-  z-index: 48;
   overflow: hidden;
 }
 
-.event-log-header {
+.event-log-expanded,
+.board-view-panel-expanded {
+  width: 280px;
+}
+
+.event-log-header,
+.board-view-panel-header {
   width: 100%;
   padding: 10px 14px;
   background: var(--panel-raised);
@@ -1448,6 +1539,7 @@ button {
   font-size: 13px;
   font-weight: 700;
   text-align: left;
+  white-space: nowrap;
 }
 
 .event-log-body {
@@ -1458,22 +1550,12 @@ button {
   color: var(--text-dim);
 }
 
-/* In normal document flow - only visible once scrolled down to, unlike the
-   fixed Event Log and turn box. Left margin lines its buttons up with where
-   the (fixed, always-visible) Event Log panel sits: its 16px offset + 280px
-   width, minus this row's own 20px page padding. */
-.bottom-controls-row {
+.board-view-panel-body {
   display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 16px;
-  margin: 16px 0 0 292px;
-}
-
-.bottom-left-controls {
-  display: flex;
-  gap: 8px;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
 }
 
 .mutual-adjustment-button {
@@ -1596,6 +1678,20 @@ button {
   gap: 6px;
 }
 
+/* My View/Opponent View only - GameBoard floors .game-board-main's height at
+   the full viewport there (see renderZoomedBoard's minHeight), and this is
+   what actually stretches the panel to fill that floor instead of leaving
+   it as blank flex space, so a lightly-populated board still reaches the
+   bottom of the screen. Deliberately not on the base .player-zone rule -
+   Full Board relies on that class hugging its natural content height
+   (unconstrained flex-basis there could shrink it unpredictably) to measure
+   its own zoom. space-between keeps the life total pinned to the panel's
+   bottom edge rather than leaving the extra space trail off below it. */
+.player-zone-fill {
+  flex: 1;
+  justify-content: space-between;
+}
+
 .zone-top-row {
   display: flex;
   gap: 16px;
@@ -1700,12 +1796,19 @@ button {
   align-items: center;
   gap: 8px;
 }
+/* Dead center of the screen rather than tucked at the bottom - illegal-move
+   messages ("already played a land", "no flash") are easy to miss down by
+   the hand tray, and nothing needs clicking through it since it clears
+   itself on the next action attempt. */
 .action-error-bottom {
   position: fixed;
-  bottom: 74px;
+  top: 50%;
   left: 50%;
-  transform: translateX(-50%);
-  z-index: 40;
+  transform: translate(-50%, -50%);
+  z-index: 90;
+  pointer-events: none;
+  max-width: 420px;
+  text-align: center;
 }
 
 .view-mode-toggle {
@@ -1927,17 +2030,28 @@ button {
   gap: -20px;
 }
 
+/* Stands in for the opponent's hand-fan (see renderHandRow) - a count reads
+   just as clearly as a row of face-down cards while costing none of the
+   170px .hand-fan reserves, which matters now that My View/Opponent View
+   only ever show one board and need to fit it without scrolling. */
+.opponent-hand-count {
+  text-align: center;
+  padding: 6px 0;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
 .hand-fan .hand-fan-card {
   margin-left: -90px;
   /* transform-origin is set inline per-hand (GameBoard's renderHandRow) since
      it flips depending on whether the hand sits at the top or bottom of the screen. */
-  transition: transform 0.15s ease;
+  transition: transform 0.15s ease, opacity 0.15s ease;
 }
 
-/* Only mounted once you've scrolled away from the bottom of the page (see
-   GameBoard's nearPageBottom) - your actual in-flow hand is off-screen at
-   that point, so this stands in: parked mostly below the viewport, showing
-   just enough of the cards' tops to read, and sliding fully into view on hover. */
+
+/* Always mounted - your hand permanently lives here rather than in normal
+   document flow, parked mostly below the viewport and showing just enough of
+   the cards' tops to read, sliding fully into view on hover. */
 .docked-hand-tray {
   position: fixed;
   left: 0;

@@ -5,7 +5,9 @@ import { createContext, useContext, useEffect } from 'react';
 //
 // Lets a deeply-nested component (GameBoard) tell the top-level App that a
 // live match is currently on screen, without prop-drilling that flag through
-// VersusPage/VsAiPage. App uses it to un-pin the top nav bar during a game.
+// VersusPage/VsAiPage. App uses it to hide the top nav bar entirely during a
+// game, since My View/Opponent View need every pixel of height to fit the
+// board without scrolling.
 // ============================================================================
 
 const GameActivityContext = createContext<(active: boolean) => void>(() => {});

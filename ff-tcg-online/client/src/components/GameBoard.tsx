@@ -353,6 +353,11 @@ const MIN_FULL_BOARD_ZOOM = 0.35;
 const MAX_FULL_BOARD_ZOOM = 1;
 const FULL_BOARD_ZOOM_STEP = 0.05;
 
+// Must match .game-board-layout's own top+bottom padding in styles.css (12px
+// + 100px) - My View/Opponent View's auto-fit zoom uses this to work out how
+// much of the viewport height is actually available for the board itself.
+const GAME_BOARD_LAYOUT_VERTICAL_PADDING = 112;
+
 export default function GameBoard({ state, yourPlayerId, actionError, onAction, soloControl }: GameBoardProps) {
   useMarkGameActive();
   const you = state.players.find((p) => p.id === yourPlayerId)!;
@@ -373,6 +378,8 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   const [winnerDismissed, setWinnerDismissed] = useState(false);
   const [selectionBox, setSelectionBox] = useState<SelectionBox | null>(null);
   const [multiSelected, setMultiSelected] = useState<Set<string>>(new Set());
+  const [concedeHolding, setConcedeHolding] = useState(false);
+  const concedeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [phaseBoxPos, setPhaseBoxPos] = useState<{ x: number; y: number } | null>(null);
   const [manaChoiceQueue, setManaChoiceQueue] = useState<ManaChoiceItem[]>([]);
   const [viewMode, setViewMode] = useState<'mine' | 'opponent' | 'full'>('mine');
@@ -387,6 +394,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     full: 0.8,
   });
   const [editingZoom, setEditingZoom] = useState(false);
+  const [boardViewExpanded, setBoardViewExpanded] = useState(false);
   // Full Board only - lets a crowded creatures/others/lands row collapse to
   // a thin summary strip so the two boards fit together more comfortably.
   // Keyed "playerId:rowKey" since either player's board can be full there.
@@ -403,9 +411,23 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   const [openBlockerPile, setOpenBlockerPile] = useState<string | null>(null);
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const landsRowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const combatZoneRef = useRef<HTMLDivElement | null>(null);
+  const firstBlockerSlotRef = useRef<HTMLDivElement | null>(null);
   const phaseDragRef = useRef<{ offsetX: number; offsetY: number } | null>(null);
   const [naturalBoardHeight, setNaturalBoardHeight] = useState(0);
   const boardResizeObserverRef = useRef<ResizeObserver | null>(null);
+  // Drives the auto-fit zoom below - My View/Opponent View have no manual
+  // zoom control (see effectiveViewMode !== 'full' guards further down), so
+  // their fit has to react to the viewport itself resizing, not just the
+  // board's own content height.
+  const [windowHeight, setWindowHeight] = useState(() => window.innerHeight);
+  useEffect(() => {
+    function handleResize() {
+      setWindowHeight(window.innerHeight);
+    }
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Full Board's zoom uses transform: scale, not the CSS `zoom` property -
   // zoom actually resizes layout, so any resize (however small) makes the
@@ -452,34 +474,6 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     });
   }, []);
 
-  // Your hand sits at the very bottom of a page that's often much taller
-  // than the viewport - scroll away from it (say, up to look at the
-  // opponent's board) and it's gone until you scroll all the way back. The
-  // docked tray below covers that: whenever your real, in-flow hand isn't
-  // actually on screen, it takes over as a permanently-visible, mostly-
-  // collapsed strip you can hover to pull back into view without losing
-  // your place. yourHandRef is attached to that real hand (see
-  // renderHandRow) so this checks its actual on-screen position rather than
-  // just "near the bottom of the page" - a fixed distance-from-bottom
-  // threshold left both visible at once for a stretch of scroll positions
-  // right as the real hand scrolled into view.
-  const yourHandRef = useRef<HTMLDivElement>(null);
-  const [yourHandVisible, setYourHandVisible] = useState(true);
-  useEffect(() => {
-    function checkHandVisibility() {
-      const el = yourHandRef.current;
-      if (!el) return;
-      const rect = el.getBoundingClientRect();
-      setYourHandVisible(rect.top < window.innerHeight && rect.bottom > 0);
-    }
-    checkHandVisibility();
-    window.addEventListener('scroll', checkHandVisibility, { passive: true });
-    window.addEventListener('resize', checkHandVisibility);
-    return () => {
-      window.removeEventListener('scroll', checkHandVisibility);
-      window.removeEventListener('resize', checkHandVisibility);
-    };
-  }, []);
 
   // Switching view mode swaps in a different amount of content above the
   // fold, and Full Board also changes zoom level going in or out (each view
@@ -534,6 +528,17 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   }, [state.declaredAttackers]);
 
   const openCard = openPanelId ? findCard(state, openPanelId) : null;
+  // Clicking an opponent's card (now possible from Opponent View/Full Board -
+  // see isOpponentViewLocked) opens the same preview panel as your own cards,
+  // but it should only ever be a look, never a way to tap/cast/activate
+  // their stuff - a card only ever changes because the rules say so (its
+  // controller casting it, combat, an effect), not because someone else
+  // reached over and touched it. That holds even in VS AI (soloControl) -
+  // the AI plays its own turn through useLocalGame's own dispatches, so it
+  // never needed a manual-override door here, and leaving one in would just
+  // be a way to cheat against it. Mutual Adjustment is the one deliberate
+  // exception: both players explicitly agreed to suspend this.
+  const openCardIsReadOnly = !!openCard && openCard.player.id !== yourPlayerId && !mutualActive;
 
   const isDeclaringAttackers = state.phase === 'declare_attackers' && state.activePlayerId === yourPlayerId;
   const isDeclaringBlockers = state.phase === 'declare_blockers' && state.activePlayerId !== yourPlayerId;
@@ -541,7 +546,19 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   // Combat needs both sides visible to declare attackers/blockers sensibly,
   // so it always shows Full Board regardless of what's selected below.
   const effectiveViewMode = showCombatZones ? 'full' : viewMode;
-  const fullBoardZoom = zoomByMode[effectiveViewMode];
+  // My View/Opponent View only ever show a single board and always need to
+  // fit it into the viewport with nothing left to scroll to - rather than
+  // trust a manually-set zoom to happen to fit, their zoom is computed
+  // straight from how much vertical space is actually available (see
+  // GAME_BOARD_LAYOUT_VERTICAL_PADDING) versus the board's real unscaled
+  // height. Full Board keeps its own manual, remembered-per-mode zoom
+  // (zoomByMode.full) exactly as before.
+  const singleBoardAvailableHeight = Math.max(0, windowHeight - GAME_BOARD_LAYOUT_VERTICAL_PADDING);
+  // Floored at the same minimum Full Board's manual slider allows, rather
+  // than shrinking all the way toward 0 on an extremely short viewport -
+  // body.no-page-scroll still hides whatever that floor can't make fit.
+  const autoFitZoom = naturalBoardHeight > 0 ? Math.max(MIN_FULL_BOARD_ZOOM, Math.min(1, singleBoardAvailableHeight / naturalBoardHeight)) : 1;
+  const fullBoardZoom = effectiveViewMode === 'full' ? zoomByMode.full : autoFitZoom;
   // Full Board renders actual cards 25% smaller (see styles.css) - a stacked
   // pile's own container is sized from these constants via inline styles
   // (CSS can't reach them), so it has to shrink the same amount or the real
@@ -559,10 +576,13 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     setZoomByMode((prev) => ({ ...prev, [effectiveViewMode]: typeof next === 'function' ? next(prev[effectiveViewMode]) : next }));
   }
 
-  // Opponent View is look-only, even at your own board/hand (which still
-  // renders, mirrored, in this mode) - it exists purely so you can read
-  // their side without the mirrored orientation, not to act from. Combat
-  // forcing Full Board already takes priority over this, same as everywhere else.
+  // Opponent View exists so you can read their side in their own
+  // orientation, not to act from - but that's enforced per-action (every
+  // drag/attack/block/draw check below already requires !isOpponentSide or
+  // soloControl) rather than by a blanket lock, so clicking a card to open
+  // its read-only preview still works (see the CardActionsPanel readOnly
+  // prop further down). This flag now only drives the "you're just looking"
+  // banner and clearing any leftover open panel/selection on the way in.
   const isOpponentViewLocked = effectiveViewMode === 'opponent';
 
   /**
@@ -570,16 +590,28 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
    * ResizeObserver above naturalBoardHeight for why the wrapper needs its
    * own reserved height.
    *
-   * `fillWidth` (Full Board only) fixes a side effect of scaling down from a
-   * centered origin: shrinking a box toward its own middle leaves equal gaps
-   * on both sides, which is exactly what made the field look like it wasn't
-   * reaching the commander/graveyard rails anymore. Setting the unscaled
-   * width to 100/zoom% and scaling from the top-LEFT corner instead makes
-   * the visible result exactly 100% of the track width at any zoom level -
-   * the classic CSS "zoom to fit" trick. My View/Opponent View don't need
-   * this (they're not flanked by anything the content has to reach).
+   * Scaling down from a centered origin has a side effect: shrinking a box
+   * toward its own middle leaves equal gaps on both sides - on Full Board
+   * that meant not reaching the commander/graveyard rails, and on My
+   * View/Opponent View (now that their zoom can auto-fit-shrink below 1x
+   * too) it meant the library/graveyard corner columns stopping short of the
+   * actual screen edges. Setting the unscaled width to 100/zoom% and scaling
+   * from the top-LEFT corner instead makes the visible result exactly 100%
+   * of the track width at any zoom level - the classic CSS "zoom to fit" trick.
+   *
+   * My View/Opponent View also get a `minHeight` floor of the full available
+   * viewport height - without it, a board with little on it (nothing to
+   * shrink-to-fit) would just render at its own short natural size, leaving
+   * a gap below instead of reaching the bottom of the screen the way a
+   * board that's too tall to fit already does by construction (shrinking
+   * exactly to the available height). The floor only ever adds height when
+   * natural content falls short of it - a naturally-tall board is
+   * unaffected, so the existing shrink-to-fit math above still applies
+   * (see naturalBoardHeight/autoFitZoom). .player-zone's `flex: 1` (styles.css)
+   * is what actually stretches to fill that extra height rather than
+   * leaving it as blank flex space.
    */
-  function renderZoomedBoard(children: React.ReactNode, fillWidth = false) {
+  function renderZoomedBoard(children: React.ReactNode) {
     return (
       <div className="game-board-main-zoom-wrapper" style={naturalBoardHeight > 0 ? { height: naturalBoardHeight * fullBoardZoom, overflow: 'hidden' } : undefined}>
         <div
@@ -587,9 +619,9 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           className="game-board-main"
           style={{
             transform: `scale(${fullBoardZoom})`,
-            transformOrigin: fillWidth ? 'top left' : 'top center',
-            width: fillWidth ? `${100 / fullBoardZoom}%` : undefined,
-            pointerEvents: isOpponentViewLocked ? 'none' : undefined,
+            transformOrigin: 'top left',
+            width: `${100 / fullBoardZoom}%`,
+            minHeight: effectiveViewMode === 'full' ? undefined : singleBoardAvailableHeight,
           }}
         >
           {children}
@@ -605,6 +637,24 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     setManaChoiceQueue([]);
     setMultiSelected(new Set());
   }, [isOpponentViewLocked]);
+
+  // Belt-and-suspenders for "My View/Opponent View never scroll": the
+  // auto-fit zoom above should already make the single board's wrapper
+  // exactly the right height to avoid a scrollbar, but this guarantees it
+  // even if some other bit of content (a banner, a future addition) ever
+  // pushes the page taller than the viewport. Full Board is left alone -
+  // it still uses a manual, page-scrollable zoom.
+  useEffect(() => {
+    document.body.classList.toggle('no-page-scroll', effectiveViewMode !== 'full');
+    return () => document.body.classList.remove('no-page-scroll');
+  }, [effectiveViewMode]);
+
+  // Manual zoom only applies to Full Board now - leaving the zoom editor
+  // open while switching to an auto-fit view would show controls for a
+  // value the board no longer actually uses.
+  useEffect(() => {
+    if (effectiveViewMode !== 'full') setEditingZoom(false);
+  }, [effectiveViewMode]);
 
   function blockersFor(attackerId: string): string[] {
     if (isDeclaringBlockers) return blockerAssignments[attackerId] || [];
@@ -729,6 +779,46 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     }
     onAction({ type: 'TOGGLE_TAP', instanceId: card.instanceId });
   }
+
+  /** Gates every direct tap/untap interaction on the battlefield (double-click,
+   * mana pips, the stacked-pile tap/untap stepper, box-select's Tap button) -
+   * a card someone else controls only ever changes because the rules say
+   * so, never because another player (or, in solo VS AI, the human) reached
+   * over and tapped or untapped it themselves. That's true in real
+   * multiplayer (no griefing) and just as true in VS AI - the AI plays its
+   * own turn through useLocalGame's own dispatches, so soloControl is NOT
+   * an exception here; a manual-tap door into its cards would just be a way
+   * to cheat against it. Mutual Adjustment is the one deliberate exception:
+   * both players explicitly agreed to suspend this. */
+  function canControlCard(ownerId: string): boolean {
+    return ownerId === yourPlayerId || mutualActive;
+  }
+
+  const CONCEDE_HOLD_MS = 3000;
+
+  /** Concede ends the game the instant it fires, so a plain click was one
+   * misclick away from throwing a game - holding for a few seconds (with the
+   * red bar filling to show how close it is) means letting go early always
+   * cancels harmlessly, and only an actually-held press gets there. */
+  function startConcedeHold() {
+    if (concedeTimerRef.current) return;
+    setConcedeHolding(true);
+    concedeTimerRef.current = setTimeout(() => {
+      concedeTimerRef.current = null;
+      setConcedeHolding(false);
+      onAction({ type: 'CONCEDE' }, yourPlayerId);
+    }, CONCEDE_HOLD_MS);
+  }
+
+  function cancelConcedeHold() {
+    if (concedeTimerRef.current) {
+      clearTimeout(concedeTimerRef.current);
+      concedeTimerRef.current = null;
+    }
+    setConcedeHolding(false);
+  }
+
+  useEffect(() => () => cancelConcedeHold(), []);
 
   /**
    * A stack of 2+ identical permanents is tapped/untapped a chosen amount at
@@ -892,7 +982,15 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
         const hits = new Set<string>();
         cardRefs.current.forEach((el, id) => {
           const r = el.getBoundingClientRect();
-          if (r.left < box.x + box.w && r.right > box.x && r.top < box.y + box.h && r.bottom > box.y) hits.add(id);
+          if (r.left < box.x + box.w && r.right > box.x && r.top < box.y + box.h && r.bottom > box.y) {
+            // cardRefs spans every card on screen regardless of owner - in
+            // Full Board a drag can start on your own side (where it's
+            // enabled) and cross into the opponent's, so this still has to
+            // filter opponent cards back out itself rather than trusting
+            // startSelection's own-zone check alone.
+            const owner = findCard(state, id)?.player.id;
+            if (owner && canControlCard(owner)) hits.add(id);
+          }
         });
         setMultiSelected(hits);
       }
@@ -976,6 +1074,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     group: CardInstance[],
     front: CardInstance,
     frontProps: { selected?: boolean; onClick: () => void; onDoubleClick: () => void },
+    canControl: boolean,
   ) {
     if (group.length === 1) {
       const def = getCardDefinition(front.defId);
@@ -990,7 +1089,11 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
       // it has more than one) is still just a click away instead of needing
       // the panel - it just never shows a color that isn't currently either
       // choosable or the one actually in play.
-      const isSingleColor = pipOptions.length === 1;
+      // !canControl forces this into the same "single-click just opens the
+      // panel" path a dual/any-color land already uses, whatever the actual
+      // color count - the pips below stay visible for information but stop
+      // doing anything, so someone else's land can't be tapped this way either.
+      const isSingleColor = canControl && pipOptions.length === 1;
       const displayedPips = front.tapped ? (front.producedManaColor ? [front.producedManaColor] : []) : pipOptions;
 
       function doToggle(color: ManaColor) {
@@ -1022,9 +1125,10 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
               <button
                 key={color}
                 className={`mana-tap-pip mana-${color} ${front.tapped ? 'mana-tap-pip-spent' : ''}`}
-                title={front.tapped ? `Untap (refund ${color})` : `Tap for ${color}`}
+                title={canControl ? (front.tapped ? `Untap (refund ${color})` : `Tap for ${color}`) : color}
                 onClick={(e) => {
                   e.stopPropagation();
+                  if (!canControl) return;
                   doToggle(color);
                 }}
               >
@@ -1058,19 +1162,23 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
         })}
         {/* Stacked permanents are only tapped/untapped via this control strip,
             a chosen amount at a time, so it's always unambiguous which
-            copies - and how much mana - is being added or refunded. */}
-        <div style={{ position: 'absolute', top: activeCardHeight + footprint, left: 0, width: activeCardWidth + footprint, zIndex: depthOrder.length + 2 }}>
-          <StackTapControls
-            untappedCount={untappedCount}
-            untappableCount={untappableCount}
-            onTapN={(n) => tapNFromGroup(group, n)}
-            onUntapN={(n) => untapNFromGroup(group, n, ownerManaPool)}
-            tapColorOptions={manaPipOptions(getCardDefinition(front.defId)) ?? undefined}
-            onTapColor={(color) => tapOneFromGroupWithColor(group, color)}
-            untapColorOptions={untapColorOptionsForGroup(group, ownerManaPool)}
-            onUntapColor={(color) => untapOneFromGroupWithColor(group, color, ownerManaPool)}
-          />
-        </div>
+            copies - and how much mana - is being added or refunded. Omitted
+            entirely (rather than just disabled) when you don't control this
+            stack - there's nothing here worth showing if it can't be used. */}
+        {canControl && (
+          <div style={{ position: 'absolute', top: activeCardHeight + footprint, left: 0, width: activeCardWidth + footprint, zIndex: depthOrder.length + 2 }}>
+            <StackTapControls
+              untappedCount={untappedCount}
+              untappableCount={untappableCount}
+              onTapN={(n) => tapNFromGroup(group, n)}
+              onUntapN={(n) => untapNFromGroup(group, n, ownerManaPool)}
+              tapColorOptions={manaPipOptions(getCardDefinition(front.defId)) ?? undefined}
+              onTapColor={(color) => tapOneFromGroupWithColor(group, color)}
+              untapColorOptions={untapColorOptionsForGroup(group, ownerManaPool)}
+              onUntapColor={(color) => untapOneFromGroupWithColor(group, color, ownerManaPool)}
+            />
+          </div>
+        )}
         <div className="battlefield-stack-layer" style={{ zIndex: depthOrder.length + 1 }}>
           <Card
             definition={getCardDefinition(front.defId)}
@@ -1101,6 +1209,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     const acceptsBlockerRemoval = isDeclaringBlockers && !isOpponentSide;
     const isLegalTarget = isLegalPendingTarget(c, ownerId);
     const selected = pendingBlocker === c.instanceId || multiSelected.has(c.instanceId) || isLegalTarget;
+    const canControl = canControlCard(ownerId);
 
     return (
       <div key={c.instanceId} className={isDead ? 'destroyed-card-wrapper' : ''} ref={(el) => registerCardRef(c.instanceId, el)}>
@@ -1120,18 +1229,23 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
             }
           }}
         >
-          {renderStackedCard(group, c, {
-            selected,
-            onClick: () => {
-              if (isDead) return;
-              if (isLegalTarget) {
-                onAction({ type: 'CHOOSE_TARGET', targetInstanceId: c.instanceId });
-              } else if (canAttackThis) toggleAttacker(c.instanceId);
-              else if (canBeBlocker) handleBlockerCandidateClick(c.instanceId);
-              else setOpenPanelId(c.instanceId);
+          {renderStackedCard(
+            group,
+            c,
+            {
+              selected,
+              onClick: () => {
+                if (isDead) return;
+                if (isLegalTarget) {
+                  onAction({ type: 'CHOOSE_TARGET', targetInstanceId: c.instanceId });
+                } else if (canAttackThis) toggleAttacker(c.instanceId);
+                else if (canBeBlocker) handleBlockerCandidateClick(c.instanceId);
+                else setOpenPanelId(c.instanceId);
+              },
+              onDoubleClick: () => canControl && !isDead && stackCount === 1 && handleToggleTap(c),
             },
-            onDoubleClick: () => !isDead && stackCount === 1 && handleToggleTap(c),
-          })}
+            canControl,
+          )}
         </div>
       </div>
     );
@@ -1145,6 +1259,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     const isPendingManaChoice = manaChoiceQueue.length > 0 && manaChoiceQueue[0].instanceId === c.instanceId;
     const canReorder = reorderAllowed && stackCount === 1;
     const isLegalTarget = isLegalPendingTarget(c, playerId);
+    const canControl = canControlCard(playerId);
     return (
       <div key={c.instanceId} ref={(el) => registerCardRef(c.instanceId, el)}>
         <div
@@ -1153,38 +1268,50 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           onDragOver={(e) => reorderAllowed && e.preventDefault()}
           onDrop={() => reorderAllowed && draggedInstanceId && handleRowDrop(playerId, rowKey, rowCards, c.instanceId)}
         >
-          {renderStackedCard(group, c, {
-            selected: multiSelected.has(c.instanceId) || isPendingManaChoice || isLegalTarget,
-            onClick: () => {
-              if (isLegalTarget) onAction({ type: 'CHOOSE_TARGET', targetInstanceId: c.instanceId });
-              else setOpenPanelId(c.instanceId);
+          {renderStackedCard(
+            group,
+            c,
+            {
+              selected: multiSelected.has(c.instanceId) || isPendingManaChoice || isLegalTarget,
+              onClick: () => {
+                if (isLegalTarget) onAction({ type: 'CHOOSE_TARGET', targetInstanceId: c.instanceId });
+                else setOpenPanelId(c.instanceId);
+              },
+              onDoubleClick: () => canControl && stackCount === 1 && handleToggleTap(c),
             },
-            onDoubleClick: () => stackCount === 1 && handleToggleTap(c),
-          })}
+            canControl,
+          )}
         </div>
       </div>
     );
   }
 
   /**
-   * The hand-fan itself - same fanned/overlapping layout for both hands.
-   * Never reveals the opponent's actual cards - just face-down backs, same shape.
+   * The hand-fan itself, for your own hand only - the opponent's hand never
+   * gets a card-shaped row at all (see the isOpponentSide branch below): a
+   * face-down card is still shaped and sized like a real card, and showing
+   * a whole fanned row of them ate as much screen space as showing your own
+   * hand, exactly what a single-board, no-scrolling view can't afford. A
+   * plain count reads just as clearly with a fraction of the height.
    * `curveUp` picks which way the arc bows: a hand sitting at the bottom of
    * the screen fans like a smile (center pokes up, edges droop down); a hand
-   * placed at the top instead - the opponent's, in Full Board - needs the
-   * mirror image (center dips down toward the table, edges lift up), or it
-   * reads as an upside-down frown.
+   * placed at the top instead needs the mirror image (center dips down
+   * toward the table, edges lift up), or it reads as an upside-down frown.
    */
-  function renderHandRow(player: PlayerState, isOpponentSide: boolean, curveUp: boolean, handRef?: React.Ref<HTMLDivElement>) {
+  function renderHandRow(player: PlayerState, isOpponentSide: boolean, curveUp: boolean) {
+    if (isOpponentSide) {
+      return <div className="opponent-hand-count">Opponent hand: {player.zones.hand.length}</div>;
+    }
+
     const isControllersTurn = state.activePlayerId === player.id;
     // Only dim hand cards for affordability once mana's actually been tapped -
     // at 0 mana (start of turn, or right after casting something) nothing
     // should look unplayable yet, since the player hasn't had a chance to pay for anything.
     const hasMana = Object.values(player.manaPool).some((amount) => amount > 0);
-    const hand = isOpponentSide ? player.zones.hand : orderedHand(player.zones.hand);
+    const hand = orderedHand(player.zones.hand);
 
     return (
-      <div ref={handRef} className={`hand-fan ${isOpponentSide ? 'opponent-hand' : 'your-hand'}`}>
+      <div className="hand-fan your-hand">
         {hand.map((c, i, arr) => {
           const mid = (arr.length - 1) / 2;
           const offset = i - mid;
@@ -1192,15 +1319,6 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           // Pivot from whichever edge the hand is "held from" - bottom for a
           // hand at the bottom of the screen, top for one mirrored at the top.
           const fanStyle = { transform: `rotate(${offset * 4}deg) translateY(${curveY}px)`, transformOrigin: curveUp ? 'bottom center' : 'top center', zIndex: i };
-
-          if (isOpponentSide) {
-            return (
-              <div key={c.instanceId} className="hand-fan-card" style={fanStyle}>
-                <Card definition={getCardDefinition(c.defId)} faceDown />
-              </div>
-            );
-          }
-
           const def = getCardDefinition(c.defId);
           const affordable = def.type === 'land' || canPay(player.manaPool, parseCostLabel(def.costLabel), 0);
           const isInstantSpeed = def.type === 'instant' || hasKeyword(def.text, 'flash');
@@ -1211,7 +1329,16 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
               className="hand-fan-card"
               style={fanStyle}
               draggable
-              onDragStart={() => setDraggedInstanceId(c.instanceId)}
+              onDragStart={(e) => {
+                setDraggedInstanceId(c.instanceId);
+                // The default drag ghost is captured from this wrapper, which
+                // carries the fan's rotate/translate transform - some
+                // browsers render that as a blank/plain-image ghost instead
+                // of the actual styled card. Pointing setDragImage at the
+                // card itself (no transform of its own) fixes that.
+                const cardEl = e.currentTarget.querySelector('.card') as HTMLElement | null;
+                if (cardEl) e.dataTransfer.setDragImage(cardEl, cardEl.offsetWidth / 2, cardEl.offsetHeight / 2);
+              }}
               onDragOver={(e) => e.preventDefault()}
               onDrop={() => handleHandDrop(player.id, c.instanceId)}
             >
@@ -1366,10 +1493,10 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     );
 
     // A hand placed at the top of its zone (mirrorLayout) needs the mirrored
-    // arc - see renderHandRow. Only your own real (in-flow) hand gets
-    // yourHandRef - the opponent's hand and the docked tray's own copy of
-    // yours don't represent "is my real hand on screen right now".
-    const handRow = renderHandRow(player, isOpponentSide, !mirrorLayout, isOpponentSide ? undefined : yourHandRef);
+    // arc - see renderHandRow. Your own hand never renders in-flow anymore -
+    // it lives permanently in the docked tray (see the bottom of the render
+    // function) - so this is only ever actually used for the opponent's.
+    const handRow = isOpponentSide ? renderHandRow(player, isOpponentSide, !mirrorLayout) : null;
 
     const lifeRow = (
       <div className="life-row">
@@ -1398,7 +1525,11 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   function renderPlayerZone(player: PlayerState, isOpponentSide: boolean, mirrorLayout: boolean = isOpponentSide) {
     const { commanderColumn, graveyardExileColumn, centerColumn, handRow, lifeRow } = buildPlayerZonePieces(player, isOpponentSide, mirrorLayout, false);
     return (
-      <section className={`player-zone ${isOpponentSide ? 'opponent-zone' : 'your-zone'}`}>
+      // player-zone-fill: this is only ever the single board shown in My
+      // View/Opponent View (Full Board builds its own zones separately) -
+      // see .player-zone-fill in styles.css for why it needs the modifier
+      // rather than just being part of the base .player-zone rule.
+      <section className={`player-zone player-zone-fill ${isOpponentSide ? 'opponent-zone' : 'your-zone'}`}>
         {mirrorLayout && lifeRow}
         {mirrorLayout && handRow}
         <div className="zone-top-row">
@@ -1442,6 +1573,42 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   // attacker stack visually in the same slot. ---------------------------
   const blockerSlotsVisible = !isDeclaringAttackers && state.declaredAttackers.length > 0;
 
+  // Combat forces Full Board (see showCombatZones), which is a much taller
+  // layout than whatever single-board view was showing a moment ago -
+  // without this, the page keeps whatever scroll position it already had,
+  // which now points at a completely different part of the new, taller
+  // page (usually well past the combat zone - the "overshoot"). Centering
+  // explicitly on declaring attackers keeps the intended reading order on
+  // screen: opponent's creatures above the red zone, yours below it.
+  useEffect(() => {
+    if (!isDeclaringAttackers) return;
+    // Two frames, same as changeViewMode's own settling wait - the content
+    // swap into Full Board and the zoom wrapper's ResizeObserver follow-up
+    // (see naturalBoardHeight) both need to land before this position means anything.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        combatZoneRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+    });
+  }, [isDeclaringAttackers]);
+
+  // Once blocker slots appear, the zone grows a full extra row of cards -
+  // re-centering on the whole (now taller) box the same way would push its
+  // top half off the top of the screen. Aligning the newly-appeared slots'
+  // own top edge to screen-center instead keeps them (and enough of what's
+  // above) comfortably in view without recalculating around the zone's new height.
+  useEffect(() => {
+    if (!blockerSlotsVisible) return;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const el = firstBlockerSlotRef.current;
+        if (!el) return;
+        const targetY = window.scrollY + el.getBoundingClientRect().top - window.innerHeight / 2;
+        window.scrollTo({ top: targetY, behavior: 'smooth' });
+      });
+    });
+  }, [blockerSlotsVisible]);
+
   // The attacking player (not the defender) chooses the damage order once an
   // attacker ends up with 2+ blockers - one modal per multi-blocked attacker,
   // tracked via orderedAttackerIds so it doesn't reappear once confirmed.
@@ -1451,7 +1618,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
       : undefined;
 
   const combatZoneEl = showCombatZones && (
-    <div className="combat-zone-merged">
+    <div className="combat-zone-merged" ref={combatZoneRef}>
       <div className="combat-zone-label">
         {isDeclaringAttackers
           ? 'Attacking \u2014 drag your creatures here'
@@ -1469,7 +1636,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           }
         }}
       >
-        {(isDeclaringAttackers ? Array.from(selectedAttackers) : state.declaredAttackers).map((id) => {
+        {(isDeclaringAttackers ? Array.from(selectedAttackers) : state.declaredAttackers).map((id, columnIndex) => {
           const found = findCard(state, id);
           if (!found) return null;
           const attackerIsDead = state.pendingDeaths.includes(id);
@@ -1489,7 +1656,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
               <Card
                 definition={getCardDefinition(found.card.defId)}
                 instance={{ ...found.card, tapped: false }}
-                onClick={() => isDeclaringAttackers && toggleAttacker(id)}
+                onClick={() => setOpenPanelId(id)}
               />
             </div>
           );
@@ -1497,6 +1664,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           const blockerSlotEl = blockerSlotsVisible && (
             <div
               className="combat-blocker-slot"
+              ref={columnIndex === 0 ? firstBlockerSlotRef : undefined}
               onDragOver={(e) => isDeclaringBlockers && e.preventDefault()}
               onDrop={() => {
                 if (isDeclaringBlockers && draggedInstanceId) {
@@ -1554,9 +1722,9 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                       }}
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (isDeclaringBlockers) removeBlockerAssignment(id, bId);
+                        setOpenPanelId(bId);
                       }}
-                      title={isDeclaringBlockers ? 'Click, or drag back out, to remove this blocker' : ''}
+                      title={isDeclaringBlockers ? 'Drag out to remove this blocker - click to view' : ''}
                     >
                       <Card definition={getCardDefinition(bf.card.defId)} instance={{ ...bf.card, tapped: false }} />
                     </div>
@@ -1653,9 +1821,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
         </div>
       )}
 
-      {!yourHandVisible && (
-        <div className="docked-hand-tray">{renderHandRow(you, false, true)}</div>
-      )}
+      <div className="docked-hand-tray">{renderHandRow(you, false, true)}</div>
 
       {effectiveViewMode === 'full' ? (
         (() => {
@@ -1688,7 +1854,6 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                     {yourPieces.lifeRow}
                   </section>
                 </>,
-                true,
               )}
               <div className="full-board-side-rail">
                 {opponentPieces.commanderColumn}
@@ -1698,72 +1863,17 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           );
         })()
       ) : effectiveViewMode === 'mine' ? (
-        // Opponent's board still renders, mirrored above like Full Board -
-        // scroll up yourself to see it; switching views never scrolls for you.
-        renderZoomedBoard(
-          <>
-            {renderPlayerZone(opponent, true, true)}
-            {renderPlayerZone(you, false, false)}
-          </>,
-        )
+        // Just your own battlefield, full-screen - no opponent zone to
+        // scroll past to reach it. Full Board is still there (and forced
+        // during combat) for whenever both boards actually need to be visible at once.
+        renderZoomedBoard(renderPlayerZone(you, false, false))
       ) : (
-        renderZoomedBoard(
-          <>
-            {renderPlayerZone(you, false, true)}
-            {renderPlayerZone(opponent, true, false)}
-          </>,
-        )
+        // Opponent View: their battlefield, laid out the way they'd see it
+        // (mirrorLayout false) rather than mirrored across the table -
+        // isOpponentSide stays true so their hand still only shows a count
+        // (see renderHandRow) and their permanents stay look-only.
+        renderZoomedBoard(renderPlayerZone(opponent, true, false))
       )}
-
-      {/* In normal document flow (not fixed) - only comes into view once
-          scrolled down to it, unlike the Event Log which stays pinned. */}
-      <div className="bottom-controls-row">
-        <div className="bottom-left-controls">
-          <button className="undo-button" onClick={() => onAction({ type: 'UNDO' })} title="Step back through recent actions">
-            {'\u21b6'} Undo
-          </button>
-          <MutualAdjustmentControls
-            state={state}
-            yourPlayerId={yourPlayerId}
-            onRequest={() => onAction({ type: 'REQUEST_MUTUAL_ADJUSTMENT' }, yourPlayerId)}
-            onRespond={(accept) => onAction({ type: 'RESPOND_MUTUAL_ADJUSTMENT', accept }, yourPlayerId)}
-            onRequestExit={() => onAction({ type: 'REQUEST_EXIT_MUTUAL_ADJUSTMENT' }, yourPlayerId)}
-            onRespondExit={(accept) => onAction({ type: 'RESPOND_EXIT_MUTUAL_ADJUSTMENT', accept }, yourPlayerId)}
-          />
-          <button className="concede-button" onClick={() => onAction({ type: 'CONCEDE' }, yourPlayerId)}>
-            Concede
-          </button>
-        </div>
-
-        <div className="view-mode-toggle">
-          {!editingZoom && (
-            <>
-              <button
-                className={`view-mode-button ${viewMode === 'mine' ? 'view-mode-button-active' : ''}`}
-                disabled={showCombatZones}
-                title={showCombatZones ? 'Combat shows the full board until it resolves' : ''}
-                onClick={() => changeViewMode('mine')}
-              >
-                My View
-              </button>
-              <button
-                className={`view-mode-button ${viewMode === 'opponent' ? 'view-mode-button-active' : ''}`}
-                disabled={showCombatZones}
-                title={showCombatZones ? 'Combat shows the full board until it resolves' : ''}
-                onClick={() => changeViewMode('opponent')}
-              >
-                Opponent View
-              </button>
-              <button className={`view-mode-button ${viewMode === 'full' ? 'view-mode-button-active' : ''}`} onClick={() => changeViewMode('full')}>
-                Full Board
-              </button>
-            </>
-          )}
-          <button className="view-mode-button" onClick={() => setEditingZoom(true)}>
-            Edit View
-          </button>
-        </div>
-      </div>
 
       {/* Pinned to the screen (not in normal flow) while editing, so it's
           always reachable regardless of scroll position - Done dismisses it.
@@ -1805,7 +1915,94 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
         </div>
       )}
 
-      <EventLog log={state.log} />
+      {/* Pinned bottom-left, Event Log then Board View to its right - the
+          hand now lives permanently in the docked tray, so Mutual
+          Adjustment/Concede/View options moved here rather than sitting in
+          normal document flow where the hand used to leave room for them. */}
+      <div className="bottom-left-stack">
+        <EventLog log={state.log} />
+
+        <div className="board-view-column">
+          {/* Only during someone else's turn - a quick way to flip to
+              Opponent View and watch it happen, without opening Board View
+              and clicking through to it yourself. Once more than two
+              players are ever in a game, this is the shape a "watch player
+              N's turn" shortcut would take for each of them too. */}
+          {state.activePlayerId !== yourPlayerId && (
+            <button
+              className="opponent-turn-eye"
+              disabled={showCombatZones}
+              title={showCombatZones ? 'Combat shows the full board until it resolves' : "Opponent's turn - click to watch (Opponent View)"}
+              onClick={() => changeViewMode('opponent')}
+            >
+              {'\u{1F441}'}
+            </button>
+          )}
+          <div className={`board-view-panel-float ${boardViewExpanded ? 'board-view-panel-expanded' : ''}`}>
+            <button className="board-view-panel-header" onClick={() => setBoardViewExpanded((e) => !e)}>
+              {boardViewExpanded ? 'Board View ▾' : 'Board View ▴'}
+            </button>
+            {boardViewExpanded && (
+              <div className="board-view-panel-body">
+                <div className="view-mode-toggle">
+                  <button
+                    className={`view-mode-button ${viewMode === 'mine' ? 'view-mode-button-active' : ''}`}
+                    disabled={showCombatZones}
+                    title={showCombatZones ? 'Combat shows the full board until it resolves' : ''}
+                    onClick={() => changeViewMode('mine')}
+                  >
+                    My View
+                  </button>
+                  <button
+                    className={`view-mode-button ${viewMode === 'opponent' ? 'view-mode-button-active' : ''}`}
+                    disabled={showCombatZones}
+                    title={showCombatZones ? 'Combat shows the full board until it resolves' : ''}
+                    onClick={() => changeViewMode('opponent')}
+                  >
+                    Opponent View
+                  </button>
+                  <button className={`view-mode-button ${viewMode === 'full' ? 'view-mode-button-active' : ''}`} onClick={() => changeViewMode('full')}>
+                    Full Board
+                  </button>
+                  {/* My View/Opponent View fit themselves automatically now (see
+                      autoFitZoom) - there's nothing left for a manual zoom to do
+                      until Full Board is actually showing both boards. */}
+                  {effectiveViewMode === 'full' && (
+                    <button className="view-mode-button" onClick={() => setEditingZoom(true)}>
+                      Edit View
+                    </button>
+                  )}
+                </div>
+                <MutualAdjustmentControls
+                  state={state}
+                  yourPlayerId={yourPlayerId}
+                  onRequest={() => onAction({ type: 'REQUEST_MUTUAL_ADJUSTMENT' }, yourPlayerId)}
+                  onRespond={(accept) => onAction({ type: 'RESPOND_MUTUAL_ADJUSTMENT', accept }, yourPlayerId)}
+                  onRequestExit={() => onAction({ type: 'REQUEST_EXIT_MUTUAL_ADJUSTMENT' }, yourPlayerId)}
+                  onRespondExit={(accept) => onAction({ type: 'RESPOND_EXIT_MUTUAL_ADJUSTMENT', accept }, yourPlayerId)}
+                />
+                {/* Hold rather than click - see startConcedeHold - so an
+                    accidental tap never ends the game outright. */}
+                <button
+                  className="concede-button"
+                  onMouseDown={startConcedeHold}
+                  onMouseUp={cancelConcedeHold}
+                  onMouseLeave={cancelConcedeHold}
+                  onTouchStart={startConcedeHold}
+                  onTouchEnd={cancelConcedeHold}
+                  onTouchCancel={cancelConcedeHold}
+                >
+                  <span
+                    className="concede-button-fill"
+                    style={{ width: concedeHolding ? '100%' : '0%', transitionDuration: concedeHolding ? `${CONCEDE_HOLD_MS}ms` : '0s' }}
+                  />
+                  <span className="concede-button-label">Hold to Concede</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
 
       <div
         className="bottom-right-controls"
@@ -1838,6 +2035,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           definition={getCardDefinition(openCard.card.defId)}
           instance={openCard.card}
           currentZone={openCard.zone}
+          readOnly={openCardIsReadOnly}
           ownerManaPool={openCard.player.manaPool}
           ownerCommanderDefId={openCard.player.commanderDefId}
           mutualActive={mutualActive}

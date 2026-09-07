@@ -35,7 +35,7 @@ export default function App() {
   return (
     <GameActivityProvider value={setInGame}>
       <div className="app-shell">
-        <NavBar page={page} onNavigate={navigate} pinned={!inGame} />
+        {!inGame && <NavBar page={page} onNavigate={navigate} />}
         <div className="app-content">
           {page === 'home' && <HomePage onNavigate={navigate} />}
           {page === 'library' && <LibraryPage />}
