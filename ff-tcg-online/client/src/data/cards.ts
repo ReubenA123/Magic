@@ -311,7 +311,7 @@ export const CARD_POOL: CardDefinition[] = [
     power: 1,
     toughness: 1,
     text: "Whenever you cast a noncreature spell, if at least four mana was spent to cast it, put a +1/+1 counter on this creature. " +
-      "Blow Up — {T}, Sacrifice this creature: It deals damage equal to its power to target creature. Activate only as a sorcery.",
+      "Blow Up — Tap, Sacrifice this creature: It deals damage equal to its power to target creature. Activate only as a sorcery.",
     imagePath: '/assets/cards/blazing-bomb.webp',
   },
   {
@@ -320,7 +320,7 @@ export const CARD_POOL: CardDefinition[] = [
     type: 'artifact',
     costLabel: "3",
     text: ": Add one mana of any color. " +
-      "GOOOOAAAALLL! — {T}, Sacrifice this artifact: Draw two cards. Activate only if an opponent was dealt combat " +
+      "GOOOOAAAALLL! — Tap, Sacrifice this artifact: Draw two cards. Activate only if an opponent was dealt combat " +
       "damage by a legendary creature this turn.",
     imagePath: '/assets/cards/blitzball.webp',
   },
@@ -1618,7 +1618,7 @@ export const CARD_POOL: CardDefinition[] = [
     subtype: 'artifact',
     power: 1,
     toughness: 4,
-    text: 'When this creature dies, create a Treasure token. (It\u2019s an artifact with “{T}, Sacrifice this token: Add one mana of any color.”)\n' +
+    text: 'When this creature dies, create a Treasure token. (It\u2019s an artifact with “Tap, Sacrifice this token: Add one mana of any color.”)\n' +
       "2, Tap: Exile target card from a graveyard.",
     imagePath: '/assets/cards/magic-pot.webp'
   },
@@ -2170,7 +2170,7 @@ export const CARD_POOL: CardDefinition[] = [
     power: 1,
     toughness: 2,
     text: 'Landfall — Whenever a land you control enters, you may discard a card. If you do, draw a card.\n' +
-      'Summon — {X}, {T}: Return target Saga card with mana value X from your graveyard to the battlefield with ' +
+      'Summon — {X}, Tap: Return target Saga card with mana value X from your graveyard to the battlefield with ' +
       'a finality counter on it. It gains haste until end of turn. Activate only as a sorcery.',
     imagePath: '/assets/cards/rydia-summoner-of-mist.webp'
   },
@@ -2909,7 +2909,7 @@ export const CARD_POOL: CardDefinition[] = [
   subtype: 'Legendary Artifact',
   text: 'Black spells you cast cost {1} less to cast. \n' +
   'If a nontoken creature an opponent controls would die, instead exile it and you gain 2 life. \n' +
-  '{4}{B}{B}, {T}: Put target creature card exiled with The Darkness Crystal onto the battlefield tapped under your control with two additional +1/+1 counters on it.',
+  '{4}{B}{B}, Tap: Put target creature card exiled with The Darkness Crystal onto the battlefield tapped under your control with two additional +1/+1 counters on it.',
   imagePath: '/assets/cards/the-darkness-crystal.webp'
   },
   {
@@ -2920,7 +2920,7 @@ export const CARD_POOL: CardDefinition[] = [
   subtype: 'Legendary Artifact',
   text: 'Green spells you cast cost {1} less to cast. \n' +
   'If one or more +1/+1 counters would be put on a creature you control, twice that many +1/+1 counters are put on that creature instead. \n' +
-  '{4}{G}{G}, {T}: Distribute two +1/+1 counters among one or two target creatures you control.',
+  '{4}{G}{G}, Tap: Distribute two +1/+1 counters among one or two target creatures you control.',
   imagePath: '/assets/cards/the-earth-crystal.webp'
   },
   {
@@ -2931,7 +2931,7 @@ export const CARD_POOL: CardDefinition[] = [
   subtype: 'Legendary Creature Human Noble Warrior',
   power: 2,
   toughness: 2,
-  text: '{T}: Add {U} or {R}. Spend this mana only to cast a noncreature spell. \n' +
+  text: 'Tap: Add {U} or {R}. Spend this mana only to cast a noncreature spell. \n' +
   'Whenever you cast a noncreature spell, if at least four mana was spent to cast it, put a +1/+1 counter on The Emperor of Palamecia. ' +
   'Then if it has three or more +1/+1 counters on it, transform it.',
   imagePath: '/assets/cards/the-emperor-of-palamecia.webp',
@@ -2965,7 +2965,7 @@ export const CARD_POOL: CardDefinition[] = [
   subtype: 'Legendary Artifact',
   text: 'Red spells you cast cost {1} less to cast. \n' +
   'Creatures you control have haste. \n' +
-  '{4}{R}{R}, {T}: Create a token that\u2019s a copy of target creature you control. Sacrifice it at the beginning of the next end step.',
+  '{4}{R}{R}, Tap: Create a token that\u2019s a copy of target creature you control. Sacrifice it at the beginning of the next end step.',
   imagePath: '/assets/cards/the-fire-crystal.webp'
   },
   {
@@ -2973,9 +2973,9 @@ export const CARD_POOL: CardDefinition[] = [
   name: 'The Gold Saucer',
   costLabel: '-',
   type: 'land',
-  text: '{T}: Add {M}. \n' +
-  '{2}, {T}: Flip a coin. If you win the flip, create a Treasure token. \n' +
-  '{3}, {T}, Sacrifice two artifacts: Draw a card.',
+  text: 'Tap: Add {M}. \n' +
+  '{2}, Tap: Flip a coin. If you win the flip, create a Treasure token. \n' +
+  '{3}, Tap, Sacrifice two artifacts: Draw a card.',
   imagePath: '/assets/cards/the-gold-saucer.webp',
   producesMana: 'C'
   },
@@ -3050,7 +3050,7 @@ export const CARD_POOL: CardDefinition[] = [
   subtype: 'Legendary Artifact',
   text: 'Blue spells you cast cost {1} less to cast. \n' +
   'If an opponent would mill one or more cards, they mill that many cards plus four instead. \n' +
-  '{4}{U}{U}, {T}: Each opponent mills cards equal to the number of cards in your hand.',
+  '{4}{U}{U}, Tap: Each opponent mills cards equal to the number of cards in your hand.',
   imagePath: '/assets/cards/the-water-crystal.webp'
   },
   {
@@ -3061,7 +3061,7 @@ export const CARD_POOL: CardDefinition[] = [
   subtype: 'Legendary Artifact',
   text: 'White spells you cast cost {1} less to cast. \n' +
   'If you would gain life, you gain twice that much life instead. \n' +
-  '{4}{W}{W}, {T}: Creatures you control gain flying and lifelink until end of turn.',
+  '{4}{W}{W}, Tap: Creatures you control gain flying and lifelink until end of turn.',
   imagePath: '/assets/cards/the-wind-crystal.webp'
   },
   {
@@ -3136,7 +3136,7 @@ export const CARD_POOL: CardDefinition[] = [
   power: 2,
   toughness: 2,
   text: 'Whenever you cast your first Human creature spell each turn, that creature enters with an additional +1/+1 counter on it for each Dog and/or Wolf you control. \n' +
-  '{T}: Add one mana of any color.',
+  'Tap: Add one mana of any color.',
   imagePath: '/assets/cards/torgal-a-fine-hound.webp'
   },
   {
@@ -3178,7 +3178,7 @@ export const CARD_POOL: CardDefinition[] = [
   costLabel: '-',
   type: 'land',
   text:'This land enters tapped. \n' +
-  '{T}: Add {U} or {B}.',
+  'Tap: Add {U} or {B}.',
   imagePath: '/assets/cards/treno-dark-city.webp',
   producesMana: ['U', 'B']
   },
@@ -3209,7 +3209,7 @@ export const CARD_POOL: CardDefinition[] = [
   toughness: 4,
   text: 'Flying \n' +
   'Whenever Ultima attacks, put a blight counter on target land. For as long as that land has a blight counter on it, ' +
-  'it loses all land types and abilities and has “{T}: Add {M}.”\n' +
+  'it loses all land types and abilities and has “Tap: Add {M}.”\n' +
   'Whenever you tap a land for {M}, add an additional {M}.',
   imagePath: '/assets/cards/ultima-origin-of-oblivion.webp'
   },
@@ -3281,7 +3281,7 @@ export const CARD_POOL: CardDefinition[] = [
   subtype: 'Creature Rat',
   power: 2,
   toughness: 2,
-  text: 'Rat Tail — When this creature dies, create a Treasure token. (It’s an artifact with “{T}, Sacrifice this token: Add one mana of any color.”)',
+  text: 'Rat Tail — When this creature dies, create a Treasure token. (It’s an artifact with “Tap, Sacrifice this token: Add one mana of any color.”)',
   imagePath: '/assets/cards/undercity-dire-rat.webp'
   },
   {
@@ -3348,7 +3348,7 @@ export const CARD_POOL: CardDefinition[] = [
   costLabel: '-',
   type: 'land',
   text: 'This land enters tapped. \n' +
-  '{T}: Add {B} or {R}.',
+  'Tap: Add {B} or {R}.',
   imagePath: '/assets/cards/vector-imperial-capital.webp',
   producesMana: ['B', 'R']
   },
@@ -3361,7 +3361,7 @@ export const CARD_POOL: CardDefinition[] = [
   power: 3,
   toughness: 3,
   text: 'Whenever you cast a legendary spell, draw a card. This ability triggers only once each turn. \n' +
-  'Hero\u2019s Sundering — {7}, {T}: Exile target nonland permanent. Transform Venat. Activate only as a sorcery.',
+  'Hero\u2019s Sundering — {7}, Tap: Exile target nonland permanent. Transform Venat. Activate only as a sorcery.',
   imagePath: '/assets/cards/venat-heart-of-hydaelyn.webp',
   transformsInto: 'hydaelyn-the-mothercrystal',
   },
@@ -3468,7 +3468,7 @@ export const CARD_POOL: CardDefinition[] = [
   costLabel: '2WW',
   type: 'artifact',
   text: 'When this artifact enters, exile target nonland permanent an opponent controls until this artifact leaves the battlefield. \n' +
-  '{T}: Add {W}.',
+  'Tap: Add {W}.',
   imagePath: '/assets/cards/white-auracite.webp'
   },
   {
@@ -3489,7 +3489,7 @@ export const CARD_POOL: CardDefinition[] = [
   costLabel: '-',
   type: 'land',
   subtype: 'Town',
-  text: 'This land enters tapped. \n{T}: Add {G} or {W}.',
+  text: 'This land enters tapped. \nTap: Add {G} or {W}.',
   imagePath: '/assets/cards/windurst-federation-center.webp',
   producesMana: ['G', 'W']
   },
@@ -3498,8 +3498,8 @@ export const CARD_POOL: CardDefinition[] = [
   name: 'World Map',
   costLabel: '1',
   type: 'artifact',
-  text: '{1}, {T}, Sacrifice this artifact: Search your library for a basic land card, reveal it, put it into your hand, then shuffle. \n' +
-  '{3}, {T}, Sacrifice this artifact: Search your library for a land card, reveal it, put it into your hand, then shuffle.',
+  text: '{1}, Tap, Sacrifice this artifact: Search your library for a basic land card, reveal it, put it into your hand, then shuffle. \n' +
+  '{3}, Tap, Sacrifice this artifact: Search your library for a land card, reveal it, put it into your hand, then shuffle.',
   imagePath: '/assets/cards/world-map.webp'
   },
   {
@@ -3563,7 +3563,7 @@ export const CARD_POOL: CardDefinition[] = [
   costLabel: '-',
   type: 'land',
   text: 'This land enters tapped. \n ' +
-  '{T}: Add {G}. \n' +
+  'Tap: Add {G}. \n' +
   'A city dead for a thousand years. The end of Yuna\u2019s journey.\n' +
   'Lasting Fayth {4}{G}{G} \n' +
   'Sorcery — Adventure \n' +
