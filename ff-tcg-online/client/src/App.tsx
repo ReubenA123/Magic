@@ -4,10 +4,12 @@ import HomePage from './pages/HomePage';
 import LibraryPage from './pages/LibraryPage';
 import DeckBuilderPage from './pages/DeckBuilderPage';
 import VersusPage from './pages/VersusPage';
+import AccountPage from './pages/AccountPage';
 import { GameActivityProvider } from './context/GameActivity';
+import { AuthProvider, useAuth } from './context/AuthContext';
 
 const PAGE_STORAGE_KEY = 'magic-current-page';
-const VALID_PAGES: Page[] = ['home', 'library', 'deckbuilder', 'versus'];
+const VALID_PAGES: Page[] = ['home', 'library', 'deckbuilder', 'versus', 'account'];
 
 function loadInitialPage(): Page {
   try {
@@ -33,16 +35,26 @@ export default function App() {
   }
 
   return (
-    <GameActivityProvider value={setInGame}>
-      <div className="app-shell">
-        {!inGame && <NavBar page={page} onNavigate={navigate} />}
-        <div className="app-content">
-          {page === 'home' && <HomePage onNavigate={navigate} />}
-          {page === 'library' && <LibraryPage />}
-          {page === 'deckbuilder' && <DeckBuilderPage />}
-          {page === 'versus' && <VersusPage />}
+    <AuthProvider>
+      <GameActivityProvider value={setInGame}>
+        <div className="app-shell">
+          {!inGame && <NavBar page={page} onNavigate={navigate} />}
+          <div className="app-content">
+            {page === 'home' && <HomePage onNavigate={navigate} />}
+            {page === 'library' && <LibraryPage />}
+            {page === 'deckbuilder' && <DeckBuilderPage />}
+            {page === 'versus' && <VersusPage />}
+            {/* Falls back to Home rather than a blank page if the saved "last
+                page was Account" gets restored after a session has expired. */}
+            {page === 'account' && <AccountPageOrHome onNavigate={navigate} />}
+          </div>
         </div>
-      </div>
-    </GameActivityProvider>
+      </GameActivityProvider>
+    </AuthProvider>
   );
+}
+
+function AccountPageOrHome({ onNavigate }: { onNavigate: (page: Page) => void }) {
+  const { user } = useAuth();
+  return user ? <AccountPage /> : <HomePage onNavigate={onNavigate} />;
 }

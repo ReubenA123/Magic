@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+*.local
+
+# SQLite account database - contains password hashes, must never be committed.
+ff-tcg-online/server/data/
+
+# Editor/OS noise
+.DS_Store
+Thumbs.db

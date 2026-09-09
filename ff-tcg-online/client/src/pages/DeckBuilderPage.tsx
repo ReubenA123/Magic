@@ -1,11 +1,12 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { CARD_POOL, getCardDefinition } from '../data/cards';
 import { CardType } from '../types';
 import Card from '../components/Card';
 import DeckViewModal from '../components/DeckViewModal';
 import { isLegalCommander, canAddCopy, isTransformBackFace } from '../utils/commander';
-import { loadDecks, saveDeck, deleteDeck, newDeckId, SavedDeck } from '../utils/deckStorage';
+import { loadDecks, saveDeck, deleteDeck, newDeckId, hasLocalDecksToImport, importLocalDecksToAccount, SavedDeck } from '../utils/deckStorage';
 import { getColourIdentity, isWithinColourIdentity, ManaLetter } from '../utils/colourIdentity';
+import { useAuth } from '../context/AuthContext';
 
 // --- Static filter option lists ------------------------------------------
 type PoolFilter = CardType | 'all' | 'commander';
@@ -46,8 +47,38 @@ export default function DeckBuilderPage() {
   const [flippedIds, setFlippedIds] = useState<Set<string>>(new Set());
 
   // --- Saved decks + the deck currently being previewed -------------------
-  const [savedDecks, setSavedDecks] = useState<SavedDeck[]>(() => loadDecks());
+  const { user } = useAuth();
+  const [savedDecks, setSavedDecks] = useState<SavedDeck[]>([]);
   const [viewingDeck, setViewingDeck] = useState<SavedDeck | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  // Only offered once there's actually something sitting in this browser's
+  // localStorage to bring across - re-checked whenever login state changes,
+  // since that's the only thing that can make this newly true or false.
+  const [canImportLocal, setCanImportLocal] = useState(false);
+  const [importing, setImporting] = useState(false);
+
+  function refreshSavedDecks() {
+    loadDecks()
+      .then(setSavedDecks)
+      .catch((err) => setSaveError(err instanceof Error ? err.message : 'Could not load your decks.'));
+  }
+
+  useEffect(refreshSavedDecks, [user]);
+  useEffect(() => setCanImportLocal(!!user && hasLocalDecksToImport()), [user]);
+
+  async function handleImportLocal() {
+    setImporting(true);
+    setSaveError(null);
+    try {
+      await importLocalDecksToAccount();
+      setCanImportLocal(false);
+      refreshSavedDecks();
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Could not import your local decks.');
+    } finally {
+      setImporting(false);
+    }
+  }
 
   // --- Derived values -----------------------------------------------------
   const commander = commanderId ? getCardDefinition(commanderId) : null;
@@ -107,7 +138,7 @@ export default function DeckBuilderPage() {
     });
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!commanderId) {
       alert('Choose a commander before saving.');
       return;
@@ -119,8 +150,13 @@ export default function DeckBuilderPage() {
       cardIds,
       updatedAt: new Date().toISOString(),
     };
-    saveDeck(deck);
-    setSavedDecks(loadDecks());
+    setSaveError(null);
+    try {
+      await saveDeck(deck);
+      refreshSavedDecks();
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Could not save that deck.');
+    }
   }
 
   function handleLoad(deck: SavedDeck) {
@@ -129,9 +165,14 @@ export default function DeckBuilderPage() {
     setCardIds(deck.cardIds);
   }
 
-  function handleDelete(id: string) {
-    deleteDeck(id);
-    setSavedDecks(loadDecks());
+  async function handleDelete(id: string) {
+    setSaveError(null);
+    try {
+      await deleteDeck(id);
+      refreshSavedDecks();
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Could not delete that deck.');
+    }
   }
 
   function handleExport() {
@@ -250,6 +291,17 @@ export default function DeckBuilderPage() {
           <button onClick={handleSave}>Save deck</button>
           <button onClick={handleExport}>Export as text</button>
         </div>
+
+        <p className="account-tab-hint">
+          {user ? 'Decks save to your account - they’ll follow you to any computer you log in from.' : 'Not logged in - decks save to this browser only.'}
+        </p>
+        {saveError && <p className="account-tab-error">{saveError}</p>}
+
+        {canImportLocal && (
+          <button className="card-action-button secondary" onClick={handleImportLocal} disabled={importing}>
+            {importing ? 'Importing…' : 'Import decks saved in this browser'}
+          </button>
+        )}
 
         {savedDecks.length > 0 && (
           <div className="deckbuilder-saved-list">

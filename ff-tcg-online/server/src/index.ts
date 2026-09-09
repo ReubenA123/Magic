@@ -8,10 +8,14 @@
 // ============================================================================
 
 import 'dotenv/config';
+import cors from 'cors';
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import { registerSocketHandlers } from './socket';
+import authRoutes from './routes/auth';
+import deckRoutes from './routes/decks';
+import friendRoutes from './routes/friends';
 
 const PORT = Number(process.env.PORT) || 4000;
 // In dev, the client runs on its own Vite dev server (default port 5173) and
@@ -21,7 +25,12 @@ const PORT = Number(process.env.PORT) || 4000;
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
 
 const app = express();
+app.use(cors({ origin: CLIENT_ORIGIN }));
+app.use(express.json());
 app.get('/health', (_req, res) => res.json({ ok: true }));
+app.use('/auth', authRoutes);
+app.use('/decks', deckRoutes);
+app.use('/friends', friendRoutes);
 
 const httpServer = createServer(app);
 const io = new Server(httpServer, {

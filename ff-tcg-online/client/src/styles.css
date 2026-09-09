@@ -828,6 +828,330 @@ button {
   border-color: var(--border);
 }
 
+/* Third flex child of .nav-bar (space-between, see above) - lands at the
+   far right automatically alongside the brand (left) and tabs (middle),
+   no extra positioning needed. */
+.nav-account-button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 14px 6px 16px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 14px;
+}
+
+.nav-account-button:disabled {
+  opacity: 0.6;
+}
+
+.avatar-circle {
+  position: relative;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* object-position/transform are set inline per-avatar (see Avatar.tsx) -
+   x/y/zoom come from account data, not something CSS alone can express. */
+/* Sizing/position (width, height, left, top, transform) all come from
+   utils/avatarCrop.ts inline - this just marks it as the cropped element,
+   nothing here is actually load-bearing anymore. */
+.avatar-circle-image {
+  display: block;
+}
+
+.avatar-circle-placeholder {
+  color: var(--text-dim);
+  font-size: 14px;
+  opacity: 0.6;
+}
+
+.account-auth-modal {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  width: 100%;
+  max-width: 360px;
+}
+
+.account-auth-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.account-auth-tab {
+  flex: 1;
+  padding: 10px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+.account-auth-tab-active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.account-auth-form {
+  display: flex;
+  flex-direction: column;
+}
+
+.account-auth-form label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  margin: 14px 0 6px;
+}
+
+.account-auth-form input {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 15px;
+}
+
+.account-auth-hint {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin: 6px 0 0;
+}
+
+.account-auth-form button[type='submit'] {
+  margin-top: 20px;
+  width: 100%;
+}
+
+.account-page {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 24px 20px;
+}
+
+.account-header {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 24px;
+}
+
+.account-header-avatar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.account-header-info {
+  flex: 1;
+}
+
+.account-header-info h1 {
+  margin: 0 0 4px;
+  font-family: 'Cinzel', serif;
+  color: var(--accent);
+}
+
+.account-tabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 20px;
+}
+
+.account-tab-button {
+  padding: 10px 18px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+.account-tab-button:disabled {
+  opacity: 0.4;
+}
+
+.account-tab-button-active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.account-tab-hint {
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.account-tab-error {
+  color: var(--danger);
+  font-size: 13px;
+}
+
+.account-deck-list,
+.account-friends-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.account-friends-section {
+  margin-top: 20px;
+}
+
+.account-friends-section h3 {
+  margin: 0 0 4px;
+  font-size: 14px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.account-deck-row,
+.account-friend-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+
+.account-deck-row-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.account-friend-row-name {
+  flex: 1;
+}
+
+.account-friend-row-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.account-friends-search {
+  position: relative;
+  margin-bottom: 8px;
+}
+
+.account-friends-search input {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.account-friend-search-results {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.avatar-cropper-modal {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.avatar-cropper-modal .library-search {
+  width: 100%;
+  margin-bottom: 12px;
+}
+
+.avatar-cropper-pick-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+  gap: 10px;
+  width: 100%;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.avatar-cropper-pick-item {
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+/* Same utils/avatarCrop.ts sizing/positioning as .avatar-circle - this
+   preview and the final saved avatar are driven by the exact same crop
+   math, just at a bigger size while editing. position:relative is what
+   lets the img's absolute position/size/transform (set inline) anchor to
+   this box instead of some further-out ancestor. */
+.avatar-cropper-preview {
+  position: relative;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
+  cursor: grab;
+  user-select: none;
+}
+
+.avatar-cropper-preview:active {
+  cursor: grabbing;
+}
+
+.avatar-cropper-preview img {
+  pointer-events: none;
+}
+
+.avatar-cropper-modal label {
+  align-self: flex-start;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  margin-top: 12px;
+}
+
+.avatar-cropper-modal input[type='range'] {
+  width: 100%;
+  margin: 4px 0 12px;
+}
+
+.avatar-cropper-buttons {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+}
+
+.avatar-cropper-buttons button {
+  flex: 1;
+}
+
 .app-content {
   flex: 1;
 }

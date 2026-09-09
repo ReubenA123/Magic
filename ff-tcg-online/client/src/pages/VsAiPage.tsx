@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { loadDecks, SavedDeck } from '../utils/deckStorage';
 import { getCardDefinition } from '../data/cards';
 import { createStateFromDeck } from '../engine/state';
@@ -6,8 +6,12 @@ import { useLocalGame } from '../hooks/useLocalGame';
 import GameBoard from '../components/GameBoard';
 
 export default function VsAiPage() {
-  const [decks] = useState<SavedDeck[]>(() => loadDecks());
+  const [decks, setDecks] = useState<SavedDeck[] | null>(null);
   const [selectedDeck, setSelectedDeck] = useState<SavedDeck | null>(null);
+
+  useEffect(() => {
+    loadDecks().then(setDecks);
+  }, []);
 
   if (!selectedDeck) {
     return (
@@ -17,7 +21,9 @@ export default function VsAiPage() {
           The AI doesn't make real decisions yet - you'll control both sides of the board yourself. It plays a
           copy of whichever deck you pick here. Build one in the Deck Builder tab first if none show up below.
         </p>
-        {decks.length === 0 ? (
+        {decks === null ? (
+          <p className="card-actions-hint">Loading decks…</p>
+        ) : decks.length === 0 ? (
           <p className="card-actions-hint">No saved decks yet.</p>
         ) : (
           <div className="vsai-deck-list">

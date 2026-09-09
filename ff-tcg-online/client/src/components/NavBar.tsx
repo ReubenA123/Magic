@@ -1,6 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { useAuth } from '../context/AuthContext';
+import Avatar from './Avatar';
+import AccountAuthModal from './AccountAuthModal';
 
-export type Page = 'home' | 'library' | 'deckbuilder' | 'versus';
+export type Page = 'home' | 'library' | 'deckbuilder' | 'versus' | 'account';
 
 interface NavBarProps {
   page: Page;
@@ -8,6 +11,9 @@ interface NavBarProps {
 }
 
 export default function NavBar({ page, onNavigate }: NavBarProps) {
+  const { user, restoring } = useAuth();
+  const [showAuthModal, setShowAuthModal] = useState(false);
+
   const tabs: { id: Page; label: string }[] = [
     { id: 'home', label: 'Home' },
     { id: 'library', label: 'Library' },
@@ -25,6 +31,19 @@ export default function NavBar({ page, onNavigate }: NavBarProps) {
           </button>
         ))}
       </div>
+
+      {/* Account + avatar, pinned to the far right - see AccountAuthModal for
+          the log in/sign up flow this opens when nobody's logged in yet. */}
+      <button
+        className={`nav-account-button ${page === 'account' ? 'nav-tab-active' : ''}`}
+        onClick={() => (user ? onNavigate('account') : setShowAuthModal(true))}
+        disabled={restoring}
+      >
+        <span>{restoring ? 'Loading…' : user ? user.username : 'Account'}</span>
+        <Avatar avatar={user?.avatar} size={32} />
+      </button>
+
+      {showAuthModal && <AccountAuthModal onClose={() => setShowAuthModal(false)} />}
     </nav>
   );
 }
