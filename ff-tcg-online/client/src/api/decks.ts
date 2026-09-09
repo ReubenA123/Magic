@@ -22,3 +22,7 @@ export async function upsertRemoteDeck(deck: SavedDeck): Promise<SavedDeck> {
 export async function deleteRemoteDeck(id: string): Promise<void> {
   await api.delete(`/decks/${encodeURIComponent(id)}`);
 }
+
+export async function markRemoteDeckPlayed(id: string): Promise<void> {
+  await api.post(`/decks/${encodeURIComponent(id)}/played`);
+}

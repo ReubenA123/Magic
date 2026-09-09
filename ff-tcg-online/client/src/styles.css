@@ -1034,11 +1034,45 @@ button {
   padding: 10px 14px;
 }
 
+/* Commander thumbnail scaled down to fit a list row - same trick as
+   .combat-blockers-row .card, just a different target size. */
+.account-deck-row-commander .card {
+  width: 48px;
+  height: 64px;
+}
+
 .account-deck-row-info {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.account-deck-row-info strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-deck-row-date {
+  flex-shrink: 0;
+  width: 130px;
+}
+
+/* Small icon button, not the full-size .card-action-button - see the "far
+   too large" feedback that led to this. */
+.account-deck-delete-button {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--panel-raised);
+  color: var(--danger);
+  font-size: 12px;
+  line-height: 1;
 }
 
 .account-friend-row-name {

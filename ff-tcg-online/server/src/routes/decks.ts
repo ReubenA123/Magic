@@ -8,7 +8,7 @@
 
 import { Router } from 'express';
 import { requireAuth, AuthedRequest } from '../auth/session';
-import { deleteDeck, listDecks, SavedDeck, upsertDeck } from '../db/decks';
+import { deleteDeck, listDecks, markDeckPlayed, SavedDeck, upsertDeck } from '../db/decks';
 
 const router = Router();
 router.use(requireAuth);
@@ -45,6 +45,14 @@ router.put('/:id', (req: AuthedRequest, res) => {
 router.delete('/:id', (req: AuthedRequest, res) => {
   const removed = deleteDeck(req.user!.id, req.params.id);
   if (!removed) return res.status(404).json({ error: 'No such deck.' });
+  res.status(204).end();
+});
+
+// Called whenever a game actually starts with this deck (see VsAiPage) -
+// just the one timestamp, not real match history (see markDeckPlayed).
+router.post('/:id/played', (req: AuthedRequest, res) => {
+  const marked = markDeckPlayed(req.user!.id, req.params.id);
+  if (!marked) return res.status(404).json({ error: 'No such deck.' });
   res.status(204).end();
 });
 

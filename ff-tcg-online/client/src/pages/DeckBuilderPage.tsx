@@ -143,12 +143,15 @@ export default function DeckBuilderPage() {
       alert('Choose a commander before saving.');
       return;
     }
+    const now = new Date().toISOString();
     const deck: SavedDeck = {
       id: newDeckId(),
       name: deckName || 'Untitled Deck',
       commanderId,
       cardIds,
-      updatedAt: new Date().toISOString(),
+      createdAt: now,
+      updatedAt: now,
+      lastPlayedAt: null,
     };
     setSaveError(null);
     try {

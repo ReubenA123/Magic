@@ -10,14 +10,18 @@
 // ============================================================================
 
 import { getToken } from '../api/rest';
-import { deleteRemoteDeck, listRemoteDecks, upsertRemoteDeck } from '../api/decks';
+import { deleteRemoteDeck, listRemoteDecks, markRemoteDeckPlayed, upsertRemoteDeck } from '../api/decks';
 
 export interface SavedDeck {
   id: string;
   name: string;
   commanderId: string;
   cardIds: string[]; // the 99 (or however many you've added so far), one entry per copy
+  createdAt: string;
   updatedAt: string;
+  /** Null until the deck has actually started a game at least once - just
+   * this one timestamp, not real match history (see markDeckPlayed below). */
+  lastPlayedAt: string | null;
 }
 
 const STORAGE_KEY = 'magic-decks';
@@ -31,16 +35,31 @@ function loadLocalDecks(): SavedDeck[] {
   }
 }
 
+/** Re-saving an existing id keeps its original createdAt/lastPlayedAt
+ * rather than letting the caller's fresh object overwrite them - matches
+ * the server's upsert (see server/src/db/decks.ts), even though nothing in
+ * the UI currently re-saves an existing id (every Save makes a new one). */
 function saveLocalDeck(deck: SavedDeck): void {
   const decks = loadLocalDecks();
   const existingIndex = decks.findIndex((d) => d.id === deck.id);
-  if (existingIndex >= 0) decks[existingIndex] = deck;
-  else decks.push(deck);
+  if (existingIndex >= 0) {
+    decks[existingIndex] = { ...deck, createdAt: decks[existingIndex].createdAt, lastPlayedAt: decks[existingIndex].lastPlayedAt };
+  } else {
+    decks.push(deck);
+  }
   localStorage.setItem(STORAGE_KEY, JSON.stringify(decks));
 }
 
 function deleteLocalDeck(id: string): void {
   const decks = loadLocalDecks().filter((d) => d.id !== id);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(decks));
+}
+
+function markLocalDeckPlayed(id: string): void {
+  const decks = loadLocalDecks();
+  const deck = decks.find((d) => d.id === id);
+  if (!deck) return;
+  deck.lastPlayedAt = new Date().toISOString();
   localStorage.setItem(STORAGE_KEY, JSON.stringify(decks));
 }
 
@@ -57,6 +76,17 @@ export async function saveDeck(deck: SavedDeck): Promise<void> {
   saveLocalDeck(deck);
 }
 
+/** Call whenever a game actually starts with this deck (see VsAiPage) -
+ * stamps a single "last played" timestamp, not real match history (see
+ * the SavedDeck.lastPlayedAt doc comment for why). */
+export async function markDeckPlayed(id: string): Promise<void> {
+  if (getToken()) {
+    await markRemoteDeckPlayed(id);
+    return;
+  }
+  markLocalDeckPlayed(id);
+}
+
 export async function deleteDeck(id: string): Promise<void> {
   if (getToken()) {
     await deleteRemoteDeck(id);
@@ -67,6 +97,14 @@ export async function deleteDeck(id: string): Promise<void> {
 
 export function newDeckId(): string {
   return `deck-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+}
+
+/** cardIds is just the 99 (the commander lives in its own slot, never in
+ * this list - see DeckBuilderPage's setAsCommander) - anywhere a deck's
+ * total size is shown as a single summary number, it should read as a
+ * full 100-card deck, not 99. */
+export function deckTotalCardCount(deck: SavedDeck): number {
+  return deck.cardIds.length + 1;
 }
 
 /** Decks built before logging in (or on a computer you're not logged in on

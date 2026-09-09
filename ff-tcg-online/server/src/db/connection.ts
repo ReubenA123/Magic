@@ -77,7 +77,29 @@ db.exec(`
     name TEXT NOT NULL,
     commander_id TEXT NOT NULL,
     card_ids TEXT NOT NULL, -- JSON array of card def ids, one entry per copy
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    last_played_at TEXT,
     PRIMARY KEY (user_id, id)
   );
 `);
+
+// Lightweight migration for anyone with a decks table from before
+// created_at/last_played_at existed - CREATE TABLE IF NOT EXISTS above
+// doesn't retroactively add columns to a table that's already there.
+//
+// SQLite refuses ADD COLUMN ... NOT NULL DEFAULT (datetime('now')) once the
+// table already has rows ("Cannot add a column with non-constant default") -
+// a function call can't be resolved to one fixed backfill value for
+// existing rows the way a literal default can. So this adds the column
+// bare (nullable, no default) and backfills it with an UPDATE instead,
+// which has no such restriction. updated_at is the closest real value
+// standing in for a created_at nothing ever recorded on these older rows.
+const deckColumns = (db.prepare('PRAGMA table_info(decks)').all() as unknown as { name: string }[]).map((c) => c.name);
+if (!deckColumns.includes('created_at')) {
+  db.exec('ALTER TABLE decks ADD COLUMN created_at TEXT');
+  db.exec('UPDATE decks SET created_at = updated_at WHERE created_at IS NULL');
+}
+if (!deckColumns.includes('last_played_at')) {
+  db.exec('ALTER TABLE decks ADD COLUMN last_played_at TEXT');
+}

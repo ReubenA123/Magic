@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { deleteDeck, loadDecks, SavedDeck } from '../utils/deckStorage';
+import { deckTotalCardCount, deleteDeck, loadDecks, SavedDeck } from '../utils/deckStorage';
+import { getCardDefinition } from '../data/cards';
+import Card from './Card';
 
 /**
  * The account page's view of the same decks DeckBuilderPage reads and
@@ -37,14 +39,19 @@ export default function AccountDecksTab() {
     <div className="account-deck-list">
       {decks.map((deck) => (
         <div key={deck.id} className="account-deck-row">
+          <div className="account-deck-row-commander">
+            <Card definition={getCardDefinition(deck.commanderId)} />
+          </div>
           <div className="account-deck-row-info">
             <strong>{deck.name}</strong>
-            <span className="account-tab-hint">
-              {deck.cardIds.length} cards · updated {new Date(deck.updatedAt).toLocaleDateString()}
-            </span>
+            <span className="account-tab-hint">{deckTotalCardCount(deck)} cards</span>
           </div>
-          <button className="card-action-button secondary" onClick={() => handleDelete(deck.id)}>
-            Delete
+          <span className="account-tab-hint account-deck-row-date">Created {new Date(deck.createdAt).toLocaleDateString()}</span>
+          <span className="account-tab-hint account-deck-row-date">
+            {deck.lastPlayedAt ? `Last played ${new Date(deck.lastPlayedAt).toLocaleDateString()}` : 'Never played'}
+          </span>
+          <button className="account-deck-delete-button" onClick={() => handleDelete(deck.id)} title="Delete this deck">
+            {'✕'}
           </button>
         </div>
       ))}

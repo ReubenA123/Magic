@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { loadDecks, SavedDeck } from '../utils/deckStorage';
+import { deckTotalCardCount, loadDecks, markDeckPlayed, SavedDeck } from '../utils/deckStorage';
 import { getCardDefinition } from '../data/cards';
 import { createStateFromDeck } from '../engine/state';
 import { useLocalGame } from '../hooks/useLocalGame';
@@ -12,6 +12,13 @@ export default function VsAiPage() {
   useEffect(() => {
     loadDecks().then(setDecks);
   }, []);
+
+  // Fire-and-forget - the "last played" stamp (see deckStorage.ts) shouldn't
+  // ever block actually starting the game, even if the request fails.
+  function startWithDeck(deck: SavedDeck) {
+    setSelectedDeck(deck);
+    markDeckPlayed(deck.id).catch(() => {});
+  }
 
   if (!selectedDeck) {
     return (
@@ -28,10 +35,10 @@ export default function VsAiPage() {
         ) : (
           <div className="vsai-deck-list">
             {decks.map((d) => (
-              <button key={d.id} className="vsai-deck-option" onClick={() => setSelectedDeck(d)}>
+              <button key={d.id} className="vsai-deck-option" onClick={() => startWithDeck(d)}>
                 <strong>{d.name}</strong>
                 <span>{getCardDefinition(d.commanderId).name}</span>
-                <span>{d.cardIds.length} cards</span>
+                <span>{deckTotalCardCount(d)} cards</span>
               </button>
             ))}
           </div>
