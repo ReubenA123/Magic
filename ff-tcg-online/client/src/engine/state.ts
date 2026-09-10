@@ -144,6 +144,10 @@ export function createStateFromDeck(deck: SavedDeck, humanName: string): GameSta
     combatReadyPlayers: [],
     pendingTarget: null,
     pendingReveal: null,
+    pendingManaColorChoice: null,
+    pendingSacrifice: null,
+    pendingSurveil: null,
+    extraTurnsQueued: [],
   };
 }
 

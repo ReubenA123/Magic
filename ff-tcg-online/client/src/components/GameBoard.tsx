@@ -10,6 +10,7 @@ import ZoneModal from './ZoneModal';
 import BlockOrderModal from './BlockOrderModal';
 import BlockerPileModal from './BlockerPileModal';
 import RevealDivideModal from './RevealDivideModal';
+import SurveilModal from './SurveilModal';
 import EventLog from './EventLog';
 import MutualAdjustmentControls from './MutualAdjustmentControls';
 import { useMarkGameActive } from '../context/GameActivity';
@@ -57,15 +58,18 @@ function countLandsForOwner(state: GameState, ownerId: string): number {
 }
 
 /**
- * Whether this instance's landCountBuff (see types.ts) is on right now, for
- * the Card badge - returns the creature's actual current power/toughness
- * (base + counters + the buff), not just the buff's own +X/+Y, so the badge
- * reads as "here's what it is right now" rather than making the player do
- * the addition themselves.
+ * Whether this instance's current power/toughness differs from its printed
+ * stats right now - either because a landCountBuff (see types.ts) is active,
+ * or because it has +1/+1 / -1/-1 counters on it. Returns the creature's
+ * actual current power/toughness (base + counters + the buff), not just the
+ * delta, so the badge reads as "here's what it is right now" rather than
+ * making the player do the addition themselves.
  */
-function activeLandCountBuff(def: ReturnType<typeof getCardDefinition>, instance: CardInstance, state: GameState) {
-  if (!def.landCountBuff) return null;
-  if (countLandsForOwner(state, instance.ownerId) < def.landCountBuff.minLands) return null;
+function activeStatBadge(def: ReturnType<typeof getCardDefinition>, instance: CardInstance, state: GameState) {
+  const landBuffActive = !!def.landCountBuff && countLandsForOwner(state, instance.ownerId) >= def.landCountBuff.minLands;
+  const plus = instance.counters.find((c) => c.label === '+1/+1')?.amount ?? 0;
+  const minus = instance.counters.find((c) => c.label === '-1/-1')?.amount ?? 0;
+  if (!landBuffActive && plus === 0 && minus === 0) return null;
   return { power: counterAdjustedStat(def, instance, 'power', state), toughness: counterAdjustedStat(def, instance, 'toughness', state) };
 }
 
@@ -75,6 +79,31 @@ function counterAdjustedStat(def: ReturnType<typeof getCardDefinition>, instance
   const minus = instance.counters.find((c) => c.label === '-1/-1')?.amount ?? 0;
   const buff = def.landCountBuff && countLandsForOwner(state, instance.ownerId) >= def.landCountBuff.minLands ? def.landCountBuff[stat] : 0;
   return (base ?? 0) + plus - minus + buff;
+}
+
+/**
+ * Whether this permanent's transformSelf ability (see types.ts: CardAbility)
+ * could be activated right now, as-is - same gating engine/actions.ts's
+ * activateAbility actually enforces (timing, tap, mana, exile-from-graveyard),
+ * just read-only here for the red "ready to transform" outline. A card with
+ * no transformSelf ability at all always returns false.
+ */
+function canTransformNow(def: ReturnType<typeof getCardDefinition>, instance: CardInstance, state: GameState): boolean {
+  const ability = def.abilities?.find((a) => a.transformSelf);
+  if (!ability) return false;
+  const owner = state.players.find((p) => p.id === instance.ownerId);
+  if (!owner) return false;
+  const mutual = state.mutualAdjustment.status === 'active';
+
+  if (!mutual && ability.onlyDuringOwnEndStep && (state.phase !== 'end' || state.activePlayerId !== instance.ownerId)) return false;
+  if (ability.cost.tap && instance.tapped) return false;
+  if (!mutual && ability.cost.tap && def.type === 'creature' && instance.summoningSick) return false;
+  const manaCost = ability.cost.manaLabel ? parseCostLabel(ability.cost.manaLabel) : null;
+  if (!mutual && manaCost && !canPay(owner.manaPool, manaCost, 0)) return false;
+  const exileCost = ability.cost.exileFromGraveyard ?? 0;
+  if (exileCost > 0 && owner.zones.graveyard.length < exileCost) return false;
+
+  return true;
 }
 
 /**
@@ -366,6 +395,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   const mutualActive = state.mutualAdjustment.status === 'active';
   const pendingTargetForYou = state.pendingTarget && (state.pendingTarget.controllerId === yourPlayerId || soloControl) ? state.pendingTarget : null;
   const pendingTargetSourceName = pendingTargetForYou ? getCardDefinition(findCard(state, pendingTargetForYou.sourceInstanceId)?.card.defId ?? '')?.name ?? 'Ability' : '';
+  const pendingSacrificeForYou = state.pendingSacrifice && (state.pendingSacrifice.playerId === yourPlayerId || soloControl) ? state.pendingSacrifice : null;
 
   const [openPanelId, setOpenPanelId] = useState<string | null>(null);
   const [openZone, setOpenZone] = useState<{ playerId: string; zone: 'graveyard' | 'exile' } | null>(null);
@@ -743,6 +773,17 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     return t === 'artifactOrCreature' ? def.type === 'artifact' || def.type === 'creature' : def.type === t;
   }
 
+  /** Is this creature a legal choice for a pendingSacrifice waiting on
+   * ownerId (e.g. Cornered by Black Mages) - unlike isLegalPendingTarget,
+   * ownerId must be the player who has to sacrifice, choosing among their
+   * OWN creatures, not the caster picking something of the opponent's. */
+  function isLegalSacrifice(card: CardInstance, ownerId: string): boolean {
+    if (!pendingSacrificeForYou) return false;
+    if (pendingSacrificeForYou.playerId !== ownerId) return false;
+    if (ownerId !== yourPlayerId && !soloControl) return false;
+    return getCardDefinition(card.defId).type === 'creature';
+  }
+
   /** The color choices an untapped land offers, or null if it only ever makes one color. */
   function manaTapOptions(def: CardDefinition): ManaColor[] | null {
     if (def.type !== 'land' || !def.producesMana) return null;
@@ -1093,7 +1134,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
       const def = getCardDefinition(front.defId);
       const pipOptions = manaPipOptions(def);
       if (!pipOptions) {
-        return <Card definition={def} instance={front} {...frontProps} staticBuff={activeLandCountBuff(def, front, state)} />;
+        return <Card definition={def} instance={front} {...frontProps} staticBuff={activeStatBadge(def, front, state)} transformReady={canTransformNow(def, front, state)} />;
       }
 
       // Untapped: show every color this land could produce - click one to
@@ -1127,6 +1168,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           selected={frontProps.selected}
           onClick={isSingleColor ? () => doToggle(pipOptions[0]) : frontProps.onClick}
           onDoubleClick={isSingleColor ? frontProps.onClick : undefined}
+          transformReady={canTransformNow(def, front, state)}
         />
       );
       if (displayedPips.length === 0) return cardEl;
@@ -1169,7 +1211,12 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
               className="battlefield-stack-layer battlefield-stack-layer-back"
               style={{ transform: `translate(${depth}px, ${depth}px)`, zIndex: depthOrder.length - i }}
             >
-              <Card definition={getCardDefinition(bc.defId)} instance={bc} staticBuff={activeLandCountBuff(getCardDefinition(bc.defId), bc, state)} />
+              <Card
+                definition={getCardDefinition(bc.defId)}
+                instance={bc}
+                staticBuff={activeStatBadge(getCardDefinition(bc.defId), bc, state)}
+                transformReady={canTransformNow(getCardDefinition(bc.defId), bc, state)}
+              />
             </div>
           );
         })}
@@ -1198,7 +1245,8 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
             instance={front}
             selected={frontProps.selected}
             onClick={frontProps.onClick}
-            staticBuff={activeLandCountBuff(getCardDefinition(front.defId), front, state)}
+            staticBuff={activeStatBadge(getCardDefinition(front.defId), front, state)}
+            transformReady={canTransformNow(getCardDefinition(front.defId), front, state)}
           />
         </div>
       </div>
@@ -1221,7 +1269,8 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     const acceptsAttackerRemoval = isDeclaringAttackers && !isOpponentSide;
     const acceptsBlockerRemoval = isDeclaringBlockers && !isOpponentSide;
     const isLegalTarget = isLegalPendingTarget(c, ownerId);
-    const selected = pendingBlocker === c.instanceId || multiSelected.has(c.instanceId) || isLegalTarget;
+    const isSacrificeChoice = isLegalSacrifice(c, ownerId);
+    const selected = pendingBlocker === c.instanceId || multiSelected.has(c.instanceId) || isLegalTarget || isSacrificeChoice;
     const canControl = canControlCard(ownerId);
 
     return (
@@ -1249,7 +1298,9 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
               selected,
               onClick: () => {
                 if (isDead) return;
-                if (isLegalTarget) {
+                if (isSacrificeChoice) {
+                  onAction({ type: 'CHOOSE_SACRIFICE', instanceId: c.instanceId });
+                } else if (isLegalTarget) {
                   onAction({ type: 'CHOOSE_TARGET', targetInstanceId: c.instanceId });
                 } else if (canAttackThis) toggleAttacker(c.instanceId);
                 else if (canBeBlocker) handleBlockerCandidateClick(c.instanceId);
@@ -1593,6 +1644,12 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   // page (usually well past the combat zone - the "overshoot"). Centering
   // explicitly on declaring attackers keeps the intended reading order on
   // screen: opponent's creatures above the red zone, yours below it.
+  //
+  // Re-runs on selectedAttackers.size too, not just the phase transition -
+  // dragging each creature into the zone grows it by another row, which
+  // shifts its center every time. Re-centering only once, on entry, left it
+  // drifting out of center as soon as you actually started dragging
+  // attackers in - re-running per attacker keeps it centered throughout.
   useEffect(() => {
     if (!isDeclaringAttackers) return;
     // Two frames, same as changeViewMode's own settling wait - the content
@@ -1603,7 +1660,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
         combatZoneRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       });
     });
-  }, [isDeclaringAttackers]);
+  }, [isDeclaringAttackers, selectedAttackers.size]);
 
   // Once blocker slots appear, the zone grows a full extra row of cards -
   // re-centering on the whole (now taller) box the same way would push its
@@ -1834,6 +1891,12 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
         </div>
       )}
 
+      {pendingSacrificeForYou && (
+        <div className="pending-target-banner">
+          <span>Choose a creature to sacrifice.</span>
+        </div>
+      )}
+
       <div className="docked-hand-tray">{renderHandRow(you, false, true)}</div>
 
       {effectiveViewMode === 'full' ? (
@@ -2053,6 +2116,8 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           ownerCommanderDefId={openCard.player.commanderDefId}
           mutualActive={mutualActive}
           isMyTurn={state.activePlayerId === openCard.player.id}
+          isMyEndStep={state.phase === 'end' && state.activePlayerId === openCard.player.id}
+          ownerGraveyardCount={openCard.player.zones.graveyard.length}
           alreadyPlayedLand={openCard.player.hasPlayedLandThisTurn}
           attachedToName={
             openCard.card.attachedToInstanceId ? getCardDefinition(findCard(state, openCard.card.attachedToInstanceId)?.card.defId ?? '')?.name ?? null : null
@@ -2179,6 +2244,24 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
               chooserName={chooserName}
               destinationLabel={destinationLabel}
               onChoose={(instanceId) => onAction({ type: 'CHOOSE_REVEALED_CARD', instanceId }, expectedChooserId ?? yourPlayerId)}
+            />
+          );
+        })()}
+
+      {/* Unlike pendingReveal, surveiled cards are private - only the
+          controller (or the soloControl player, who sees everything) ever
+          renders this modal at all. */}
+      {state.pendingSurveil &&
+        (state.pendingSurveil.controllerId === yourPlayerId || soloControl) &&
+        (() => {
+          const pending = state.pendingSurveil;
+          const sourceFound = findCard(state, pending.sourceInstanceId);
+          const sourceName = sourceFound ? getCardDefinition(sourceFound.card.defId).name : 'This ability';
+          return (
+            <SurveilModal
+              sourceName={sourceName}
+              cards={pending.cards.map((c) => ({ definition: getCardDefinition(c.defId), instance: c }))}
+              onConfirm={(graveyardIds, keepOrder) => onAction({ type: 'RESOLVE_SURVEIL', graveyardIds, keepOrder }, pending.controllerId)}
             />
           );
         })()}

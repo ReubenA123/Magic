@@ -10,6 +10,13 @@ interface CardActionsPanelProps {
   ownerCommanderDefId?: string;
   mutualActive: boolean;
   isMyTurn: boolean;
+  /** True only while it's this card owner's own end step - gates any
+   * ability with CardAbility.onlyDuringOwnEndStep (e.g. Ultimecia's
+   * Transform). Ignored (never blocks) under Mutual Adjustment. */
+  isMyEndStep: boolean;
+  /** This card's owner's current graveyard size - gates any ability with a
+   * CardAbility.cost.exileFromGraveyard requirement. */
+  ownerGraveyardCount: number;
   alreadyPlayedLand: boolean;
   attachedToName: string | null;
   /** Someone else's card, viewed outside Mutual Adjustment - the image and
@@ -50,6 +57,8 @@ export default function CardActionsPanel({
   ownerCommanderDefId,
   mutualActive,
   isMyTurn,
+  isMyEndStep,
+  ownerGraveyardCount,
   alreadyPlayedLand,
   attachedToName,
   readOnly,
@@ -137,8 +146,16 @@ export default function CardActionsPanel({
               const manaCost = ability.cost.manaLabel ? parseCostLabel(ability.cost.manaLabel) : null;
               const affordable = mutualActive || !manaCost || canPay(ownerManaPool, manaCost, 0);
               const tapBlocked = !!ability.cost.tap && instance.tapped;
+              const graveyardBlocked = !!ability.cost.exileFromGraveyard && ownerGraveyardCount < ability.cost.exileFromGraveyard;
+              const endStepBlocked = !!ability.onlyDuringOwnEndStep && !mutualActive && !isMyEndStep;
+              const disabled = !affordable || tapBlocked || graveyardBlocked || endStepBlocked;
+              const blockedReason = endStepBlocked
+                ? 'Only during your own end step'
+                : graveyardBlocked
+                  ? `Needs ${ability.cost.exileFromGraveyard} cards in your graveyard`
+                  : '';
               return (
-                <button key={ability.id} className="card-action-button secondary" disabled={!affordable || tapBlocked} onClick={() => onActivateAbility(ability.id)} title={ability.effectText}>
+                <button key={ability.id} className="card-action-button secondary" disabled={disabled} onClick={() => onActivateAbility(ability.id)} title={blockedReason || ability.effectText}>
                   {ability.label}
                 </button>
               );
@@ -199,7 +216,11 @@ export default function CardActionsPanel({
                 {instance.tapped ? 'Untap' : 'Tap'}
               </button>
             )}
-            {definition.transformsInto && (
+            {/* Hidden when transform is gated behind a paid ability (see
+                CardAbility.transformSelf, listed above under Abilities) -
+                that button is the only legal way to transform a card like
+                that; this free flip is only for cards with no such cost. */}
+            {definition.transformsInto && !definition.abilities?.some((a) => a.transformSelf) && (
               <button className="card-action-button card-action-button-play" onClick={onFlip}>
                 Flip / Transform
               </button>

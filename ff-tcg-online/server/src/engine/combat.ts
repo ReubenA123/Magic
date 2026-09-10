@@ -18,14 +18,14 @@ function hasActiveLandCountBuff(def: CardDefinition, state: GameState, controlle
   return !!def.landCountBuff && countLands(state, controllerId) >= def.landCountBuff.minLands;
 }
 
-function effectivePower(def: CardDefinition, instance: CardInstance, state: GameState, controllerId: string): number {
+export function effectivePower(def: CardDefinition, instance: CardInstance, state: GameState, controllerId: string): number {
   const plus = instance.counters.find((c) => c.label === '+1/+1')?.amount ?? 0;
   const minus = instance.counters.find((c) => c.label === '-1/-1')?.amount ?? 0;
   const buff = hasActiveLandCountBuff(def, state, controllerId) ? def.landCountBuff!.power : 0;
   return (def.power ?? 0) + plus - minus + buff;
 }
 
-function effectiveToughness(def: CardDefinition, instance: CardInstance, state: GameState, controllerId: string): number {
+export function effectiveToughness(def: CardDefinition, instance: CardInstance, state: GameState, controllerId: string): number {
   const plus = instance.counters.find((c) => c.label === '+1/+1')?.amount ?? 0;
   const minus = instance.counters.find((c) => c.label === '-1/-1')?.amount ?? 0;
   const buff = hasActiveLandCountBuff(def, state, controllerId) ? def.landCountBuff!.toughness : 0;
@@ -167,18 +167,20 @@ export function resolveCombatDamage(state: GameState): GameState {
   return next;
 }
 
-/** Actually moves every pending-death creature to its owner's graveyard,
- * cascading any attached Auras/Equipment off first. Called when leaving
- * the End Combat step. */
-export function resolvePendingDeaths(state: GameState): GameState {
-  if (state.pendingDeaths.length === 0) return state;
+/** Actually moves the given creatures to their owners' graveyards (or, for
+ * commanders, back to the command zone with increased tax), cascading any
+ * attached Auras/Equipment off first. `verb` only changes the log wording
+ * ("is destroyed" vs "is sacrificed" etc). Shared by resolvePendingDeaths
+ * (combat, batched at the End Combat step) and by immediate effects like
+ * sacrifice (see engine/actions.ts: chooseSacrifice). */
+export function moveCreaturesToGraveyard(state: GameState, deadIds: string[], verb: string = 'is destroyed'): GameState {
+  if (deadIds.length === 0) return state;
   let next = state;
 
-  for (const id of state.pendingDeaths) {
+  for (const id of deadIds) {
     next = detachEverythingFrom(next, id);
   }
 
-  const deadIds = next.pendingDeaths;
   for (const player of next.players) {
     const dead = player.zones.battlefield.filter((c) => deadIds.includes(c.instanceId));
     if (dead.length === 0) continue;
@@ -215,7 +217,7 @@ export function resolvePendingDeaths(state: GameState): GameState {
     }));
     for (const d of toGraveyard) {
       const def = getCardDefinition(d.defId);
-      next = { ...next, log: [...next.log, `${def.name} is destroyed.`] };
+      next = { ...next, log: [...next.log, `${def.name} ${verb}.`] };
     }
     for (const d of toCommandZone) {
       const def = getCardDefinition(d.defId);
@@ -223,5 +225,13 @@ export function resolvePendingDeaths(state: GameState): GameState {
     }
   }
 
+  return next;
+}
+
+/** Actually moves every pending-death creature to its owner's graveyard.
+ * Called when leaving the End Combat step. */
+export function resolvePendingDeaths(state: GameState): GameState {
+  if (state.pendingDeaths.length === 0) return state;
+  const next = moveCreaturesToGraveyard(state, state.pendingDeaths);
   return { ...next, pendingDeaths: [] };
 }

@@ -9,13 +9,18 @@ interface CardProps {
   dimmed?: boolean;
   onClick?: () => void;
   onDoubleClick?: () => void;
-  /** A currently-active static buff (see types.ts: LandCountBuff) - the
-   * caller works out whether the condition is actually met right now (it
-   * needs board state Card itself doesn't have), this just displays it. */
+  /** Current power/toughness whenever it differs from the printed stats
+   * right now - a static buff (see types.ts: LandCountBuff) and/or +1/+1 /
+   * -1/-1 counters. The caller works out the actual current value (it needs
+   * board state Card itself doesn't have), this just displays it. */
   staticBuff?: { power: number; toughness: number } | null;
+  /** A transformSelf ability's cost/timing are all currently met (see
+   * GameBoard's canTransformNow) - drawn as a red outer border/glow so the
+   * player notices they can transform this permanent right now. */
+  transformReady?: boolean;
 }
 
-export default function Card({ definition, instance, faceDown, selected, dimmed, onClick, onDoubleClick, staticBuff }: CardProps) {
+export default function Card({ definition, instance, faceDown, selected, dimmed, onClick, onDoubleClick, staticBuff, transformReady }: CardProps) {
   const [imageFailed, setImageFailed] = useState(false);
   const [backImageFailed, setBackImageFailed] = useState(false);
 
@@ -27,13 +32,23 @@ export default function Card({ definition, instance, faceDown, selected, dimmed,
     );
   }
 
-  const classNames = ['card', selected ? 'card-selected' : '', onClick ? 'card-clickable' : '', instance?.tapped ? 'card-tapped' : '', dimmed ? 'card-dimmed' : '']
+  const classNames = [
+    'card',
+    selected ? 'card-selected' : '',
+    transformReady ? 'card-transform-ready' : '',
+    onClick ? 'card-clickable' : '',
+    instance?.tapped ? 'card-tapped' : '',
+    dimmed ? 'card-dimmed' : '',
+  ]
     .filter(Boolean)
     .join(' ');
 
   const dualMana = Array.isArray(definition.producesMana) && definition.producesMana.length === 2 ? definition.producesMana : null;
   const commanderTax = instance?.counters.find((c) => c.label === 'Commander Tax')?.amount ?? 0;
-  const otherCounters = instance?.counters.filter((c) => c.label !== 'Commander Tax') ?? [];
+  // +1/+1 and -1/-1 already surface via the yellow static-buff-badge (see
+  // GameBoard's activeStatBadge) - listing them again here would just be a
+  // second, redundant readout of the same number.
+  const otherCounters = instance?.counters.filter((c) => c.label !== 'Commander Tax' && c.label !== '+1/+1' && c.label !== '-1/-1') ?? [];
 
   return (
     <div className={classNames} onClick={onClick} onDoubleClick={onDoubleClick} title={definition.text}>
@@ -63,17 +78,26 @@ export default function Card({ definition, instance, faceDown, selected, dimmed,
           +{commanderTax}
         </span>
       )}
-      {otherCounters.length > 0 && (
-        <div className="card-counters">
-          {otherCounters.map((c) => (
-            <span key={c.label} className="counter-badge" title={`${c.amount} ${c.label} counter(s)`}>
-              {c.label} {c.amount}
+      {(instance?.isToken || otherCounters.length > 0) && (
+        <div className="card-top-left">
+          {instance?.isToken && (
+            <span className="token-badge" title="This is a token, not a real card">
+              Token
             </span>
-          ))}
+          )}
+          {otherCounters.length > 0 && (
+            <div className="card-counters">
+              {otherCounters.map((c) => (
+                <span key={c.label} className="counter-badge" title={`${c.amount} ${c.label} counter(s)`}>
+                  {c.label} {c.amount}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       )}
       {staticBuff && (
-        <span className="static-buff-badge" title="Current power/toughness with its static ability active">
+        <span className="static-buff-badge" title="Current power/toughness, including counters and static buffs">
           {staticBuff.power}/{staticBuff.toughness}
         </span>
       )}

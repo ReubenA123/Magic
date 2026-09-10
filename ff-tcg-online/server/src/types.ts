@@ -15,7 +15,20 @@ export interface CardAbility {
     sacrificeSelf?: boolean;
     discardCards?: number;
     manaLabel?: string;
+    /** "Exile N cards from your graveyard" as (part of) the cost - which N
+     * cards is never mechanically relevant elsewhere in this engine, so
+     * they're auto-selected (oldest first) rather than player-chosen. */
+    exileFromGraveyard?: number;
   };
+  /** "At the beginning of your end step, you may..." - since there's no
+   * separate trigger/priority system, this just restricts activation to
+   * your own end step instead, and the player chooses to press it or not,
+   * standing in for "you may". Bypassed under Mutual Adjustment like other
+   * timing restrictions (see engine/actions.ts: castCard's own !mutual check). */
+  onlyDuringOwnEndStep?: boolean;
+  /** After costs are paid, transform this permanent into its transformsInto
+   * back face (same defId swap as FLIP_CARD). */
+  transformSelf?: boolean;
   effectText: string;
 }
 
@@ -66,7 +79,58 @@ export interface RevealAndDivideEffect {
   remainderDestination: 'hand' | 'bottomOfLibrary';
 }
 
-export type CardEffect = CreateTokenEffect | TapAndStunEffect | RevealAndDivideEffect;
+/**
+ * "As it enters, choose a color" (Crossroads Village) - the chosen color
+ * becomes fixed as this permanent's produced mana color from then on (see
+ * CardInstance.chosenManaColor and GameState.pendingManaColorChoice).
+ * Colorless is deliberately not offered - cards worded this way always mean
+ * one of the five real colors.
+ */
+export interface ChooseManaColorEffect {
+  type: 'chooseManaColor';
+}
+
+/**
+ * "Target opponent sacrifices a creature of their choice" - see
+ * GameState.pendingSacrifice and engine/actions.ts: chooseSacrifice. Only
+ * "opponent sacrifices a creature" is implemented so far (Cornered by Black
+ * Mages); other sacrifice wordings (each player, a permanent, a nontoken
+ * creature, etc.) still need to be handled by hand.
+ */
+export interface SacrificeCreatureEffect {
+  type: 'sacrificeCreature';
+  target: 'opponent';
+}
+
+/**
+ * "Exile a permanent card from your graveyard at random, then create a
+ * tapped token that's a copy of that card" (Sin, Spira's Punishment) - see
+ * engine/effects.ts: resolveCardEffects. `repeatOnLand` re-runs the whole
+ * exile+copy step again as long as the card exiled that time was a land.
+ */
+export interface RandomGraveyardCopyEffect {
+  type: 'randomGraveyardCopy';
+  repeatOnLand: boolean;
+}
+
+/**
+ * "Surveil N" - look at the top N cards of your library, then put any
+ * number into the graveyard and the rest back on top in any order. See
+ * GameState.pendingSurveil and engine/actions.ts: resolveSurveil.
+ */
+export interface SurveilEffect {
+  type: 'surveil';
+  count: number;
+}
+
+export type CardEffect =
+  | CreateTokenEffect
+  | TapAndStunEffect
+  | RevealAndDivideEffect
+  | ChooseManaColorEffect
+  | SacrificeCreatureEffect
+  | RandomGraveyardCopyEffect
+  | SurveilEffect;
 
 /**
  * "[Basic land type]cycling N" and plain "Cycling N" - discard this card
@@ -96,6 +160,30 @@ export interface FlashbackAbility {
   cost: string;
 }
 
+/**
+ * Landfall - fires once each time ANY land the controller controls enters
+ * (not just this permanent itself), for as long as this permanent stays on
+ * the battlefield. See engine/effects.ts: triggerLandfall, called from
+ * engine/actions.ts right after a land is played. Only "put N counters of
+ * this label on this permanent" is implemented - the only landfall payout
+ * among the cards that need it so far.
+ */
+export interface LandfallTrigger {
+  counterLabel: string;
+  counterAmount: number;
+}
+
+/**
+ * Fires once each time the controller casts a noncreature spell (instant,
+ * sorcery, artifact, or enchantment - not a creature and not a land, which
+ * isn't "casting a spell" at all), for as long as this permanent/token
+ * stays on the battlefield. See engine/effects.ts: triggerNoncreatureCastAbilities.
+ * Only "deal N damage to each opponent" is implemented (the Wizard token).
+ */
+export interface NoncreatureCastTrigger {
+  damageEachOpponent: number;
+}
+
 export interface CardDefinition {
   id: string;
   name: string;
@@ -121,12 +209,34 @@ export interface CardDefinition {
   /** Fires once, automatically, when this instant/sorcery resolves (right
    * before it goes to the graveyard). */
   onCast?: CardEffect[];
+  /** Fires once, automatically, whenever this creature is declared as an
+   * attacker. See engine/actions.ts: declareAttackers. */
+  onAttack?: CardEffect[];
   /** "Cycling" family - activated from hand, see engine/actions.ts: cycleCard. */
   cycling?: CyclingAbility;
   /** See LandCountBuff - a static, always-on-condition-met power/toughness buff. */
   landCountBuff?: LandCountBuff;
   /** See FlashbackAbility - cast from the graveyard, see engine/actions.ts: castFromGraveyard. */
   flashback?: FlashbackAbility;
+  /** "This land/creature/artifact enters tapped." - applied the moment this
+   * permanent is moved onto the battlefield (engine/actions.ts: castCard),
+   * instead of leaving it to the player to remember to tap it themselves.
+   * Only covers the plain, unconditional wording - a few cards phrase this
+   * conditionally ("...unless it's your first, second, or third turn") or
+   * apply it to something other than themselves (search effects tutoring a
+   * land onto the battlefield tapped); those still need to be handled by hand. */
+  entersTapped?: boolean;
+  /** See LandfallTrigger. */
+  landfall?: LandfallTrigger;
+  /** See NoncreatureCastTrigger. */
+  noncreatureCastTrigger?: NoncreatureCastTrigger;
+  /** "When this creature transforms into [this], take an extra turn after
+   * this one" (e.g. Ultimecia, Omnipotent's Time Compression) - checked
+   * against the BACK face's own definition, whichever way the transform
+   * happened (a paid transformSelf ability or a free FLIP_CARD), and queued
+   * onto GameState.extraTurnsQueued. See engine/actions.ts: flipCard,
+   * activateAbility, endTurn. */
+  grantsExtraTurnOnTransform?: boolean;
 }
 
 export interface Counter {
@@ -150,6 +260,15 @@ export interface CardInstance {
    * records which color, so untapping (before it's spent) correctly gives it
    * back instead of leaving phantom mana in the pool. See engine/actions.ts: toggleTap. */
   producedManaColor?: ManaColor;
+  /** Set once, by a chooseManaColor onEnter effect (e.g. Crossroads Village) -
+   * from then on this land always taps for this color, overriding whatever
+   * its CardDefinition's own producesMana would otherwise say. See
+   * engine/actions.ts: toggleTap. */
+  chosenManaColor?: ManaColor;
+  /** True for any token (created by a createToken or randomGraveyardCopy
+   * effect) rather than a real card - see components/Card.tsx for the
+   * "Token" badge this drives. */
+  isToken?: boolean;
 }
 
 export type ZoneName = 'library' | 'hand' | 'battlefield' | 'graveyard' | 'exile' | 'commander';
@@ -237,6 +356,22 @@ export interface GameState {
     steps: RevealAndDivideEffect['steps'];
     remainderDestination: 'hand' | 'bottomOfLibrary';
   } | null;
+  /** Set when a chooseManaColor onEnter effect (e.g. Crossroads Village)
+   * needs its controller to pick a color before the permanent can be used -
+   * cleared by CHOOSE_MANA_COLOR. Null whenever nothing is waiting on this. */
+  pendingManaColorChoice: { instanceId: string; controllerId: string } | null;
+  /** Set when a sacrificeCreature effect (e.g. Cornered by Black Mages) is
+   * waiting on `playerId` to pick one of their own creatures to sacrifice -
+   * cleared by CHOOSE_SACRIFICE. Null whenever nothing is waiting on this. */
+  pendingSacrifice: { playerId: string; sourceInstanceId: string } | null;
+  /** Set while a SurveilEffect is mid-resolution - cleared by RESOLVE_SURVEIL.
+   * `cards` are the surveiled cards, already removed from the library (so
+   * they don't show up there in the meantime) but not yet anywhere else. */
+  pendingSurveil: { sourceInstanceId: string; controllerId: string; cards: CardInstance[] } | null;
+  /** FIFO queue of player ids owed an extra turn (e.g. Ultimecia, Omnipotent's
+   * Time Compression) - see engine/actions.ts: endTurn, which pops the front
+   * entry and gives that player the next turn instead of the usual opponent. */
+  extraTurnsQueued: string[];
 }
 
 export type GameAction =
@@ -257,6 +392,9 @@ export type GameAction =
   | { type: 'CHOOSE_TARGET'; targetInstanceId: string }
   | { type: 'CYCLE_CARD'; instanceId: string }
   | { type: 'CHOOSE_REVEALED_CARD'; instanceId: string }
+  | { type: 'CHOOSE_MANA_COLOR'; color: ManaColor }
+  | { type: 'CHOOSE_SACRIFICE'; instanceId: string }
+  | { type: 'RESOLVE_SURVEIL'; graveyardIds: string[]; keepOrder: string[] }
   | { type: 'CAST_FROM_GRAVEYARD'; instanceId: string; chosenX?: number }
   | { type: 'NEXT_PHASE' }
   | { type: 'END_TURN' }

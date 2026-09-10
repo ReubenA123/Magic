@@ -181,6 +181,7 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: '-',
     text: "This land enters tapped. Tap: Add G or U. 5GU Tap: Transform this land. This ability costs 1 less to activate for each other Town you control.",
     imagePath: '/assets/cards/balamb-garden-seed-academy.webp',
+    entersTapped: true,
     transformsInto: 'balamb-garden-airborne',
     producesMana: ['G', 'U'],
   },
@@ -233,7 +234,8 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: '-',
     text: "This land enters tapped. Tap: Add R or W.",
     imagePath: '/assets/cards/baron-airship-kingdom.webp',
-    producesMana: ['G', 'U']
+    entersTapped: true,
+    producesMana: ['R', 'W']
   },
   {
     id: 'barret-wallace',
@@ -612,7 +614,7 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: '1BB',
     text: 'Target opponent sacrifices a creature of their choice. \nCreate a 0/1 black Wizard creature token with “Whenever you cast a noncreature spell, ' +
       ' this token deals 1 damage to each opponent.”',
-    onCast: [{ type: 'createToken', tokenId: 'token-wizard' }],
+    onCast: [{ type: 'sacrificeCreature', target: 'opponent' }, { type: 'createToken', tokenId: 'token-wizard' }],
     imagePath: '/assets/cards/cornered-by-black-mages.webp'
   },
   {
@@ -622,7 +624,8 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: '-',
     text: "This land enters tapped. As it enters, choose a color. \nTap: Add one mana of the chosen color.",
     imagePath: '/assets/cards/crossroads-village.webp',
-    producesMana: 'C'
+    entersTapped: true,
+    onEnter: [{ type: 'chooseManaColor' }],
   },
   {
     id: 'crystal-fragments',
@@ -803,7 +806,8 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: '1',
     text: "This artifact enters tapped.\n5, T, Exile this artifact: Shuffle all nonland cards from your graveyard into your library. " +
       "You gain life equal to the number of cards shuffled into your library this way.",
-    imagePath: '/assets/cards/elixir.webp'
+    imagePath: '/assets/cards/elixir.webp',
+    entersTapped: true,
   },
   {
     id: 'emet-selch-unsundered',
@@ -1092,6 +1096,7 @@ export const CARD_POOL: CardDefinition[] = [
     type: 'land',
     text: "This land enters tapped. Tap: Add B or G.",
     imagePath: '/assets/cards/gohn-town-of-ruin.webp',
+    entersTapped: true,
     producesMana: ['B', 'G']
   },
   {
@@ -1114,6 +1119,7 @@ export const CARD_POOL: CardDefinition[] = [
     type: 'land',
     text: 'This land enters tapped. \nTap: Add R or G.',
     imagePath: '/assets/cards/gongaga-reactor-town.webp',
+    entersTapped: true,
     producesMana: ['R', 'G']
   },
   {
@@ -1154,7 +1160,8 @@ export const CARD_POOL: CardDefinition[] = [
     type: 'land',
     text: 'This land enters tapped. \nTap: Add G or U.',
     imagePath: '/assets/cards/guadosalam-farplane-gateway.webp',
-    producesMana: ['G', 'B']
+    entersTapped: true,
+    producesMana: ['G', 'U']
   },
   {
     id: 'gysahl-greens',
@@ -1260,7 +1267,8 @@ export const CARD_POOL: CardDefinition[] = [
     type: 'land',
     text: 'This land enters tapped. \nTap: Add W or B.',
     imagePath: '/assets/cards/insomnia-crown-city.webp',
-    producesMana: 'W'
+    entersTapped: true,
+    producesMana: ['W', 'B']
   },
   {
     id: 'instant-ramen',
@@ -1290,6 +1298,7 @@ export const CARD_POOL: CardDefinition[] = [
       '\nFaith & Grief 3WW \nSorcery — Adventure\n' +
       'Return up to two target artifact and/or enchantment cards from your graveyard to your hand. (Then exile this card. You may play the land later from exile.)',
     imagePath: '/assets/cards/ishgard-the-holy-see.webp',
+    entersTapped: true,
     producesMana: 'W'
   },
   {
@@ -1353,6 +1362,7 @@ export const CARD_POOL: CardDefinition[] = [
     text: "This land enters tapped. \nTap: Add U.\nOverture 4UU\n" +
       "Sorcery — Adventure\n Target opponent mills half their library, rounded down. (Then exile this card. You may play the land later from exile.)",
     imagePath: '/assets/cards/jidoor-aristocratic-capital.webp',
+    entersTapped: true,
     producesMana: 'U'
   },
   {
@@ -1541,6 +1551,7 @@ export const CARD_POOL: CardDefinition[] = [
       "\nMage Siege 2R \nInstant — Adventure\n " +
       'Create a 0/1 black Wizard creature token with “Whenever you cast a noncreature spell, this token deals 1 damage to each opponent.”',
     imagePath: '/assets/cards/lindblum-industrial-regency.webp',
+    entersTapped: true,
     producesMana: 'R'
   },
   {
@@ -1700,6 +1711,7 @@ export const CARD_POOL: CardDefinition[] = [
       "Reactor Raid 2B \nSorcery — Adventure\n " +
       "You may sacrifice an artifact or creature. If you do, draw two cards. (Then exile this card. You may play the land later from exile.)",
     imagePath: '/assets/cards/midgar-city-of-mako.webp',
+    entersTapped: true,
     producesMana: 'B'
   },
   {
@@ -1976,6 +1988,7 @@ export const CARD_POOL: CardDefinition[] = [
     type: 'land',
     text: "This land enters tapped.\n Tap: Add R or W.",
     imagePath: '/assets/cards/rabanastre-royal-city.webp',
+    entersTapped: true,
     producesMana: ['R', 'W']
   },
   {
@@ -2250,7 +2263,8 @@ export const CARD_POOL: CardDefinition[] = [
     power: 0,
     toughness: 1,
     text: 'Landfall — Whenever a land you control enters, put a +1/+1 counter on this creature.',
-    imagePath: '/assets/cards/sazh-s-chocobo.webp'
+    imagePath: '/assets/cards/sazh-s-chocobo.webp',
+    landfall: { counterLabel: '+1/+1', counterAmount: 1 },
   },
   {
     id: 'scorpion-sentinel',
@@ -2375,7 +2389,8 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 3,
     text: 'This creature enters tapped. \n' +
       'Whenever you cast a noncreature spell, you may pay B. If you do, return this card from your graveyard to your hand.',
-    imagePath: '/assets/cards/shambling-cie-th.webp'
+    imagePath: '/assets/cards/shambling-cie-th.webp',
+    entersTapped: true,
   },
   {
     id: 'shantotto-tactician-magician',
@@ -2395,6 +2410,7 @@ export const CARD_POOL: CardDefinition[] = [
     type: 'land',
     text: 'This land enters tapped. \nTap: Add W or U.',
     imagePath: '/assets/cards/sharlayan-nation-of-scholars.webp',
+    entersTapped: true,
     producesMana: ['W', 'U']
   },
   {
@@ -2509,6 +2525,8 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'Flying \n' +
       'Whenever Sin enters or attacks, exile a permanent card from your graveyard at random, then create a tapped token that\u2019s a copy of that card. ' +
       'If the exiled card is a land card, repeat this process.',
+    onEnter: [{ type: 'randomGraveyardCopy', repeatOnLand: true }],
+    onAttack: [{ type: 'randomGraveyardCopy', repeatOnLand: true }],
     imagePath: '/assets/cards/sin-spira-s-punishment.webp'
   },
   {
@@ -3125,7 +3143,8 @@ export const CARD_POOL: CardDefinition[] = [
   subtype: 'Creature Salamander Horror',
   text: 'This creature enters tapped with a stun counter on it. (If it would become untapped, remove a stun counter from it instead.) \n' +
   'Chef\u2019s Knife — During your turn, this creature has first strike and deathtouch.',
-  imagePath: '/assets/cards/tonberry.webp'
+  imagePath: '/assets/cards/tonberry.webp',
+  entersTapped: true,
   },
   {
   id: 'torgal-a-fine-hound',
@@ -3180,6 +3199,7 @@ export const CARD_POOL: CardDefinition[] = [
   text:'This land enters tapped. \n' +
   'Tap: Add {U} or {B}.',
   imagePath: '/assets/cards/treno-dark-city.webp',
+  entersTapped: true,
   producesMana: ['U', 'B']
   },
   {
@@ -3249,6 +3269,18 @@ export const CARD_POOL: CardDefinition[] = [
   'At the beginning of your end step, you may pay {4}{U}{U}{B}{B} and exile eight cards from your graveyard. If you do, transform Ultimecia.',
   imagePath: '/assets/cards/ultimecia-time-sorceress.webp',
   transformsInto: 'ultimecia-omnipotent',
+  onEnter: [{ type: 'surveil', count: 2 }],
+  onAttack: [{ type: 'surveil', count: 2 }],
+  abilities: [
+    {
+      id: 'transform',
+      label: 'Transform',
+      cost: { manaLabel: '4UUBB', exileFromGraveyard: 8 },
+      onlyDuringOwnEndStep: true,
+      transformSelf: true,
+      effectText: 'Exile eight cards from your graveyard. If you do, transform Ultimecia.',
+    },
+  ],
   },
   {
   id: 'ultimecia-omnipotent',
@@ -3258,9 +3290,10 @@ export const CARD_POOL: CardDefinition[] = [
   subtype: 'Legendary Creature Nightmare Warlock',
   power: 7,
   toughness: 7,
-  text: 'Menace (This creature can’t be blocked except by two or more creatures.) \n' +
+  text: 'Menace (This creature can\u2019t be blocked except by two or more creatures.) \n' +
   'Time Compression — When this creature transforms into Ultimecia, Omnipotent, take an extra turn after this one.',
-  imagePath: '/assets/cards/ultimecia-omnipotent.webp'
+  imagePath: '/assets/cards/ultimecia-omnipotent.webp',
+  grantsExtraTurnOnTransform: true,
   },
   {
   id: 'ultros-obnoxious-octopus',
@@ -3281,7 +3314,7 @@ export const CARD_POOL: CardDefinition[] = [
   subtype: 'Creature Rat',
   power: 2,
   toughness: 2,
-  text: 'Rat Tail — When this creature dies, create a Treasure token. (It’s an artifact with “Tap, Sacrifice this token: Add one mana of any color.”)',
+  text: 'Rat Tail — When this creature dies, create a Treasure token. (It\u2019s an artifact with “Tap, Sacrifice this token: Add one mana of any color.”)',
   imagePath: '/assets/cards/undercity-dire-rat.webp'
   },
   {
@@ -3350,6 +3383,7 @@ export const CARD_POOL: CardDefinition[] = [
   text: 'This land enters tapped. \n' +
   'Tap: Add {B} or {R}.',
   imagePath: '/assets/cards/vector-imperial-capital.webp',
+  entersTapped: true,
   producesMana: ['B', 'R']
   },
   {
@@ -3491,6 +3525,7 @@ export const CARD_POOL: CardDefinition[] = [
   subtype: 'Town',
   text: 'This land enters tapped. \nTap: Add {G} or {W}.',
   imagePath: '/assets/cards/windurst-federation-center.webp',
+  entersTapped: true,
   producesMana: ['G', 'W']
   },
   {
@@ -3569,6 +3604,7 @@ export const CARD_POOL: CardDefinition[] = [
   'Sorcery — Adventure \n' +
   'Create a 1/1 colorless Hero creature token. Put a +1/+1 counter on it for each land you control. (Then exile this card. You may play the land later from exile.)',
   imagePath: '/assets/cards/zanarkand-ancient-metropolis.webp',
+  entersTapped: true,
   producesMana: 'G'
   },
   {
@@ -3662,6 +3698,7 @@ export const TOKEN_POOL: CardDefinition[] = [
     toughness: 1,
     text: 'Whenever you cast a noncreature spell, this token deals 1 damage to each opponent.',
     imagePath: '/assets/cards/token-wizard.webp',
+    noncreatureCastTrigger: { damageEachOpponent: 1 },
   },
   {
     id: 'token-bird',

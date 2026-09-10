@@ -63,6 +63,10 @@ export function createInitialState(player1Name: string, player2Name: string, pla
     pendingDeaths: [],
     pendingTarget: null,
     pendingReveal: null,
+    pendingManaColorChoice: null,
+    pendingSacrifice: null,
+    pendingSurveil: null,
+    extraTurnsQueued: [],
   };
 }
 
