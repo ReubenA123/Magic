@@ -723,6 +723,17 @@ button {
   margin: 0 0 14px;
 }
 
+/* CastConfirmModal's "what's about to happen" call-outs (mill, sacrifice,
+   create a token, ...) - a literal highlighter look, distinct from the
+   card's own accent color so it doesn't get lost against other UI gold. */
+.cast-confirm-keyword {
+  background: #f4d35e;
+  color: #14151d;
+  font-weight: 700;
+  padding: 0 2px;
+  border-radius: 3px;
+}
+
 .card-action-button {
   width: 100%;
   padding: 10px;

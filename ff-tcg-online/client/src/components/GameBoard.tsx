@@ -11,6 +11,8 @@ import BlockOrderModal from './BlockOrderModal';
 import BlockerPileModal from './BlockerPileModal';
 import RevealDivideModal from './RevealDivideModal';
 import SurveilModal from './SurveilModal';
+import ReturnFromGraveyardModal from './ReturnFromGraveyardModal';
+import CastConfirmModal from './CastConfirmModal';
 import EventLog from './EventLog';
 import MutualAdjustmentControls from './MutualAdjustmentControls';
 import { useMarkGameActive } from '../context/GameActivity';
@@ -128,9 +130,15 @@ function previewSingleBlockDeaths(
   const blockerToughnessLeft = Math.max(0, counterAdjustedStat(blockerDef, blockerInstance, 'toughness', state) - blockerInstance.damageMarked);
   const attackerIndestructible = hasKeyword(attackerDef.text, 'indestructible');
   const blockerIndestructible = hasKeyword(blockerDef.text, 'indestructible');
+  const attackerDeathtouch = hasKeyword(attackerDef.text, 'deathtouch');
+  const blockerDeathtouch = hasKeyword(blockerDef.text, 'deathtouch');
   return {
-    attackerDies: !attackerIndestructible && attackerToughnessLeft > 0 && blockerPower >= attackerToughnessLeft,
-    blockerDies: !blockerIndestructible && blockerToughnessLeft > 0 && attackerPower >= blockerToughnessLeft,
+    // Deathtouch: any nonzero damage from that source is lethal regardless
+    // of toughness left, unless indestructible - mirrors engine/combat.ts's
+    // markPendingDeaths exactly, so this preview never disagrees with what
+    // Resolve Combat is about to actually do.
+    attackerDies: !attackerIndestructible && attackerToughnessLeft > 0 && (blockerPower >= attackerToughnessLeft || (blockerDeathtouch && blockerPower > 0)),
+    blockerDies: !blockerIndestructible && blockerToughnessLeft > 0 && (attackerPower >= blockerToughnessLeft || (attackerDeathtouch && attackerPower > 0)),
   };
 }
 
@@ -403,6 +411,10 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   const [blockerAssignments, setBlockerAssignments] = useState<Record<string, string[]>>({});
   const [pendingBlocker, setPendingBlocker] = useState<string | null>(null);
   const [draggedInstanceId, setDraggedInstanceId] = useState<string | null>(null);
+  // Set instead of casting immediately whenever a hand/commander-zone card is
+  // dropped onto the battlefield - dragging is easy to do by accident, so
+  // CastConfirmModal makes the actual cast a separate, deliberate step.
+  const [pendingCastConfirm, setPendingCastConfirm] = useState<CardInstance | null>(null);
   const [handOrder, setHandOrder] = useState<string[]>([]);
   const [boardOrder, setBoardOrder] = useState<Record<string, string[]>>({});
   const [winnerDismissed, setWinnerDismissed] = useState(false);
@@ -925,7 +937,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     if (!found) return;
     if (found.player.id !== playerId) return;
     if (found.zone === 'hand' || found.zone === 'commander') {
-      handleCast(found.card);
+      setPendingCastConfirm(found.card);
     }
     setDraggedInstanceId(null);
   }
@@ -2117,7 +2129,9 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           mutualActive={mutualActive}
           isMyTurn={state.activePlayerId === openCard.player.id}
           isMyEndStep={state.phase === 'end' && state.activePlayerId === openCard.player.id}
+          isMyFirstMainPhase={state.phase === 'main1' && state.activePlayerId === openCard.player.id}
           ownerGraveyardCount={openCard.player.zones.graveyard.length}
+          ownerBattlefieldDefIds={openCard.player.zones.battlefield.map((c) => c.defId)}
           alreadyPlayedLand={openCard.player.hasPlayedLandThisTurn}
           attachedToName={
             openCard.card.attachedToInstanceId ? getCardDefinition(findCard(state, openCard.card.attachedToInstanceId)?.card.defId ?? '')?.name ?? null : null
@@ -2262,6 +2276,40 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
               sourceName={sourceName}
               cards={pending.cards.map((c) => ({ definition: getCardDefinition(c.defId), instance: c }))}
               onConfirm={(graveyardIds, keepOrder) => onAction({ type: 'RESOLVE_SURVEIL', graveyardIds, keepOrder }, pending.controllerId)}
+            />
+          );
+        })()}
+
+      {state.pendingReturnFromGraveyard &&
+        (() => {
+          const pending = state.pendingReturnFromGraveyard;
+          const sourceFound = findCard(state, pending.sourceInstanceId);
+          const sourceName = sourceFound ? getCardDefinition(sourceFound.card.defId).name : 'This ability';
+          const controller = state.players.find((p) => p.id === pending.controllerId)!;
+          const eligible = controller.zones.graveyard.filter((c) => {
+            const d = getCardDefinition(c.defId);
+            return d.type === 'creature' || d.type === 'artifact' || d.type === 'enchantment' || d.type === 'land';
+          });
+          return (
+            <ReturnFromGraveyardModal
+              sourceName={sourceName}
+              cards={eligible.map((c) => ({ definition: getCardDefinition(c.defId), instance: c }))}
+              onChoose={(instanceId) => onAction({ type: 'RETURN_FROM_GRAVEYARD', instanceId }, pending.controllerId)}
+            />
+          );
+        })()}
+
+      {pendingCastConfirm &&
+        (() => {
+          const def = getCardDefinition(pendingCastConfirm.defId);
+          return (
+            <CastConfirmModal
+              definition={def}
+              onConfirm={() => {
+                handleCast(pendingCastConfirm);
+                setPendingCastConfirm(null);
+              }}
+              onCancel={() => setPendingCastConfirm(null)}
             />
           );
         })()}

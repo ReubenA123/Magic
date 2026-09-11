@@ -52,12 +52,17 @@ export default function BlockOrderModal({ attackerDefinition, attackerInstance, 
   let remaining = attackerPower;
   const previews = order.map((id) => {
     const entry = byId.get(id)!;
+    const isIndestructible = hasKeyword(entry.definition.text, 'indestructible');
     const toughnessLeft = Math.max(0, counterAdjustedStat(entry.definition.toughness, entry.instance) - entry.instance.damageMarked);
-    if (remaining <= 0) return { ...entry, assigned: 0, remainingToughness: toughnessLeft };
+    if (remaining <= 0) return { ...entry, assigned: 0, remainingToughness: toughnessLeft, dies: false };
     const lethal = isDeathtouch ? 1 : toughnessLeft;
     const assigned = isTrample ? Math.min(remaining, Math.max(lethal, 0)) : remaining;
     remaining -= assigned;
-    return { ...entry, assigned, remainingToughness: Math.max(0, toughnessLeft - assigned) };
+    const remainingToughness = Math.max(0, toughnessLeft - assigned);
+    // Deathtouch: any nonzero damage is lethal regardless of toughness left,
+    // unless indestructible - mirrors engine/combat.ts's markPendingDeaths.
+    const dies = !isIndestructible && (remainingToughness <= 0 || (isDeathtouch && assigned > 0));
+    return { ...entry, assigned, remainingToughness, dies };
   });
 
   return (
@@ -88,7 +93,7 @@ export default function BlockOrderModal({ attackerDefinition, attackerInstance, 
                 <div className="block-order-row-info">
                   <span className="block-order-row-name">{b.definition.name}</span>
                   <span className="block-order-row-damage">
-                    {b.assigned} damage {'→'} {b.remainingToughness <= 0 ? 'dies' : `${b.remainingToughness} toughness left`}
+                    {b.assigned} damage {'→'} {b.dies ? 'dies' : `${b.remainingToughness} toughness left`}
                   </span>
                 </div>
                 <div className="block-order-move-buttons">

@@ -172,6 +172,21 @@ export function resolveCardEffects(
 
         if (!effect.repeatOnLand || chosenDef.type !== 'land') break;
       }
+    } else if (effect.type === 'millThenReturn') {
+      const player = getPlayer(next, playerId);
+      const milled = player.zones.library.slice(0, effect.millCount);
+      next = updatePlayer(next, playerId, (p) => ({ ...p, zones: { ...p.zones, library: p.zones.library.slice(effect.millCount), graveyard: [...p.zones.graveyard, ...milled] } }));
+      logLines.push(`${player.name} mills ${milled.length} card(s).`);
+
+      const eligible = getPlayer(next, playerId).zones.graveyard.filter((c) => {
+        const d = getCardDefinition(c.defId);
+        return d.type === 'creature' || d.type === 'artifact' || d.type === 'enchantment' || d.type === 'land';
+      });
+      if (eligible.length === 0) {
+        logLines.push(`${player.name} has no permanent card in their graveyard to return.`);
+      } else {
+        next = { ...next, pendingReturnFromGraveyard: { sourceInstanceId, controllerId: playerId } };
+      }
     } else if (effect.type === 'surveil') {
       const player = getPlayer(next, playerId);
       const cards = player.zones.library.slice(0, effect.count);

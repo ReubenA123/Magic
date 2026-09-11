@@ -3364,7 +3364,17 @@ export const CARD_POOL: CardDefinition[] = [
   'At the beginning of your first main phase, if you both own and control Vanille and a creature named Fang, ' +
   'Fearless l\u2019Cie, you may pay {3}{B}{G}. If you do, exile them, then meld them into Ragnarok, Divine Deliverance.',
   imagePath: '/assets/cards/vanille-cheerful-l-cie.webp',
-  transformsInto: 'Ragnarok Divine Deliverance'
+  onEnter: [{ type: 'millThenReturn', millCount: 2 }],
+  abilities: [
+    {
+      id: 'meld',
+      label: 'Meld into Ragnarok',
+      cost: { manaLabel: '3BG' },
+      onlyDuringOwnFirstMainPhase: true,
+      meldsWith: { partnerDefId: 'fang-fearless-l-cie', resultDefId: 'ragnarok-divine-deliverance' },
+      effectText: "If you own and control Fang, Fearless l’Cie, exile them both and meld into Ragnarok, Divine Deliverance.",
+    },
+  ],
   },
   {
   id: 'vayne-s-treachery',

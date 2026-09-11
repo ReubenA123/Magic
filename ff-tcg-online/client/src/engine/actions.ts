@@ -3,7 +3,7 @@
 // ============================================================================
 
 import { ActionResult, CardInstance, CombatAssignment, GameAction, GameState, ManaColor, Phase, ZoneName } from '../types';
-import { findCardAnywhere, getOpponent, getPlayer, updatePlayer, detachEverythingFrom } from './state'; import { getCardDefinition } from '../data/cards';
+import { findCardAnywhere, getOpponent, getPlayer, updatePlayer, detachEverythingFrom, nextInstanceId } from './state'; import { getCardDefinition } from '../data/cards';
 import { canPay, payCost, parseCostLabel, emptyManaPool } from './mana';
 import { hasKeyword } from './keywords';
 import { resolveCombatDamage, resolvePendingDeaths, moveCreaturesToGraveyard } from './combat';
@@ -56,6 +56,8 @@ export function applyAction(state: GameState, action: GameAction, playerId: stri
       return chooseSacrifice(state, playerId, action.instanceId);
     case 'RESOLVE_SURVEIL':
       return resolveSurveil(state, playerId, action.graveyardIds, action.keepOrder);
+    case 'RETURN_FROM_GRAVEYARD':
+      return returnFromGraveyard(state, playerId, action.instanceId);
     case 'CAST_FROM_GRAVEYARD':
       return castFromGraveyard(state, playerId, action.instanceId, action.chosenX);
     case 'NEXT_PHASE':
@@ -469,6 +471,16 @@ function activateAbility(state: GameState, playerId: string, instanceId: string,
   if (!mutual && ability.onlyDuringOwnEndStep && (state.phase !== 'end' || state.activePlayerId !== found.ownerPlayerId)) {
     return { ok: false, error: `${ability.label} can only be activated during your own end step.` };
   }
+  if (!mutual && ability.onlyDuringOwnFirstMainPhase && (state.phase !== 'main1' || state.activePlayerId !== found.ownerPlayerId)) {
+    return { ok: false, error: `${ability.label} can only be activated during your own first main phase.` };
+  }
+  let meldPartner: CardInstance | null = null;
+  if (ability.meldsWith) {
+    meldPartner = owner.zones.battlefield.find((c) => c.defId === ability.meldsWith!.partnerDefId && c.ownerId === found.ownerPlayerId) ?? null;
+    if (!meldPartner) {
+      return { ok: false, error: `${ability.label} requires you to also own and control ${getCardDefinition(ability.meldsWith.partnerDefId).name}.` };
+    }
+  }
   if (!mutual && ability.cost.tap && def.type === 'creature' && found.card.summoningSick) {
     return { ok: false, error: `${def.name} has summoning sickness and can't use a tap ability yet.` };
   }
@@ -515,11 +527,46 @@ function activateAbility(state: GameState, playerId: string, instanceId: string,
     }
   }
 
+  let meldedIntoDef = null as ReturnType<typeof getCardDefinition> | null;
+  if (ability.meldsWith && meldPartner) {
+    const resultDef = getCardDefinition(ability.meldsWith.resultDefId);
+    meldedIntoDef = resultDef;
+    const partnerId = meldPartner.instanceId;
+    next = detachEverythingFrom(next, instanceId);
+    next = detachEverythingFrom(next, partnerId);
+    const ownerNow = getPlayer(next, found.ownerPlayerId);
+    const meldedAway = [ownerNow.zones.battlefield.find((c) => c.instanceId === instanceId), ownerNow.zones.battlefield.find((c) => c.instanceId === partnerId)].filter(
+      (c): c is CardInstance => !!c
+    );
+    next = updatePlayer(next, found.ownerPlayerId, (p) => ({
+      ...p,
+      zones: {
+        ...p.zones,
+        battlefield: [
+          ...p.zones.battlefield.filter((c) => c.instanceId !== instanceId && c.instanceId !== partnerId),
+          {
+            instanceId: nextInstanceId(),
+            defId: resultDef.id,
+            ownerId: found.ownerPlayerId,
+            tapped: false,
+            counters: [],
+            damageMarked: 0,
+            summoningSick: !hasKeyword(resultDef.text, 'haste'),
+          },
+        ],
+        exile: [...p.zones.exile, ...meldedAway],
+      },
+    }));
+  }
+
   let logLine = `${owner.name} activates ${ability.label} on ${def.name}: ${ability.effectText}`;
   if (ability.cost.discardCards) logLine += ` (also discard ${ability.cost.discardCards} card(s) manually as part of the cost)`;
   if (transformedIntoDef) {
     logLine += ` ${def.name} transforms into ${transformedIntoDef.name}.`;
     if (transformedIntoDef.grantsExtraTurnOnTransform) logLine += ` ${owner.name} takes an extra turn after this one.`;
+  }
+  if (meldedIntoDef && meldPartner) {
+    logLine += ` ${def.name} and ${getCardDefinition(meldPartner.defId).name} are exiled and meld into ${meldedIntoDef.name}.`;
   }
 
   return { ok: true, state: { ...next, log: [...next.log, logLine] } };
@@ -856,6 +903,30 @@ function resolveSurveil(state: GameState, playerId: string, graveyardIds: string
   return { ok: true, state: { ...next, log: [...next.log, `${player.name} surveils: ${toGraveyard.length} to the graveyard, ${toKeep.length} back on top.`] } };
 }
 
+/** "Return a permanent card from your graveyard to your hand" (Vanille,
+ * Cheerful l'Cie's millThenReturn) - see types.ts: MillThenReturnEffect. */
+function returnFromGraveyard(state: GameState, playerId: string, instanceId: string): ActionResult {
+  const pending = state.pendingReturnFromGraveyard;
+  if (!pending) return { ok: false, error: 'Nothing is waiting on a graveyard return right now.' };
+  if (pending.controllerId !== playerId) return { ok: false, error: "It's not your graveyard to choose from." };
+
+  const player = getPlayer(state, playerId);
+  const card = player.zones.graveyard.find((c) => c.instanceId === instanceId);
+  if (!card) return { ok: false, error: 'That card is not in your graveyard.' };
+  const def = getCardDefinition(card.defId);
+  if (def.type !== 'creature' && def.type !== 'artifact' && def.type !== 'enchantment' && def.type !== 'land') {
+    return { ok: false, error: 'You must return a permanent card.' };
+  }
+
+  let next = updatePlayer(state, playerId, (p) => ({
+    ...p,
+    zones: { ...p.zones, graveyard: p.zones.graveyard.filter((c) => c.instanceId !== instanceId), hand: [...p.zones.hand, card] },
+  }));
+  next = { ...next, pendingReturnFromGraveyard: null };
+
+  return { ok: true, state: { ...next, log: [...next.log, `${player.name} returns ${def.name} from the graveyard to hand.`] } };
+}
+
 /** "[Land]cycling"/"Cycling" - see types.ts: CyclingAbility. A hand-only cost, so it doesn't go through castCard. */
 function cycleCard(state: GameState, playerId: string, instanceId: string): ActionResult {
   const player = getPlayer(state, playerId);
@@ -974,7 +1045,7 @@ function nextPhase(state: GameState, playerId: string): ActionResult {
 
   if (next.phase === 'cleanup') {
     for (const player of next.players) {
-      next = updatePlayer(next, player.id, (p) => ({ ...p, zones: { ...p.zones, battlefield: p.zones.battlefield.map((c) => ({ ...c, damageMarked: 0 })) } }));
+      next = updatePlayer(next, player.id, (p) => ({ ...p, zones: { ...p.zones, battlefield: p.zones.battlefield.map((c) => ({ ...c, damageMarked: 0, tookDeathtouchDamage: false })) } }));
     }
     const active = getPlayer(next, next.activePlayerId);
     if (active.zones.hand.length > 7) {
@@ -1094,6 +1165,24 @@ function readyToStart(state: GameState, playerId: string): ActionResult {
 function requestMutualAdjustment(state: GameState, playerId: string): ActionResult {
   if (state.mutualAdjustment.status !== 'inactive') return { ok: false, error: 'A Mutual Adjustment request is already in progress.' };
   const requester = getPlayer(state, playerId);
+  const opponent = getOpponent(state, playerId);
+
+  // The VS AI opponent doesn't make real decisions anywhere else either (see
+  // engine/state.ts: createStateFromDeck), and only one GameBoard is ever
+  // mounted in VS AI mode - there's no separate client that could click
+  // "Yes" as the other side, so waiting for a real response would deadlock
+  // forever. Accept immediately instead.
+  if (opponent.id === 'ai') {
+    return {
+      ok: true,
+      state: {
+        ...state,
+        mutualAdjustment: { status: 'active', requestedBy: playerId, agreedBy: [playerId, opponent.id] },
+        log: [...state.log, `${requester.name} requests Mutual Adjustment - ${opponent.name} agrees immediately. Normal rules are suspended until both players agree to exit.`],
+      },
+    };
+  }
+
   return {
     ok: true,
     state: { ...state, mutualAdjustment: { status: 'requested', requestedBy: playerId, agreedBy: [playerId] }, log: [...state.log, `${requester.name} requests Mutual Adjustment - waiting for the other player to agree.`] },
@@ -1121,6 +1210,21 @@ function respondMutualAdjustment(state: GameState, playerId: string, accept: boo
 function requestExitMutualAdjustment(state: GameState, playerId: string): ActionResult {
   if (state.mutualAdjustment.status !== 'active') return { ok: false, error: 'Mutual Adjustment is not currently active.' };
   const requester = getPlayer(state, playerId);
+  const opponent = getOpponent(state, playerId);
+
+  // Same VS AI deadlock as requestMutualAdjustment - no separate client
+  // exists to respond as 'ai', so agree immediately.
+  if (opponent.id === 'ai') {
+    return {
+      ok: true,
+      state: {
+        ...state,
+        mutualAdjustment: { status: 'inactive', agreedBy: [] },
+        log: [...state.log, `${requester.name} wants to end Mutual Adjustment - ${opponent.name} agrees immediately. Normal rules resume.`],
+      },
+    };
+  }
+
   return {
     ok: true,
     state: { ...state, mutualAdjustment: { status: 'exit_requested', requestedBy: playerId, agreedBy: [playerId] }, log: [...state.log, `${requester.name} wants to end Mutual Adjustment - waiting for the other player to agree.`] },

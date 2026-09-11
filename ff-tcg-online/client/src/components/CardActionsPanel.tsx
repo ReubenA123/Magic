@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { CardDefinition, CardInstance, ManaColor, ManaPool, ZoneName } from '../types';
 import { parseCostLabel, canPay } from '../engine/mana';
+import { getCardDefinition } from '../data/cards';
 
 interface CardActionsPanelProps {
   definition: CardDefinition;
@@ -14,9 +15,17 @@ interface CardActionsPanelProps {
    * ability with CardAbility.onlyDuringOwnEndStep (e.g. Ultimecia's
    * Transform). Ignored (never blocks) under Mutual Adjustment. */
   isMyEndStep: boolean;
+  /** True only while it's this card owner's own first main phase - gates any
+   * ability with CardAbility.onlyDuringOwnFirstMainPhase (e.g. Vanille's
+   * meld). Ignored (never blocks) under Mutual Adjustment. */
+  isMyFirstMainPhase: boolean;
   /** This card's owner's current graveyard size - gates any ability with a
    * CardAbility.cost.exileFromGraveyard requirement. */
   ownerGraveyardCount: number;
+  /** defIds of every creature this card's owner currently controls - gates
+   * any ability with a CardAbility.meldsWith requirement (the named partner
+   * must be present). */
+  ownerBattlefieldDefIds: string[];
   alreadyPlayedLand: boolean;
   attachedToName: string | null;
   /** Someone else's card, viewed outside Mutual Adjustment - the image and
@@ -58,7 +67,9 @@ export default function CardActionsPanel({
   mutualActive,
   isMyTurn,
   isMyEndStep,
+  isMyFirstMainPhase,
   ownerGraveyardCount,
+  ownerBattlefieldDefIds,
   alreadyPlayedLand,
   attachedToName,
   readOnly,
@@ -148,12 +159,18 @@ export default function CardActionsPanel({
               const tapBlocked = !!ability.cost.tap && instance.tapped;
               const graveyardBlocked = !!ability.cost.exileFromGraveyard && ownerGraveyardCount < ability.cost.exileFromGraveyard;
               const endStepBlocked = !!ability.onlyDuringOwnEndStep && !mutualActive && !isMyEndStep;
-              const disabled = !affordable || tapBlocked || graveyardBlocked || endStepBlocked;
+              const mainPhaseBlocked = !!ability.onlyDuringOwnFirstMainPhase && !mutualActive && !isMyFirstMainPhase;
+              const meldPartnerMissing = !!ability.meldsWith && !ownerBattlefieldDefIds.includes(ability.meldsWith.partnerDefId);
+              const disabled = !affordable || tapBlocked || graveyardBlocked || endStepBlocked || mainPhaseBlocked || meldPartnerMissing;
               const blockedReason = endStepBlocked
                 ? 'Only during your own end step'
-                : graveyardBlocked
-                  ? `Needs ${ability.cost.exileFromGraveyard} cards in your graveyard`
-                  : '';
+                : mainPhaseBlocked
+                  ? 'Only during your own first main phase'
+                  : meldPartnerMissing
+                    ? `Requires owning and controlling ${ability.meldsWith ? getCardDefinition(ability.meldsWith.partnerDefId).name : ''}`
+                    : graveyardBlocked
+                      ? `Needs ${ability.cost.exileFromGraveyard} cards in your graveyard`
+                      : '';
               return (
                 <button key={ability.id} className="card-action-button secondary" disabled={disabled} onClick={() => onActivateAbility(ability.id)} title={blockedReason || ability.effectText}>
                   {ability.label}

@@ -67,6 +67,7 @@ export function createInitialState(player1Name: string, player2Name: string, pla
     pendingSacrifice: null,
     pendingSurveil: null,
     extraTurnsQueued: [],
+    pendingReturnFromGraveyard: null,
   };
 }
 

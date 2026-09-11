@@ -45,12 +45,17 @@ function isCommanderAttack(state: GameState, controllerId: string, attackerDefId
   return !!controller?.commanderDefId && controller.commanderDefId === attackerDefId;
 }
 
-function markDamage(state: GameState, instanceId: string, amount: number): GameState {
+function markDamage(state: GameState, instanceId: string, amount: number, isDeathtouch: boolean = false): GameState {
   const found = findInstance(state, instanceId);
   if (!found) return state;
   return updatePlayer(state, found.controllerId, (p) => ({
     ...p,
-    zones: { ...p.zones, battlefield: p.zones.battlefield.map((c) => (c.instanceId === instanceId ? { ...c, damageMarked: c.damageMarked + amount } : c)) },
+    zones: {
+      ...p.zones,
+      battlefield: p.zones.battlefield.map((c) =>
+        c.instanceId === instanceId ? { ...c, damageMarked: c.damageMarked + amount, tookDeathtouchDamage: c.tookDeathtouchDamage || (isDeathtouch && amount > 0) } : c
+      ),
+    },
   }));
 }
 
@@ -104,7 +109,7 @@ function dealDamagePass(state: GameState, pass: 1 | 2): GameState {
           const toughnessLeft = Math.max(0, effectiveToughness(blockerDef, blocker.instance, next, blocker.controllerId) - blocker.instance.damageMarked);
           const lethal = isDeathtouch ? 1 : toughnessLeft;
           const assigned = isTrample ? Math.min(remaining, Math.max(lethal, 0)) : remaining;
-          next = markDamage(next, blocker.instance.instanceId, assigned);
+          next = markDamage(next, blocker.instance.instanceId, assigned, isDeathtouch);
           next = { ...next, log: [...next.log, `${attackerDef.name} deals ${assigned} damage to ${blockerDef.name}.`] };
           if (isLifelink) next = updatePlayer(next, attackerFound.controllerId, (p) => ({ ...p, life: p.life + assigned }));
           remaining -= assigned;
@@ -122,7 +127,8 @@ function dealDamagePass(state: GameState, pass: 1 | 2): GameState {
       if (!strikesInPass(blockerDef.text, pass)) continue;
       if (isPendingDeath(next, attackerFound.instance.instanceId)) continue;
       const blockerPower = effectivePower(blockerDef, blocker.instance, next, blocker.controllerId);
-      next = markDamage(next, attackerFound.instance.instanceId, blockerPower);
+      const blockerHasDeathtouch = hasKeyword(blockerDef.text, 'deathtouch');
+      next = markDamage(next, attackerFound.instance.instanceId, blockerPower, blockerHasDeathtouch);
       next = { ...next, log: [...next.log, `${blockerDef.name} deals ${blockerPower} damage to ${attackerDef.name}.`] };
       if (hasKeyword(blockerDef.text, 'lifelink')) next = updatePlayer(next, blocker.controllerId, (p) => ({ ...p, life: p.life + blockerPower }));
     }
@@ -143,7 +149,9 @@ function markPendingDeaths(state: GameState): GameState {
       if (def.type !== 'creature') continue;
       const isIndestructible = hasKeyword(def.text, 'indestructible');
       const toughness = effectiveToughness(def, c, state, player.id);
-      if (!isIndestructible && toughness > 0 && c.damageMarked >= toughness) newlyDead.push(c.instanceId);
+      // Deathtouch: any nonzero combat damage from that source is lethal
+      // regardless of how much toughness is left, unless indestructible.
+      if (!isIndestructible && toughness > 0 && (c.damageMarked >= toughness || c.tookDeathtouchDamage)) newlyDead.push(c.instanceId);
     }
   }
   if (newlyDead.length === 0) return state;
@@ -199,7 +207,7 @@ export function moveCreaturesToGraveyard(state: GameState, deadIds: string[], ve
       zones: {
         ...p.zones,
         battlefield: survivors,
-        graveyard: [...p.zones.graveyard, ...toGraveyard.map((d) => ({ ...d, damageMarked: 0 }))],
+        graveyard: [...p.zones.graveyard, ...toGraveyard.map((d) => ({ ...d, damageMarked: 0, tookDeathtouchDamage: false }))],
         commander: [
           ...p.zones.commander,
           ...toCommandZone.map((d) => {
@@ -207,6 +215,7 @@ export function moveCreaturesToGraveyard(state: GameState, deadIds: string[], ve
             return {
               ...d,
               damageMarked: 0,
+              tookDeathtouchDamage: false,
               tapped: false,
               producedManaColor: undefined,
               counters: [...d.counters.filter((c) => c.label !== 'Commander Tax'), { label: 'Commander Tax', amount: existingTax + 2 }],

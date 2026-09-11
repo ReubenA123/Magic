@@ -148,6 +148,7 @@ export function createStateFromDeck(deck: SavedDeck, humanName: string): GameSta
     pendingSacrifice: null,
     pendingSurveil: null,
     extraTurnsQueued: [],
+    pendingReturnFromGraveyard: null,
   };
 }
 

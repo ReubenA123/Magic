@@ -26,9 +26,18 @@ export interface CardAbility {
    * standing in for "you may". Bypassed under Mutual Adjustment like other
    * timing restrictions (see engine/actions.ts: castCard's own !mutual check). */
   onlyDuringOwnEndStep?: boolean;
+  /** "At the beginning of your first main phase, you may..." - same "you
+   * may" stand-in as onlyDuringOwnEndStep, just gated on main1 instead. */
+  onlyDuringOwnFirstMainPhase?: boolean;
   /** After costs are paid, transform this permanent into its transformsInto
    * back face (same defId swap as FLIP_CARD). */
   transformSelf?: boolean;
+  /** Meld: requires the controller to also own and control a creature with
+   * `partnerDefId` (checked as a precondition, same as a targeting
+   * restriction) - after costs are paid, exiles both this permanent and the
+   * partner, then creates a fresh `resultDefId` permanent in their place.
+   * See engine/actions.ts: activateAbility. */
+  meldsWith?: { partnerDefId: string; resultDefId: string };
   effectText: string;
 }
 
@@ -123,6 +132,18 @@ export interface SurveilEffect {
   count: number;
 }
 
+/**
+ * "Mill N cards, then return a permanent card from your graveyard to your
+ * hand" (Vanille, Cheerful l'Cie) - the return is from the WHOLE graveyard,
+ * not just the newly milled cards, and is mandatory if any permanent card is
+ * available. See GameState.pendingReturnFromGraveyard and engine/actions.ts:
+ * returnFromGraveyard.
+ */
+export interface MillThenReturnEffect {
+  type: 'millThenReturn';
+  millCount: number;
+}
+
 export type CardEffect =
   | CreateTokenEffect
   | TapAndStunEffect
@@ -130,7 +151,8 @@ export type CardEffect =
   | ChooseManaColorEffect
   | SacrificeCreatureEffect
   | RandomGraveyardCopyEffect
-  | SurveilEffect;
+  | SurveilEffect
+  | MillThenReturnEffect;
 
 /**
  * "[Basic land type]cycling N" and plain "Cycling N" - discard this card
@@ -269,6 +291,12 @@ export interface CardInstance {
    * effect) rather than a real card - see components/Card.tsx for the
    * "Token" badge this drives. */
   isToken?: boolean;
+  /** Set for the rest of the turn once this creature has taken ANY nonzero
+   * combat damage from a source with deathtouch - lethal regardless of how
+   * much toughness is left (unless indestructible). See engine/combat.ts:
+   * markDamage/markPendingDeaths. Reset to false alongside damageMarked
+   * (cleanup step, or whenever a creature leaves and re-enters the battlefield). */
+  tookDeathtouchDamage?: boolean;
 }
 
 export type ZoneName = 'library' | 'hand' | 'battlefield' | 'graveyard' | 'exile' | 'commander';
@@ -372,6 +400,11 @@ export interface GameState {
    * Time Compression) - see engine/actions.ts: endTurn, which pops the front
    * entry and gives that player the next turn instead of the usual opponent. */
   extraTurnsQueued: string[];
+  /** Set when a millThenReturn effect (e.g. Vanille, Cheerful l'Cie) needs
+   * `controllerId` to pick a permanent card out of their graveyard to return
+   * to hand - cleared by RETURN_FROM_GRAVEYARD. Only set at all if at least
+   * one permanent card is actually available (otherwise nothing to choose). */
+  pendingReturnFromGraveyard: { sourceInstanceId: string; controllerId: string } | null;
 }
 
 export type GameAction =
@@ -395,6 +428,7 @@ export type GameAction =
   | { type: 'CHOOSE_MANA_COLOR'; color: ManaColor }
   | { type: 'CHOOSE_SACRIFICE'; instanceId: string }
   | { type: 'RESOLVE_SURVEIL'; graveyardIds: string[]; keepOrder: string[] }
+  | { type: 'RETURN_FROM_GRAVEYARD'; instanceId: string }
   | { type: 'CAST_FROM_GRAVEYARD'; instanceId: string; chosenX?: number }
   | { type: 'NEXT_PHASE' }
   | { type: 'END_TURN' }
