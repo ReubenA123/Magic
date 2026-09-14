@@ -68,6 +68,13 @@ export function createInitialState(player1Name: string, player2Name: string, pla
     pendingSurveil: null,
     extraTurnsQueued: [],
     pendingReturnFromGraveyard: null,
+    pendingDiscard: null,
+    pendingOptionalBounce: null,
+    pendingRevealFiltered: null,
+    pendingOptionalDiscardHandForDevotion: null,
+    pendingChooseOneMode: null,
+    pendingPlayerTarget: null,
+    creaturesDiedThisTurn: 0,
   };
 }
 

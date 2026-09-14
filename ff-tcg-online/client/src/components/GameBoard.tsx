@@ -12,7 +12,12 @@ import BlockerPileModal from './BlockerPileModal';
 import RevealDivideModal from './RevealDivideModal';
 import SurveilModal from './SurveilModal';
 import ReturnFromGraveyardModal from './ReturnFromGraveyardModal';
+import DiscardModal from './DiscardModal';
+import OptionalBounceModal from './OptionalBounceModal';
+import RevealFilteredModal from './RevealFilteredModal';
 import CastConfirmModal from './CastConfirmModal';
+import ModalSpellModal from './ModalSpellModal';
+import ChooseOneModeModal from './ChooseOneModeModal';
 import EventLog from './EventLog';
 import MutualAdjustmentControls from './MutualAdjustmentControls';
 import { useMarkGameActive } from '../context/GameActivity';
@@ -45,7 +50,12 @@ function splitBattlefield(cards: CardInstance[]) {
   const lands: CardInstance[] = [];
   for (const c of cards) {
     const def = getCardDefinition(c.defId);
-    if (def.type === 'creature') creatures.push(c);
+    // A crewed Vehicle (see types.ts: CardDefinition.crew) renders in the
+    // creatures row like any other creature - engine/combat.ts's
+    // isEffectivelyCreature is the authority on this same check server-side;
+    // this is display-only grouping so it's duplicated inline rather than
+    // importing combat.ts into a component.
+    if (def.type === 'creature' || (def.crew !== undefined && c.crewedUntilEndOfTurn)) creatures.push(c);
     else if (def.type === 'land') lands.push(c);
     else others.push(c);
   }
@@ -67,20 +77,34 @@ function countLandsForOwner(state: GameState, ownerId: string): number {
  * delta, so the badge reads as "here's what it is right now" rather than
  * making the player do the addition themselves.
  */
+/** Whether any Aura/Equipment attached to this instance sets its base power
+ * and toughness to the controller's life total (e.g. Aettir and Priwen) -
+ * mirrors engine/combat.ts's lifeBasedBaseStat exactly, so this preview
+ * never disagrees with what the engine actually computes. */
+function lifeBasedBaseStat(state: GameState, ownerId: string, instanceId: string): number | null {
+  const owner = state.players.find((p) => p.id === ownerId);
+  if (!owner) return null;
+  const hasLifeBasedEquipment = owner.zones.battlefield.some(
+    (c) => c.attachedToInstanceId === instanceId && getCardDefinition(c.defId).setsBasePowerToughnessToControllerLife
+  );
+  return hasLifeBasedEquipment ? owner.life : null;
+}
+
 function activeStatBadge(def: ReturnType<typeof getCardDefinition>, instance: CardInstance, state: GameState) {
   const landBuffActive = !!def.landCountBuff && countLandsForOwner(state, instance.ownerId) >= def.landCountBuff.minLands;
   const plus = instance.counters.find((c) => c.label === '+1/+1')?.amount ?? 0;
   const minus = instance.counters.find((c) => c.label === '-1/-1')?.amount ?? 0;
-  if (!landBuffActive && plus === 0 && minus === 0) return null;
+  const lifeBased = lifeBasedBaseStat(state, instance.ownerId, instance.instanceId) !== null;
+  if (!landBuffActive && !lifeBased && plus === 0 && minus === 0) return null;
   return { power: counterAdjustedStat(def, instance, 'power', state), toughness: counterAdjustedStat(def, instance, 'toughness', state) };
 }
 
 function counterAdjustedStat(def: ReturnType<typeof getCardDefinition>, instance: CardInstance, stat: 'power' | 'toughness', state: GameState): number {
-  const base = stat === 'power' ? def.power : def.toughness;
+  const base = lifeBasedBaseStat(state, instance.ownerId, instance.instanceId) ?? (stat === 'power' ? def.power : def.toughness) ?? 0;
   const plus = instance.counters.find((c) => c.label === '+1/+1')?.amount ?? 0;
   const minus = instance.counters.find((c) => c.label === '-1/-1')?.amount ?? 0;
   const buff = def.landCountBuff && countLandsForOwner(state, instance.ownerId) >= def.landCountBuff.minLands ? def.landCountBuff[stat] : 0;
-  return (base ?? 0) + plus - minus + buff;
+  return base + plus - minus + buff;
 }
 
 /**
@@ -98,6 +122,9 @@ function canTransformNow(def: ReturnType<typeof getCardDefinition>, instance: Ca
   const mutual = state.mutualAdjustment.status === 'active';
 
   if (!mutual && ability.onlyDuringOwnEndStep && (state.phase !== 'end' || state.activePlayerId !== instance.ownerId)) return false;
+  if (!mutual && ability.onlyDuringOwnFirstMainPhase && (state.phase !== 'main1' || state.activePlayerId !== instance.ownerId)) return false;
+  if (!mutual && ability.onlyDuringOwnUpkeep && (state.phase !== 'upkeep' || state.activePlayerId !== instance.ownerId)) return false;
+  if (ability.requiresGraveyardSize && owner.zones.graveyard.length < ability.requiresGraveyardSize) return false;
   if (ability.cost.tap && instance.tapped) return false;
   if (!mutual && ability.cost.tap && def.type === 'creature' && instance.summoningSick) return false;
   const manaCost = ability.cost.manaLabel ? parseCostLabel(ability.cost.manaLabel) : null;
@@ -415,6 +442,26 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   // dropped onto the battlefield - dragging is easy to do by accident, so
   // CastConfirmModal makes the actual cast a separate, deliberate step.
   const [pendingCastConfirm, setPendingCastConfirm] = useState<CardInstance | null>(null);
+  // Set instead of dispatching immediately whenever a "Choose one or more"
+  // modal spell (see types.ts: CardDefinition.chooseModes) is cast - the
+  // player checks a nonempty subset of modes, then Cast dispatches a single
+  // CAST_CARD with chosenModeIndices.
+  const [pendingModalCast, setPendingModalCast] = useState<CardInstance | null>(null);
+  // Set while an ability with a sacrificeAnother cost (e.g. Ahriman) is
+  // waiting on the player to click which OTHER permanent to sacrifice - the
+  // choice is strategically meaningful, so it's picked client-side before a
+  // single atomic ACTIVATE_ABILITY dispatch carries it as costTargetInstanceId
+  // (see types.ts: CardAbility.cost.sacrificeAnother).
+  const [pendingSacrificeCost, setPendingSacrificeCost] = useState<{ instanceId: string; abilityId: string; ownerId: string; filter: 'creature' | 'artifact' | 'artifactOrCreature' } | null>(
+    null
+  );
+  // Set while crewing a Vehicle (see types.ts: CardDefinition.crew) is in
+  // progress - the player toggles any number of their own untapped creatures
+  // on/off, then presses Confirm to dispatch a single CREW_VEHICLE action.
+  // Unlike sacrificeAnother's single pick, Crew needs a variable-size set
+  // chosen before submitting, so this tracks a running selection instead of
+  // dispatching on the first click.
+  const [pendingCrew, setPendingCrew] = useState<{ instanceId: string; ownerId: string; crewCost: number; selected: string[] } | null>(null);
   const [handOrder, setHandOrder] = useState<string[]>([]);
   const [boardOrder, setBoardOrder] = useState<Record<string, string[]>>({});
   const [winnerDismissed, setWinnerDismissed] = useState(false);
@@ -776,13 +823,53 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     setManaChoiceQueue((prev) => prev.slice(1));
   }
 
-  /** Is this permanent a legal choice for the ability currently waiting on a target? */
+  /** Is this permanent a legal choice for the ability currently waiting on a target?
+   * tapAndStun and debuffTargetByGraveyard only ever target the opponent's
+   * permanents; destroyTarget (e.g. Airship Crash), pumpTarget (e.g.
+   * Blitzball Shot), and putCounterOnTarget (e.g. Cloudbound Moogle) name no
+   * controller restriction at all, so either player's permanents are fair
+   * game there. */
   function isLegalPendingTarget(card: CardInstance, ownerId: string): boolean {
     if (!pendingTargetForYou) return false;
-    if (ownerId === pendingTargetForYou.controllerId) return false;
     const def = getCardDefinition(card.defId);
-    const t = pendingTargetForYou.effect.targetType;
-    return t === 'artifactOrCreature' ? def.type === 'artifact' || def.type === 'creature' : def.type === t;
+    const effect = pendingTargetForYou.effect;
+    if (effect.type === 'tapAndStun') {
+      if (ownerId === pendingTargetForYou.controllerId) return false;
+      return effect.targetType === 'artifactOrCreature' ? def.type === 'artifact' || def.type === 'creature' : def.type === effect.targetType;
+    }
+    if (effect.type === 'pumpTarget' || effect.type === 'putCounterOnTarget') {
+      return def.type === 'creature';
+    }
+    if (effect.type === 'debuffTargetByGraveyard') {
+      if (ownerId === pendingTargetForYou.controllerId) return false;
+      return def.type === 'creature';
+    }
+    if (effect.type === 'selfFightTarget') {
+      return def.type === 'creature' && card.instanceId !== pendingTargetForYou.sourceInstanceId;
+    }
+    if (effect.type === 'chooseCreaturesFight') {
+      if (def.type !== 'creature') return false;
+      return pendingTargetForYou.firstInstanceId ? ownerId !== pendingTargetForYou.controllerId : ownerId === pendingTargetForYou.controllerId;
+    }
+    if (effect.type === 'modifySagaLoreCounter') {
+      return !!def.saga && ownerId === pendingTargetForYou.controllerId;
+    }
+    if (effect.type === 'tapTarget') {
+      return def.type === 'creature';
+    }
+    if (effect.type === 'putCounterOnUpToOneOwnCreature' || effect.type === 'attachSelfToTarget') {
+      return def.type === 'creature' && ownerId === pendingTargetForYou.controllerId;
+    }
+    if (effect.type === 'destroyOpponentCreature') {
+      if (ownerId === pendingTargetForYou.controllerId) return false;
+      return def.type === 'creature';
+    }
+    const isFlyingCreature = def.type === 'creature' && hasKeyword(def.text, 'flying');
+    return (
+      effect.targetFilter === 'anyPermanent' ||
+      (effect.targetFilter === 'artifactEnchantmentOrFlyingCreature' && (def.type === 'artifact' || def.type === 'enchantment' || isFlyingCreature)) ||
+      (effect.targetFilter === 'artifactOrEnchantment' && (def.type === 'artifact' || def.type === 'enchantment'))
+    );
   }
 
   /** Is this creature a legal choice for a pendingSacrifice waiting on
@@ -796,27 +883,65 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     return getCardDefinition(card.defId).type === 'creature';
   }
 
-  /** The color choices an untapped land offers, or null if it only ever makes one color. */
-  function manaTapOptions(def: CardDefinition): ManaColor[] | null {
-    if (def.type !== 'land' || !def.producesMana) return null;
-    if (Array.isArray(def.producesMana)) return def.producesMana;
-    if (def.producesMana === 'any') return ALL_MANA_COLORS;
+  /** Is this permanent a legal pick for an ability's sacrificeAnother cost
+   * currently awaiting a click (e.g. Ahriman's "3, Sacrifice another
+   * creature or artifact: Draw a card.") - must be another permanent the
+   * SAME controller controls, matching the ability's cost filter. */
+  function isLegalSacrificeCostChoice(card: CardInstance, ownerId: string): boolean {
+    if (!pendingSacrificeCost) return false;
+    if (ownerId !== pendingSacrificeCost.ownerId) return false;
+    if (card.instanceId === pendingSacrificeCost.instanceId) return false;
+    const def = getCardDefinition(card.defId);
+    return pendingSacrificeCost.filter === 'artifactOrCreature' ? def.type === 'artifact' || def.type === 'creature' : def.type === pendingSacrificeCost.filter;
+  }
+
+  /** Is this permanent a legal (untapped, other, actual creature) pick to
+   * add to the running Crew selection? See pendingCrew - clicking a card
+   * that already matches toggles it back off instead. */
+  function isLegalCrewChoice(card: CardInstance, ownerId: string): boolean {
+    if (!pendingCrew) return false;
+    if (ownerId !== pendingCrew.ownerId) return false;
+    if (card.instanceId === pendingCrew.instanceId) return false;
+    if (card.tapped && !pendingCrew.selected.includes(card.instanceId)) return false;
+    return getCardDefinition(card.defId).type === 'creature';
+  }
+
+  /** A permanent's own producesMana, or - if it doesn't have one - whatever a
+   * grantsManaAbilityToOthers permanent (e.g. A Realm Reborn) the SAME
+   * controller controls is handing out to everything else. Mirrors
+   * engine/actions.ts's effectiveProducesMana exactly. */
+  function grantedManaAbility(instance: CardInstance): ManaColor | 'any' | ManaColor[] | undefined {
+    const owner = state.players.find((p) => p.id === instance.ownerId);
+    if (!owner) return undefined;
+    const granter = owner.zones.battlefield.find((c) => c.instanceId !== instance.instanceId && !!getCardDefinition(c.defId).grantsManaAbilityToOthers);
+    return granter ? getCardDefinition(granter.defId).grantsManaAbilityToOthers : undefined;
+  }
+
+  /** The color choices an untapped mana source offers, or null if it only
+   * ever makes one color. Not land-specific - a mana creature like Goobbue
+   * Gardener ("Tap: Add G.") uses the exact same producesMana field. */
+  function manaTapOptions(def: CardDefinition, instance: CardInstance): ManaColor[] | null {
+    const producesMana = def.producesMana ?? grantedManaAbility(instance);
+    if (!producesMana) return null;
+    if (Array.isArray(producesMana)) return producesMana;
+    if (producesMana === 'any') return ALL_MANA_COLORS;
     return null;
   }
 
   /**
-   * What to show as clickable pips under an untapped land - unlike
+   * What to show as clickable pips under an untapped mana source - unlike
    * manaTapOptions (which is only about *ambiguous* choices needing a
-   * prompt), this also covers a plain single-color land: one pip, click it,
-   * tapped - no popup, no double-click needed. Keep this one scoped to the
-   * pip UI itself; handleToggleTap/batch stack tapping still use
-   * manaTapOptions so a single-color land in a stack keeps tapping in one step.
+   * prompt), this also covers a plain single-color source: one pip, click
+   * it, tapped - no popup, no double-click needed. Keep this one scoped to
+   * the pip UI itself; handleToggleTap/batch stack tapping still use
+   * manaTapOptions so a single-color source in a stack keeps tapping in one step.
    */
-  function manaPipOptions(def: CardDefinition): ManaColor[] | null {
-    const ambiguous = manaTapOptions(def);
+  function manaPipOptions(def: CardDefinition, instance: CardInstance): ManaColor[] | null {
+    const ambiguous = manaTapOptions(def, instance);
     if (ambiguous) return ambiguous;
-    if (def.type === 'land' && def.producesMana && !Array.isArray(def.producesMana) && def.producesMana !== 'any') {
-      return [def.producesMana];
+    const producesMana = def.producesMana ?? grantedManaAbility(instance);
+    if (producesMana && !Array.isArray(producesMana) && producesMana !== 'any') {
+      return [producesMana];
     }
     return null;
   }
@@ -824,7 +949,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   function handleToggleTap(card: CardInstance) {
     const def = getCardDefinition(card.defId);
     if (!card.tapped) {
-      const options = manaTapOptions(def);
+      const options = manaTapOptions(def, card);
       if (options) {
         enqueueManaChoice(card.instanceId, options);
         return;
@@ -944,6 +1069,10 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
 
   function handleCast(card: CardInstance) {
     const def = getCardDefinition(card.defId);
+    if (def.chooseModes && def.chooseModes.length > 0) {
+      setPendingModalCast(card);
+      return;
+    }
     const parsed = parseCostLabel(def.costLabel);
     let chosenX: number | undefined;
     if (parsed.hasX) {
@@ -1069,7 +1198,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
       const found = findCard(state, id);
       if (!found || found.zone !== 'battlefield' || found.card.tapped) continue;
       const def = getCardDefinition(found.card.defId);
-      const options = manaTapOptions(def);
+      const options = manaTapOptions(def, found.card);
       if (options) {
         enqueueManaChoice(id, options);
       } else {
@@ -1144,7 +1273,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   ) {
     if (group.length === 1) {
       const def = getCardDefinition(front.defId);
-      const pipOptions = manaPipOptions(def);
+      const pipOptions = manaPipOptions(def, front);
       if (!pipOptions) {
         return <Card definition={def} instance={front} {...frontProps} staticBuff={activeStatBadge(def, front, state)} transformReady={canTransformNow(def, front, state)} />;
       }
@@ -1244,7 +1373,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
               untappableCount={untappableCount}
               onTapN={(n) => tapNFromGroup(group, n)}
               onUntapN={(n) => untapNFromGroup(group, n, ownerManaPool)}
-              tapColorOptions={manaPipOptions(getCardDefinition(front.defId)) ?? undefined}
+              tapColorOptions={manaPipOptions(getCardDefinition(front.defId), front) ?? undefined}
               onTapColor={(color) => tapOneFromGroupWithColor(group, color)}
               untapColorOptions={untapColorOptionsForGroup(group, ownerManaPool)}
               onUntapColor={(color) => untapOneFromGroupWithColor(group, color, ownerManaPool)}
@@ -1282,7 +1411,10 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     const acceptsBlockerRemoval = isDeclaringBlockers && !isOpponentSide;
     const isLegalTarget = isLegalPendingTarget(c, ownerId);
     const isSacrificeChoice = isLegalSacrifice(c, ownerId);
-    const selected = pendingBlocker === c.instanceId || multiSelected.has(c.instanceId) || isLegalTarget || isSacrificeChoice;
+    const isSacrificeCostChoice = isLegalSacrificeCostChoice(c, ownerId);
+    const isCrewChoice = isLegalCrewChoice(c, ownerId);
+    const isCrewSelected = !!pendingCrew?.selected.includes(c.instanceId);
+    const selected = pendingBlocker === c.instanceId || multiSelected.has(c.instanceId) || isLegalTarget || isSacrificeChoice || isSacrificeCostChoice || isCrewSelected;
     const canControl = canControlCard(ownerId);
 
     return (
@@ -1312,6 +1444,15 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                 if (isDead) return;
                 if (isSacrificeChoice) {
                   onAction({ type: 'CHOOSE_SACRIFICE', instanceId: c.instanceId });
+                } else if (isSacrificeCostChoice) {
+                  onAction({ type: 'ACTIVATE_ABILITY', instanceId: pendingSacrificeCost!.instanceId, abilityId: pendingSacrificeCost!.abilityId, costTargetInstanceId: c.instanceId });
+                  setPendingSacrificeCost(null);
+                } else if (isCrewChoice) {
+                  setPendingCrew((prev) =>
+                    prev
+                      ? { ...prev, selected: prev.selected.includes(c.instanceId) ? prev.selected.filter((id) => id !== c.instanceId) : [...prev.selected, c.instanceId] }
+                      : prev
+                  );
                 } else if (isLegalTarget) {
                   onAction({ type: 'CHOOSE_TARGET', targetInstanceId: c.instanceId });
                 } else if (canAttackThis) toggleAttacker(c.instanceId);
@@ -1335,6 +1476,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     const isPendingManaChoice = manaChoiceQueue.length > 0 && manaChoiceQueue[0].instanceId === c.instanceId;
     const canReorder = reorderAllowed && stackCount === 1;
     const isLegalTarget = isLegalPendingTarget(c, playerId);
+    const isSacrificeCostChoice = isLegalSacrificeCostChoice(c, playerId);
     const canControl = canControlCard(playerId);
     return (
       <div key={c.instanceId} ref={(el) => registerCardRef(c.instanceId, el)}>
@@ -1348,9 +1490,12 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
             group,
             c,
             {
-              selected: multiSelected.has(c.instanceId) || isPendingManaChoice || isLegalTarget,
+              selected: multiSelected.has(c.instanceId) || isPendingManaChoice || isLegalTarget || isSacrificeCostChoice,
               onClick: () => {
-                if (isLegalTarget) onAction({ type: 'CHOOSE_TARGET', targetInstanceId: c.instanceId });
+                if (isSacrificeCostChoice) {
+                  onAction({ type: 'ACTIVATE_ABILITY', instanceId: pendingSacrificeCost!.instanceId, abilityId: pendingSacrificeCost!.abilityId, costTargetInstanceId: c.instanceId });
+                  setPendingSacrificeCost(null);
+                } else if (isLegalTarget) onAction({ type: 'CHOOSE_TARGET', targetInstanceId: c.instanceId });
                 else setOpenPanelId(c.instanceId);
               },
               onDoubleClick: () => canControl && stackCount === 1 && handleToggleTap(c),
@@ -1894,20 +2039,107 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
         </div>
       )}
 
-      {pendingTargetForYou && (
-        <div className="pending-target-banner">
-          <span>
-            Choose a target for {pendingTargetSourceName}'s ability - click an opponent's{' '}
-            {pendingTargetForYou.effect.targetType === 'artifactOrCreature' ? 'artifact or creature' : pendingTargetForYou.effect.targetType}.
-          </span>
-        </div>
-      )}
+      {pendingTargetForYou &&
+        (() => {
+          const effect = pendingTargetForYou.effect;
+          const text =
+            effect.type === 'tapAndStun'
+              ? `Choose a target for ${pendingTargetSourceName}'s ability - click an opponent's ${
+                  effect.targetType === 'artifactOrCreature' ? 'artifact or creature' : effect.targetType
+                }.`
+              : effect.type === 'pumpTarget' || effect.type === 'putCounterOnTarget'
+                ? `Choose a target for ${pendingTargetSourceName}'s ability - click any creature (either player's).`
+                : effect.type === 'debuffTargetByGraveyard'
+                  ? `Choose a target for ${pendingTargetSourceName}'s ability - click an opponent's creature.`
+                  : effect.type === 'selfFightTarget'
+                    ? `Choose a creature for ${pendingTargetSourceName} to fight (either player's)${effect.optional ? ' - or Skip.' : '.'}`
+                    : effect.type === 'chooseCreaturesFight'
+                      ? pendingTargetForYou.firstInstanceId
+                        ? "Now choose an opponent's creature to fight it."
+                        : 'Choose a creature you control to fight.'
+                      : effect.type === 'modifySagaLoreCounter'
+                        ? `Choose a Saga you control for ${pendingTargetSourceName}'s ability.`
+                        : effect.type === 'tapTarget'
+                          ? `Choose a creature for ${pendingTargetSourceName}'s ability to tap (either player's).`
+                          : effect.type === 'putCounterOnUpToOneOwnCreature'
+                            ? `Choose up to one creature you control for ${pendingTargetSourceName}'s ability - or Skip.`
+                            : effect.type === 'attachSelfToTarget'
+                              ? `Choose a creature you control for ${pendingTargetSourceName} to attach to.`
+                              : effect.type === 'destroyOpponentCreature'
+                                ? `Choose an opponent's creature for ${pendingTargetSourceName}'s ability to destroy.`
+                                : effect.targetFilter === 'artifactOrEnchantment'
+                                  ? `Choose an artifact or enchantment for ${pendingTargetSourceName}'s ability (either player's).`
+                                  : effect.targetFilter === 'anyPermanent'
+                                    ? `Choose any permanent for ${pendingTargetSourceName}'s ability (either player's).`
+                                    : `Choose a target for ${pendingTargetSourceName}'s ability - click an artifact, enchantment, or creature with flying (either player's).`;
+          return (
+            <div className="pending-target-banner">
+              <span>{text}</span>
+              {((effect.type === 'selfFightTarget' && effect.optional) || effect.type === 'putCounterOnUpToOneOwnCreature') && (
+                <button className="opponent-view-exit-button" onClick={() => onAction({ type: 'CHOOSE_TARGET', targetInstanceId: null }, pendingTargetForYou.controllerId)}>
+                  Skip
+                </button>
+              )}
+            </div>
+          );
+        })()}
 
       {pendingSacrificeForYou && (
         <div className="pending-target-banner">
           <span>Choose a creature to sacrifice.</span>
         </div>
       )}
+
+      {pendingSacrificeCost && (
+        <div className="pending-target-banner">
+          <span>
+            Choose another {pendingSacrificeCost.filter === 'artifactOrCreature' ? 'creature or artifact' : pendingSacrificeCost.filter} you control to sacrifice.
+          </span>
+          <button className="opponent-view-exit-button" onClick={() => setPendingSacrificeCost(null)}>
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {pendingCrew && (
+        <div className="pending-target-banner">
+          <span>
+            Crew {pendingCrew.crewCost}: click untapped creatures you control to add/remove them ({pendingCrew.selected.length} selected).
+          </span>
+          <button
+            className="opponent-view-exit-button"
+            disabled={pendingCrew.selected.length === 0}
+            onClick={() => {
+              onAction({ type: 'CREW_VEHICLE', instanceId: pendingCrew.instanceId, crewInstanceIds: pendingCrew.selected }, pendingCrew.ownerId);
+              setPendingCrew(null);
+            }}
+          >
+            Confirm Crew
+          </button>
+          <button className="opponent-view-exit-button" onClick={() => setPendingCrew(null)}>
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {state.pendingOptionalDiscardHandForDevotion &&
+        (state.pendingOptionalDiscardHandForDevotion.controllerId === yourPlayerId || soloControl) && (
+          <div className="pending-target-banner">
+            <span>You may discard your hand, then draw cards equal to your devotion to {state.pendingOptionalDiscardHandForDevotion.color}.</span>
+            <button
+              className="opponent-view-exit-button"
+              onClick={() => onAction({ type: 'RESOLVE_OPTIONAL_DISCARD_HAND_FOR_DEVOTION', accept: true }, state.pendingOptionalDiscardHandForDevotion!.controllerId)}
+            >
+              Discard &amp; Draw
+            </button>
+            <button
+              className="opponent-view-exit-button"
+              onClick={() => onAction({ type: 'RESOLVE_OPTIONAL_DISCARD_HAND_FOR_DEVOTION', accept: false }, state.pendingOptionalDiscardHandForDevotion!.controllerId)}
+            >
+              Skip
+            </button>
+          </div>
+        )}
 
       <div className="docked-hand-tray">{renderHandRow(you, false, true)}</div>
 
@@ -2130,13 +2362,15 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           isMyTurn={state.activePlayerId === openCard.player.id}
           isMyEndStep={state.phase === 'end' && state.activePlayerId === openCard.player.id}
           isMyFirstMainPhase={state.phase === 'main1' && state.activePlayerId === openCard.player.id}
+          isMyUpkeep={state.phase === 'upkeep' && state.activePlayerId === openCard.player.id}
+          isMyMainPhase={(state.phase === 'main1' || state.phase === 'main2') && state.activePlayerId === openCard.player.id}
           ownerGraveyardCount={openCard.player.zones.graveyard.length}
           ownerBattlefieldDefIds={openCard.player.zones.battlefield.map((c) => c.defId)}
           alreadyPlayedLand={openCard.player.hasPlayedLandThisTurn}
           attachedToName={
             openCard.card.attachedToInstanceId ? getCardDefinition(findCard(state, openCard.card.attachedToInstanceId)?.card.defId ?? '')?.name ?? null : null
           }
-          manaOptions={manaTapOptions(getCardDefinition(openCard.card.defId)) ?? undefined}
+          manaOptions={manaTapOptions(getCardDefinition(openCard.card.defId), openCard.card) ?? undefined}
           onToggleTap={() => {
             onAction({ type: 'TOGGLE_TAP', instanceId: openCard.card.instanceId });
             setOpenPanelId(null);
@@ -2147,7 +2381,15 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           }}
           onFlip={() => onAction({ type: 'FLIP_CARD', instanceId: openCard.card.instanceId })}
           onCast={() => handleCast(openCard.card)}
-          onActivateAbility={(abilityId) => onAction({ type: 'ACTIVATE_ABILITY', instanceId: openCard.card.instanceId, abilityId })}
+          onActivateAbility={(abilityId) => {
+            const ability = getCardDefinition(openCard.card.defId).abilities?.find((a) => a.id === abilityId);
+            if (ability?.cost.sacrificeAnother) {
+              setPendingSacrificeCost({ instanceId: openCard.card.instanceId, abilityId, ownerId: openCard.player.id, filter: ability.cost.sacrificeAnother });
+              setOpenPanelId(null);
+            } else {
+              onAction({ type: 'ACTIVATE_ABILITY', instanceId: openCard.card.instanceId, abilityId });
+            }
+          }}
           onMove={(toZone) => {
             onAction({ type: 'MOVE_CARD', instanceId: openCard.card.instanceId, toZone });
             setOpenPanelId(null);
@@ -2156,6 +2398,11 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           onStartAttach={() => setOpenPanelId(null)}
           onDetach={() => {
             onAction({ type: 'DETACH_CARD', instanceId: openCard.card.instanceId });
+            setOpenPanelId(null);
+          }}
+          onStartCrew={() => {
+            const def = getCardDefinition(openCard.card.defId);
+            setPendingCrew({ instanceId: openCard.card.instanceId, ownerId: openCard.player.id, crewCost: def.crew!, selected: [] });
             setOpenPanelId(null);
           }}
           onCycle={() => {
@@ -2299,6 +2546,65 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           );
         })()}
 
+      {/* Like pendingSurveil, this shows the controller's own hand - private
+          information, so only the controller (or soloControl) ever renders it. */}
+      {state.pendingDiscard &&
+        (state.pendingDiscard.controllerId === yourPlayerId || soloControl) &&
+        (() => {
+          const pending = state.pendingDiscard;
+          const sourceFound = findCard(state, pending.sourceInstanceId);
+          const sourceName = sourceFound ? getCardDefinition(sourceFound.card.defId).name : 'This ability';
+          const controller = state.players.find((p) => p.id === pending.controllerId)!;
+          return (
+            <DiscardModal
+              sourceName={sourceName}
+              count={pending.count}
+              cards={controller.zones.hand.map((c) => ({ definition: getCardDefinition(c.defId), instance: c }))}
+              onChoose={(instanceId) => onAction({ type: 'DISCARD_CARD', instanceId }, pending.controllerId)}
+            />
+          );
+        })()}
+
+      {/* Unlike pendingDiscard/pendingSurveil, a bounce target is a
+          battlefield permanent - public information - so this shows for
+          both players, no privacy gating needed. */}
+      {state.pendingOptionalBounce &&
+        (() => {
+          const pending = state.pendingOptionalBounce;
+          const sourceFound = findCard(state, pending.sourceInstanceId);
+          const sourceName = sourceFound ? getCardDefinition(sourceFound.card.defId).name : 'This ability';
+          const controller = state.players.find((p) => p.id === pending.controllerId)!;
+          const eligible = controller.zones.battlefield.filter((c) => c.instanceId !== pending.sourceInstanceId);
+          return (
+            <OptionalBounceModal
+              sourceName={sourceName}
+              cards={eligible.map((c) => ({ definition: getCardDefinition(c.defId), instance: c }))}
+              onChoose={(instanceId) => onAction({ type: 'RESOLVE_OPTIONAL_BOUNCE', instanceId }, pending.controllerId)}
+              onSkip={() => onAction({ type: 'RESOLVE_OPTIONAL_BOUNCE', instanceId: null }, pending.controllerId)}
+            />
+          );
+        })()}
+
+      {/* Like pendingSurveil/pendingDiscard, the revealed cards come from the
+          library - private information, so only the controller (or
+          soloControl) ever renders this modal at all. */}
+      {state.pendingRevealFiltered &&
+        (state.pendingRevealFiltered.controllerId === yourPlayerId || soloControl) &&
+        (() => {
+          const pending = state.pendingRevealFiltered;
+          const sourceFound = findCard(state, pending.sourceInstanceId);
+          const sourceName = sourceFound ? getCardDefinition(sourceFound.card.defId).name : 'This ability';
+          return (
+            <RevealFilteredModal
+              sourceName={sourceName}
+              filterType={pending.filterType}
+              cards={pending.revealed.map((c) => ({ definition: getCardDefinition(c.defId), instance: c }))}
+              onChoose={(instanceId) => onAction({ type: 'RESOLVE_REVEAL_FILTERED', instanceId }, pending.controllerId)}
+              onSkip={() => onAction({ type: 'RESOLVE_REVEAL_FILTERED', instanceId: null }, pending.controllerId)}
+            />
+          );
+        })()}
+
       {pendingCastConfirm &&
         (() => {
           const def = getCardDefinition(pendingCastConfirm.defId);
@@ -2311,6 +2617,67 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
               }}
               onCancel={() => setPendingCastConfirm(null)}
             />
+          );
+        })()}
+
+      {pendingModalCast &&
+        (() => {
+          const def = getCardDefinition(pendingModalCast.defId);
+          return (
+            <ModalSpellModal
+              definition={def}
+              onConfirm={(chosenModeIndices) => {
+                onAction({ type: 'CAST_CARD', instanceId: pendingModalCast.instanceId, chosenModeIndices });
+                setPendingModalCast(null);
+                setOpenPanelId(null);
+              }}
+              onCancel={() => setPendingModalCast(null)}
+            />
+          );
+        })()}
+
+      {state.pendingChooseOneMode &&
+        (() => {
+          const pending = state.pendingChooseOneMode;
+          const sourceFound = findCard(state, pending.sourceInstanceId);
+          const sourceName = sourceFound ? getCardDefinition(sourceFound.card.defId).name : 'Choose one';
+          return (
+            <ChooseOneModeModal
+              sourceName={sourceName}
+              modes={pending.modes}
+              onChoose={(modeIndex) => onAction({ type: 'RESOLVE_CHOOSE_ONE_MODE', modeIndex }, pending.controllerId)}
+            />
+          );
+        })()}
+
+      {state.pendingPlayerTarget &&
+        (() => {
+          const pending = state.pendingPlayerTarget;
+          const sourceFound = findCard(state, pending.sourceInstanceId);
+          const sourceName = sourceFound ? getCardDefinition(sourceFound.card.defId).name : 'This ability';
+          return (
+            <div className="card-drawer-overlay">
+              <div className="card-actions-panel">
+                <div className="card-actions-header">
+                  <strong>{sourceName} - choose a player</strong>
+                </div>
+                <div className="card-actions-section">
+                  <span className="card-actions-hint">Target player draws {pending.effect.count} card(s).</span>
+                </div>
+                <div className="card-actions-spacer" />
+                <div className="card-actions-bottom-row">
+                  {state.players.map((p) => (
+                    <button
+                      key={p.id}
+                      className="card-action-button card-action-button-play"
+                      onClick={() => onAction({ type: 'CHOOSE_PLAYER_TARGET', targetPlayerId: p.id }, pending.controllerId)}
+                    >
+                      {p.id === pending.controllerId ? `${p.name} (yourself)` : p.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
           );
         })()}
 

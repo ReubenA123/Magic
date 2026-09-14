@@ -19,8 +19,16 @@ interface CardActionsPanelProps {
    * ability with CardAbility.onlyDuringOwnFirstMainPhase (e.g. Vanille's
    * meld). Ignored (never blocks) under Mutual Adjustment. */
   isMyFirstMainPhase: boolean;
+  /** True only while it's this card owner's own upkeep - gates any ability
+   * with CardAbility.onlyDuringOwnUpkeep (e.g. Emet-Selch's Transform).
+   * Ignored (never blocks) under Mutual Adjustment. */
+  isMyUpkeep: boolean;
+  /** True during this card owner's own turn, EITHER main phase - gates any
+   * ability with CardAbility.onlyDuringOwnMainPhase ("Activate only as a
+   * sorcery", e.g. Clive, Ifrit's Dominant). Ignored under Mutual Adjustment. */
+  isMyMainPhase: boolean;
   /** This card's owner's current graveyard size - gates any ability with a
-   * CardAbility.cost.exileFromGraveyard requirement. */
+   * CardAbility.cost.exileFromGraveyard or .requiresGraveyardSize requirement. */
   ownerGraveyardCount: number;
   /** defIds of every creature this card's owner currently controls - gates
    * any ability with a CardAbility.meldsWith requirement (the named partner
@@ -42,6 +50,7 @@ interface CardActionsPanelProps {
   onAdjustCounter: (label: string, delta: number) => void;
   onStartAttach: () => void;
   onDetach: () => void;
+  onStartCrew: () => void;
   onCycle: () => void;
   onFlashback: () => void;
   onClose: () => void;
@@ -68,6 +77,8 @@ export default function CardActionsPanel({
   isMyTurn,
   isMyEndStep,
   isMyFirstMainPhase,
+  isMyUpkeep,
+  isMyMainPhase,
   ownerGraveyardCount,
   ownerBattlefieldDefIds,
   alreadyPlayedLand,
@@ -83,6 +94,7 @@ export default function CardActionsPanel({
   onAdjustCounter,
   onStartAttach,
   onDetach,
+  onStartCrew,
   onCycle,
   onFlashback,
   onClose,
@@ -150,6 +162,15 @@ export default function CardActionsPanel({
           </div>
         )}
 
+        {!readOnly && definition.crew !== undefined && isOnBattlefield && !instance.crewedUntilEndOfTurn && (
+          <div className="card-actions-section">
+            <div className="card-actions-label">Vehicle</div>
+            <button className="card-action-button secondary" onClick={onStartCrew}>
+              {`Crew (${definition.crew})`}
+            </button>
+          </div>
+        )}
+
         {!readOnly && definition.abilities && definition.abilities.length > 0 && (
           <div className="card-actions-section">
             <div className="card-actions-label">Abilities</div>
@@ -158,19 +179,29 @@ export default function CardActionsPanel({
               const affordable = mutualActive || !manaCost || canPay(ownerManaPool, manaCost, 0);
               const tapBlocked = !!ability.cost.tap && instance.tapped;
               const graveyardBlocked = !!ability.cost.exileFromGraveyard && ownerGraveyardCount < ability.cost.exileFromGraveyard;
+              const graveyardSizeBlocked = !!ability.requiresGraveyardSize && ownerGraveyardCount < ability.requiresGraveyardSize;
               const endStepBlocked = !!ability.onlyDuringOwnEndStep && !mutualActive && !isMyEndStep;
               const mainPhaseBlocked = !!ability.onlyDuringOwnFirstMainPhase && !mutualActive && !isMyFirstMainPhase;
+              const upkeepBlocked = !!ability.onlyDuringOwnUpkeep && !mutualActive && !isMyUpkeep;
+              const sorceryBlocked = !!ability.onlyDuringOwnMainPhase && !mutualActive && !isMyMainPhase;
               const meldPartnerMissing = !!ability.meldsWith && !ownerBattlefieldDefIds.includes(ability.meldsWith.partnerDefId);
-              const disabled = !affordable || tapBlocked || graveyardBlocked || endStepBlocked || mainPhaseBlocked || meldPartnerMissing;
+              const disabled =
+                !affordable || tapBlocked || graveyardBlocked || graveyardSizeBlocked || endStepBlocked || mainPhaseBlocked || upkeepBlocked || sorceryBlocked || meldPartnerMissing;
               const blockedReason = endStepBlocked
                 ? 'Only during your own end step'
                 : mainPhaseBlocked
                   ? 'Only during your own first main phase'
-                  : meldPartnerMissing
-                    ? `Requires owning and controlling ${ability.meldsWith ? getCardDefinition(ability.meldsWith.partnerDefId).name : ''}`
-                    : graveyardBlocked
-                      ? `Needs ${ability.cost.exileFromGraveyard} cards in your graveyard`
-                      : '';
+                  : upkeepBlocked
+                    ? 'Only during your own upkeep'
+                    : sorceryBlocked
+                      ? 'Only as a sorcery (your own turn, either main phase)'
+                      : meldPartnerMissing
+                      ? `Requires owning and controlling ${ability.meldsWith ? getCardDefinition(ability.meldsWith.partnerDefId).name : ''}`
+                      : graveyardSizeBlocked
+                        ? `Needs at least ${ability.requiresGraveyardSize} cards in your graveyard`
+                        : graveyardBlocked
+                          ? `Needs ${ability.cost.exileFromGraveyard} cards in your graveyard`
+                          : '';
               return (
                 <button key={ability.id} className="card-action-button secondary" disabled={disabled} onClick={() => onActivateAbility(ability.id)} title={blockedReason || ability.effectText}>
                   {ability.label}

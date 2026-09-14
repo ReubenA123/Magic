@@ -16,13 +16,14 @@
 import { CardDefinition } from '../types';
 
 export const CARD_POOL: CardDefinition[] = [
-  { id: 'a-realm-reborn.webp',
+  { id: 'a-realm-reborn',
     name: 'A Realm Reborn',
     type: 'enchantment',
     costLabel: '4GG',
     text: 'Other permanents you control have Tap Add one mana of any color',
-    imagePath: '/assets/cards/a-realm-reborn.webp'
-  }, 
+    imagePath: '/assets/cards/a-realm-reborn.webp',
+    grantsManaAbilityToOthers: 'any',
+  },
   {
     id: 'absolute-virtue',
     name: 'Absolute Virtue',
@@ -50,6 +51,7 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'When this land enters the battlefield, you gain 2 life. Tap: add one colourless mana',
     imagePath: '/assets/cards/adventurers-inn.webp',
     producesMana: 'C',
+    onEnter: [{ type: 'gainLife', amount: 2 }],
   },
   {
     id: 'adelbert-steiner',
@@ -72,6 +74,8 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 2,
     text: 'Lifelink. Whenever you gain life, put a +1/+1 counter on Aerith Gainsborough. When Aerith Gainsborough dies, put X +1/+1 counters on each legendary creature you control where X is the number of +1/+1 counters on Aerith Gainsborough.',
     imagePath: '/assets/cards/aerith-gainsborough.webp',
+    onGainLifeTrigger: { counterLabel: '+1/+1', counterAmount: 1 },
+    onDeathDistributeCounters: { counterLabel: '+1/+1', targetFilter: 'legendary' },
   },
   {
     id: 'aettir-and-priwen',
@@ -81,6 +85,9 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: '6',
     text: "Equipped creatures has base power and toughness X/X, where X is your life total. Equip 5",
     imagePath: '/assets/cards/aettir-and-priwen.webp',
+    attachesTo: 'creature',
+    equipCost: '5',
+    setsBasePowerToughnessToControllerLife: true,
   },
   {
     id: 'ahriman',
@@ -92,6 +99,15 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 2,
     text: 'Flying, deathtouch. 3, Sacrifice another creature or artifact: Draw a card.',
     imagePath: '/assets/cards/ahriman.webp',
+    abilities: [
+      {
+        id: 'ahriman-draw',
+        label: 'Sacrifice, Draw',
+        cost: { manaLabel: '3', sacrificeAnother: 'artifactOrCreature' },
+        effects: [{ type: 'loot', drawCount: 1, discardCount: 0 }],
+        effectText: 'Sacrifice another creature or artifact: Draw a card.',
+      },
+    ],
   },
   {
     id: 'airship-crash',
@@ -99,6 +115,7 @@ export const CARD_POOL: CardDefinition[] = [
     type: 'instant',
     costLabel: '2G',
     text: 'Destroy target artifact, enchantment, or creature with flying. Cycling 2 (2, Discard this card: Draw a card.)',
+    onCast: [{ type: 'destroyTarget', targetFilter: 'artifactEnchantmentOrFlyingCreature' }],
     cycling: { cost: '2' },
     imagePath: '/assets/cards/airship-crash.webp',
   },
@@ -112,6 +129,7 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 3,
     text: 'Whenever this creature or another creature or artifact you control dies, target opponent loses 1 life and you gain 1 life.',
     imagePath: '/assets/cards/al-bhed-salvagers.webp',
+    onAnyDeathDrain: { opponentLifeLoss: 1, controllerLifeGain: 1 },
   },
   {
     id: 'ambrosia-whiteheart',
@@ -123,6 +141,8 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 2,
     text: "When Ambrosia Whiteheart enters, you may return another permanent you control to its owner's hand. Landfall \u2014 Whenever a land you control enters, Ambrosia Whiteheart gets +1/+0 until end of turn.",
     imagePath: '/assets/cards/ambrosia-whiteheart.webp',
+    onEnter: [{ type: 'optionalBounce' }],
+    landfall: { temporaryBuff: { power: 1, toughness: 0 } },
   },
   {
     id: 'ancient-adamantoise',
@@ -134,6 +154,7 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 20,
     text: "Vigilance, ward 3. Damage isn't removed from this creature during cleanup steps. All damage that would be dealt to you and other permanents you control is dealt to this creature instead. When this creature dies, exile it and create ten tapped Treasure tokens.",
     imagePath: '/assets/cards/ancient-adamantoise.webp',
+    onDeathExileAndCreateTokens: { tokenId: 'token-treasure', count: 10 },
   },
   {
     id: 'ardyn-the-usurper',
@@ -156,6 +177,7 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 2,
     text: "Whenever Ashe attacks, look at the top five cards of your library. You may reveal an artifact card from among them and put it into your hand. Put the rest on the bottom of your library in a random order.",
     imagePath: '/assets/cards/ashe-princess-of-dalmasca.webp',
+    onAttack: [{ type: 'revealFiltered', count: 5, filterType: 'artifact' }],
   },
   {
     id: 'astrologian-s-planisphere',
@@ -172,6 +194,7 @@ export const CARD_POOL: CardDefinition[] = [
     type: 'instant',
     costLabel: '2W',
     text: "Attacking creatures get +2/+0 until end of turn.Flashback 2WW (You may cast this card from your graveyard for its flashback cost. Then exile it.)",
+    onCast: [{ type: 'pumpAttackers', power: 2, toughness: 0 }],
     imagePath: '/assets/cards/aurons-inspiration.webp',
   },
   {
@@ -184,6 +207,18 @@ export const CARD_POOL: CardDefinition[] = [
     entersTapped: true,
     transformsInto: 'balamb-garden-airborne',
     producesMana: ['G', 'U'],
+    // The "costs 1 less per other Town you control" discount is left manual -
+    // this engine has no generic subtype-counting cost-reduction system, so
+    // this activates at the flat printed cost instead.
+    abilities: [
+      {
+        id: 'balamb-transform',
+        label: 'Transform',
+        cost: { manaLabel: '5GU', tap: true },
+        transformSelf: true,
+        effectText: 'Transform this land.',
+      },
+    ],
   },
   {
     id: 'balamb-garden-airborne',
@@ -203,6 +238,7 @@ export const CARD_POOL: CardDefinition[] = [
     power: 6,
     toughness: 6,
     text: "Trample. Whenever this creature enters, you gain 3 life. Forestcycling 2(2 Discard this card: Search your library for a forest card, reveal it, put it into your hand then shuffle)",
+    onEnter: [{ type: 'gainLife', amount: 3 }],
     cycling: { cost: '2', searchLandName: 'Forest' },
     imagePath: '/assets/cards/balamb-t-rexaur.webp',
   },
@@ -246,6 +282,7 @@ export const CARD_POOL: CardDefinition[] = [
     power: 4,
     toughness: 4,
     text: "Reach, Whenever Barret Wallace attacks, it deals damage equal to the number of equipped creatures you control to defending player.",
+    onAttack: [{ type: 'damageEqualToEquippedCreatures' }],
     imagePath: '/assets/cards/barret-wallace.webp',
   },
   {
@@ -302,6 +339,7 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 2,
     text: "Flying, deathtouch " +
       "Whenever you cast a noncreature spell, Black Waltz No. 3 deals 2 damage to each opponent.",
+    noncreatureCastTrigger: { damageEachOpponent: 2 },
     imagePath: '/assets/cards/black-waltz-no3.webp',
   },
   {
@@ -314,6 +352,7 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 1,
     text: "Whenever you cast a noncreature spell, if at least four mana was spent to cast it, put a +1/+1 counter on this creature. " +
       "Blow Up — {T}, Sacrifice this creature: It deals damage equal to its power to target creature. Activate only as a sorcery.",
+    noncreatureCastTrigger: { counterIfExpensive: { minManaValue: 4, counterLabel: '+1/+1', counterAmount: 1 } },
     imagePath: '/assets/cards/blazing-bomb.webp',
   },
   {
@@ -324,6 +363,7 @@ export const CARD_POOL: CardDefinition[] = [
     text: ": Add one mana of any color. " +
       "GOOOOAAAALLL! — {T}, Sacrifice this artifact: Draw two cards. Activate only if an opponent was dealt combat " +
       "damage by a legendary creature this turn.",
+    producesMana: 'any',
     imagePath: '/assets/cards/blitzball.webp',
   },
   {
@@ -332,6 +372,7 @@ export const CARD_POOL: CardDefinition[] = [
     type: 'instant',
     costLabel: "1G",
     text: "Target creature gets +3/+3 and gains trample until end of turn.",
+    onCast: [{ type: 'pumpTarget', power: 3, toughness: 3, grantKeyword: 'trample' }],
     imagePath: '/assets/cards/blitzball-shot.webp',
   },
   {
@@ -356,6 +397,7 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 3,
     text: "Trample. " +
       "At the beginning of your end step, if this creature didn\u2019t enter the battlefield this turn, return it to its owner\u2019s hand.",
+    bounceSelfAtEndStepIfNotSummoningSick: true,
     imagePath: '/assets/cards/cactuar.webp',
   },
   {
@@ -366,7 +408,8 @@ export const CARD_POOL: CardDefinition[] = [
     text: "Search your library for a Mountain card, reveal it, put it into your hand, then shuffle. " +
       'Create a 2/2 green Bird creature token with “Whenever a land you control enters, this token gets +1/+0 until end of turn.”' +
       "Flashback {5}{R} (You may cast this card from your graveyard for its flashback cost. Then exile it.)",
-    onCast: [{ type: 'createToken', tokenId: 'token-bird' }],
+    onCast: [{ type: 'searchLibraryForLand', landName: 'Mountain' }, { type: 'createToken', tokenId: 'token-bird' }],
+    flashback: { cost: '5R' },
     imagePath: '/assets/cards/call-the-mountain-chocobo.webp',
   },
   {
@@ -388,6 +431,7 @@ export const CARD_POOL: CardDefinition[] = [
     power: 2,
     toughness: 3,
     text: "Flying, vigilance \n Tap: Add Mana. Spend this mana only to cast an artifact spell or activate an ability of an artifact source. \n Crew 1",
+    crew: 1,
     imagePath: '/assets/cards/cargo-ship.webp',
   },
   {
@@ -412,6 +456,7 @@ export const CARD_POOL: CardDefinition[] = [
     power: 4,
     toughness: 4,
     text: "Lifelink \n Protect \u2014 Whenever Cecil attacks, other attacking creatures gain indestructible until end of turn.",
+    onAttack: [{ type: 'grantKeywordToOtherAttackers', keyword: 'indestructible' }],
     imagePath: '/assets/cards/cecil-redeemed-paladin.webp',
   },
   {
@@ -431,6 +476,7 @@ export const CARD_POOL: CardDefinition[] = [
     type: 'artifact',
     costLabel: '3GG',
     text: "Landfall — Whenever a land you control enters, create a 2/2 green Bird creature token with “Whenever a land you control enters, this token gets +1/+0 until end of turn.",
+    landfall: { createTokenId: 'token-bird' },
     imagePath: '/assets/cards/chocobo-racetrack.webp',
   },
   {
@@ -453,6 +499,7 @@ export const CARD_POOL: CardDefinition[] = [
     text: "Whenever one or more Birds you control attack, look at that many cards from the top of your library. " +
       "You may put one of them into your hand. Then put any number of land cards from among them onto the battlefield tapped and the rest into your graveyard." +
       "\nLandfall — Whenever a land you control enters, Choco gets +1/+0 until end of turn.",
+    landfall: { temporaryBuff: { power: 1, toughness: 0 } },
     imagePath: '/assets/cards/choco-seeker-of-paradise.webp',
   },
   // --- Cid put in later, he has multiple cards all with the same text but different images -------------------------------------------------------
@@ -464,7 +511,12 @@ export const CARD_POOL: CardDefinition[] = [
     text: "You draw two cards and you lose 2 life. Create a 0/1 black Wizard creature token with " +
       "'Whenever you cast a noncreature spell, this token deals 1 damage to each opponent.'" +
       "\nWizards you control get +1/+0 and gain lifelink until end of turn.",
-    onCast: [{ type: 'createToken', tokenId: 'token-wizard' }],
+    onCast: [
+      { type: 'loot', drawCount: 2, discardCount: 0 },
+      { type: 'loseLife', amount: 2 },
+      { type: 'createToken', tokenId: 'token-wizard' },
+      { type: 'pumpControlledSubtype', subtype: 'Wizard', power: 1, toughness: 0, grantKeyword: 'lifelink' },
+    ],
     imagePath: '/assets/cards/circle-of-power.webp',
   },
   {
@@ -476,6 +528,11 @@ export const CARD_POOL: CardDefinition[] = [
       "\n• Target creature you control fights target creature an opponent controls." +
       "\n• Remove a lore counter from target Saga you control. (Removing lore counters doesn\u2019t cause chapter abilities to trigger.)" +
       "\n• Put a lore counter on target Saga you control.",
+    chooseModes: [
+      { label: 'Target creature you control fights target creature an opponent controls.', effects: [{ type: 'chooseCreaturesFight' }] },
+      { label: 'Remove a lore counter from target Saga you control.', effects: [{ type: 'modifySagaLoreCounter', delta: -1 }] },
+      { label: 'Put a lore counter on target Saga you control.', effects: [{ type: 'modifySagaLoreCounter', delta: 1 }] },
+    ],
     imagePath: '/assets/cards/clash-of-the-eikons.webp',
   },
   {
@@ -490,6 +547,17 @@ export const CARD_POOL: CardDefinition[] = [
       "4RR, T: Exile Clive, then return it to the battlefield transformed under its owner\u2019s control. Activate only as a sorcery.",
     imagePath: '/assets/cards/clive-ifrit-s-dominant.webp',
     transformsInto: 'ifrit-warden-of-inferno',
+    onEnter: [{ type: 'discardHandThenDrawByDevotion', color: 'R' }],
+    abilities: [
+      {
+        id: 'clive-transform',
+        label: 'Transform',
+        cost: { manaLabel: '4RR', tap: true },
+        exileAndReturnTransformed: true,
+        onlyDuringOwnMainPhase: true,
+        effectText: "Exile Clive, then return it to the battlefield transformed under its owner's control.",
+      },
+    ],
   },
   {
     id: 'ifrit-warden-of-inferno',
@@ -501,6 +569,19 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 9,
     text: "I — Lunge — Ifrit fights up to one other target creature. " +
       "\nII, III — Brimstone — Add RRRR. If Ifrit has three or more lore counters on it, exile it, then return it to the battlefield (front face up).",
+    transformsInto: 'clive-ifrits-dominant',
+    saga: {
+      chapters: [
+        { numbers: [1], effects: [{ type: 'selfFightTarget', optional: true }] },
+        {
+          numbers: [2, 3],
+          effects: [
+            { type: 'addMana', colors: { R: 4 } },
+            { type: 'exileAndReturnTransformedSelfIfLoreAtLeast', minLore: 3 },
+          ],
+        },
+      ],
+    },
     imagePath: '/assets/cards/ifrit-warden-of-inferno.webp',
   },
   {
@@ -521,6 +602,7 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: '3WW',
     text: "Flying \n When this creature enters, put a +1/+1 counter on target creature. \n" +
       "Plainscycling 2 (2, Discard this card: Search your library for a Plains card, reveal it, put it into your hand, then shuffle.)",
+    onEnter: [{ type: 'putCounterOnTarget', counterLabel: '+1/+1', counterAmount: 1 }],
     cycling: { cost: '2', searchLandName: 'Plains' },
     imagePath: '/assets/cards/cloudbound-moogle.webp'
   },
@@ -546,6 +628,7 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 3,
     text: 'Flying \nParticle Beam — When Cloud of Darkness enters, target creature an opponent controls gets -X/-X ' +
       "until end of turn, where X is the number of permanent cards in your graveyard.",
+    onEnter: [{ type: 'debuffTargetByGraveyard', powerPerUnit: -1, toughnessPerUnit: -1 }],
     imagePath: '/assets/cards/cloud-of-darkness.webp'
   },
   {
@@ -570,6 +653,15 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 2,
     text: "1W Tap target nonenchantment creature",
     imagePath: '/assets/cards/coeurl.webp',
+    abilities: [
+      {
+        id: 'coeurl-tap',
+        label: 'Tap',
+        cost: { manaLabel: '1W' },
+        effects: [{ type: 'tapTarget' }],
+        effectText: 'Tap target nonenchantment creature.',
+      },
+    ],
   },
   {
     id: 'coliseum-behemoth',
@@ -579,6 +671,15 @@ export const CARD_POOL: CardDefinition[] = [
     power: 7,
     toughness: 7,
     text: "Trample \nWhen this creature enters, choose one \u2014 \n Destroy target artifact or enchantment \nDraw a card",
+    onEnter: [
+      {
+        type: 'chooseOneMode',
+        modes: [
+          { label: 'Destroy target artifact or enchantment', effects: [{ type: 'destroyTarget', targetFilter: 'artifactOrEnchantment' }] },
+          { label: 'Draw a card', effects: [{ type: 'loot', drawCount: 1, discardCount: 0 }] },
+        ],
+      },
+    ],
     imagePath: '/assets/cards/coliseum-behemoth.webp',
   },
   {
@@ -587,6 +688,10 @@ export const CARD_POOL: CardDefinition[] = [
     type: 'sorcery',
     costLabel: '2U',
     text: "Target player draws two cards. Put a +1/+1 counter on up to one target creature you control.",
+    onCast: [
+      { type: 'drawCardsFromTargetPlayer', count: 2 },
+      { type: 'putCounterOnUpToOneOwnCreature', counterLabel: '+1/+1', counterAmount: 1 },
+    ],
     imagePath: '/assets/cards/combat-tutorial.webp'
   },
   {
@@ -596,6 +701,7 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: 'G',
     text: 'Look at the top three cards of your library. You may reveal an artifact, creature, ' +
       "or land card from among them and put it into your hand. Put the rest on the bottom of your library in any order.",
+    onCast: [{ type: 'revealFiltered', count: 3, filterType: ['artifact', 'creature', 'land'] }],
     imagePath: '/assets/cards/commune-with-beavers.webp',
   },
   {
@@ -605,6 +711,10 @@ export const CARD_POOL: CardDefinition[] = [
     subtype: 'equipment',
     costLabel: 'R',
     text: 'Flash \nWhen this Equipment enters, attach it to target creature you control. That creature gains first strike until end of turn.\n Equipped creature gets +1/+0.\nEquip 1',
+    onEnter: [{ type: 'attachSelfToTarget', grantKeyword: 'first strike' }],
+    attachesTo: 'creature',
+    equipCost: '1',
+    equipBuff: { power: 1, toughness: 0 },
     imagePath: '/assets/cards/coral-sword.webp',
   },
   {
@@ -634,6 +744,9 @@ export const CARD_POOL: CardDefinition[] = [
     subtype: 'equipment',
     costLabel: 'W',
     text: "Equipped creature gets +1/+1. \n5WW: Exile this Equipment, then return it to the battlefield transformed under its owner\u2019s control. Activate only as a sorcery. \nEquip 1",
+    attachesTo: 'creature',
+    equipCost: '1',
+    equipBuff: { power: 1, toughness: 1 },
     imagePath: '/assets/cards/crystal-fragments.webp'
   },
   {
@@ -645,6 +758,7 @@ export const CARD_POOL: CardDefinition[] = [
     power: 2,
     toughness: 1,
     text: "At the beginning of your upkeep, reveal the top card of your library and put that card into your hand. You lose life equal to its mana value.",
+    onOwnUpkeep: [{ type: 'revealTopThenLoseLifeByManaValue' }],
     imagePath: '/assets/cards/dark-confidant.webp'
   },
   {
@@ -656,6 +770,8 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'Job select (When this Equipment enters, create a 1/1 colorless Hero creature token, then attach this to it.) \n' +
       "Equipped creature gets +3/+0 and is a Knight in addition to its other types. \nChaosbringer — Equip—Pay 3 life. Activate only once each turn.",
     onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
+    attachesTo: 'creature',
+    equipBuff: { power: 3, toughness: 0 },
     imagePath: '/assets/cards/dark-knight-s-greatsword.webp'
   },
   {
@@ -664,6 +780,7 @@ export const CARD_POOL: CardDefinition[] = [
     type: 'sorcery',
     costLabel: '3BB',
     text: 'Destroy target creature an opponent controls. Then draw a card for each creature that died this turn.',
+    onCast: [{ type: 'destroyOpponentCreature', thenDrawForCreaturesDiedThisTurn: true }],
     imagePath: '/assets/cards/deadly-embrace.webp'
   },
   {
@@ -689,6 +806,16 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'Defender \nMenace (This creature can\u2019t be blocked except by two or more creatures.) ' +
       "As long as this creature has a counter on it, it can attack as though it didn\u2019t have defender. " +
       "\n5B: Put two +1/+1 counters on this creature.",
+    ignoresDefenderIfHasCounter: true,
+    abilities: [
+      {
+        id: 'demon-wall-grow',
+        label: 'Grow',
+        cost: { manaLabel: '5B' },
+        effects: [{ type: 'putCounterOnSelf', counterLabel: '+1/+1', counterAmount: 2 }],
+        effectText: 'Put two +1/+1 counters on this creature.',
+      },
+    ],
     imagePath: '/assets/cards/demon-wall.webp'
   },
   {
@@ -700,6 +827,8 @@ export const CARD_POOL: CardDefinition[] = [
     power: 8,
     toughness: 8,
     text: "This spell costs 1 less to cast for each permanent card in your graveyard. \nReach \n Immune — Prevent all combat damage that would be dealt to Diamond Weapon.",
+    costReductionPerGraveyardPermanent: 1,
+    preventsAllCombatDamage: true,
     imagePath: '/assets/cards/diamond-weapon.webp'
   },
   {
@@ -713,6 +842,16 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'Dragonfire Dive — During your turn, Dion and other Knights you control have flying.\nWhen Dion enters, create a 2/2 white Knight creature token.' +
       "4WW, Tap: Exile Dion, then return it to the battlefield transformed under its owner\u2019s control. Activate only as a sorcery.",
     onEnter: [{ type: 'createToken', tokenId: 'token-knight' }],
+    abilities: [
+      {
+        id: 'dion-transform',
+        label: 'Transform',
+        cost: { manaLabel: '4WW', tap: true },
+        exileAndReturnTransformed: true,
+        onlyDuringOwnMainPhase: true,
+        effectText: "Exile Dion, then return it to the battlefield transformed under its owner's control.",
+      },
+    ],
     imagePath: '/assets/cards/dion-bahamut-s-dominant.webp',
     transformsInto: 'bahamut-warden-of-light'
   },
@@ -726,6 +865,19 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 5,
     text: "I, II — Wings of Light — Put a +1/+1 counter on each other creature you control. Those creatures gain flying until end of turn." +
       "\nIII — Gigaflare — Destroy target permanent. Exile Bahamut, then return it to the battlefield (front face up). \nFlying",
+    transformsInto: 'dion-bahamut-dominant',
+    saga: {
+      chapters: [
+        {
+          numbers: [1, 2],
+          effects: [{ type: 'buffOtherCreaturesYouControl', counterLabel: '+1/+1', counterAmount: 1, grantKeyword: 'flying' }],
+        },
+        {
+          numbers: [3],
+          effects: [{ type: 'destroyTarget', targetFilter: 'anyPermanent' }, { type: 'exileAndReturnTransformedSelf' }],
+        },
+      ],
+    },
     imagePath: '/assets/cards/bahamut-warden-of-light.webp'
   },
   {
@@ -820,7 +972,20 @@ export const CARD_POOL: CardDefinition[] = [
     text: "Vigilance \nWhenever Emet-Selch enters or attacks, draw a card, then discard a card.\n" +
       "At the beginning of your upkeep, if there are fourteen or more cards in your graveyard, you may transform Emet-Selch.",
     imagePath: '/assets/cards/emet-selch-unsundered.webp',
-    transformsInto: 'hades-sorcerer-of-eld'
+    transformsInto: 'hades-sorcerer-of-eld',
+    onEnter: [{ type: 'loot', drawCount: 1, discardCount: 1 }],
+    onAttack: [{ type: 'loot', drawCount: 1, discardCount: 1 }],
+    abilities: [
+      {
+        id: 'transform',
+        label: 'Transform into Hades',
+        cost: {},
+        onlyDuringOwnUpkeep: true,
+        requiresGraveyardSize: 14,
+        transformSelf: true,
+        effectText: 'If there are fourteen or more cards in your graveyard, transform Emet-Selch into Hades, Sorcerer of Eld.',
+      },
+    ],
   },
   {
     id: 'hades-sorcerer-of-eld',
@@ -1130,7 +1295,8 @@ export const CARD_POOL: CardDefinition[] = [
     power: 1,
     toughness: 3,
     text: 'Tap: Add G.',
-    imagePath: '/assets/cards/goobbue-gardener.webp'
+    imagePath: '/assets/cards/goobbue-gardener.webp',
+    producesMana: 'G'
   },
   {
     id: 'g-raha-tia',
@@ -3754,6 +3920,17 @@ export const TOKEN_POOL: CardDefinition[] = [
     text: 'This token is all colors.',
     imagePath: '/assets/cards/token-elemental.webp',
   },
+  {
+    id: 'token-treasure',
+    name: 'Treasure',
+    type: 'artifact',
+    subtype: 'Treasure Token',
+    costLabel: '-',
+    text: 'Tap, Sacrifice this token: Add one mana of any color.',
+    imagePath: '/assets/cards/token-treasure.webp',
+    producesMana: 'any',
+    sacrificesOnTap: true,
+  },
 ];
 
 export function getCardDefinition(defId: string): CardDefinition {
@@ -3769,8 +3946,26 @@ export function getCardDefinition(defId: string): CardDefinition {
  * a subset of CARD_POOL per player instead of hardcoding this.
  */
 export function buildDefaultDecklist(): string[] {
-  const lands = ['fire-crystal', 'water-crystal', 'earth-crystal', 'holy-crystal', 'shadow-crystal'];
-  const nonlands = CARD_POOL.filter((c) => c.type !== 'land').map((c) => c.id);
+  // Plain, untapped, single-color basic lands - not the "fire-crystal"-style
+  // ids this used to reference, which were never real cards in CARD_POOL and
+  // crashed (getCardDefinition throws on an unknown id) the moment a player
+  // actually tried to interact with one.
+  const lands = ['plains', 'island', 'swamp', 'mountain', 'forest'];
+  // A transform back face (Hades, Ragnarok, Ultimecia's Omnipotent side, ...)
+  // never exists as its own library card - it's only ever reached by
+  // flipping the front face already in play, so it must never be dealt into
+  // a hand or library on its own. Every real back face is printed with
+  // costLabel: '-' (it's never cast on its own), so that - not just "is
+  // SOME card's transformsInto target" - is the actual signal: Ifrit,
+  // Warden of Inferno's own transformsInto points back to Clive, Ifrit's
+  // Dominant (a real, castable front face with a real cost), and that
+  // bidirectional link would otherwise wrongly exclude Clive too.
+  const backFaceIds = new Set(
+    CARD_POOL.map((c) => c.transformsInto)
+      .filter((id): id is string => !!id)
+      .filter((id) => getCardDefinition(id).costLabel === '-')
+  );
+  const nonlands = CARD_POOL.filter((c) => c.type !== 'land' && !backFaceIds.has(c.id)).map((c) => c.id);
 
   const decklist: string[] = [];
   for (let i = 0; i < 17; i++) decklist.push(lands[i % lands.length]);

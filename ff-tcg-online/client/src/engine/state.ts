@@ -12,7 +12,7 @@ export function nextInstanceId(): string {
   return `local-inst-${instanceCounter}`;
 }
 
-function shuffle<T>(items: T[]): T[] {
+export function shuffle<T>(items: T[]): T[] {
   const arr = [...items];
   for (let i = arr.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -48,7 +48,7 @@ export function findCardAnywhere(state: GameState, instanceId: string) {
   return null;
 }
 
-import { getCardDefinition } from '../data/cards';
+import { CARD_POOL, getCardDefinition } from '../data/cards';
 
 export function detachEverythingFrom(state: GameState, anchorInstanceId: string): GameState {
   let next = state;
@@ -78,8 +78,16 @@ export function createStateFromDeck(deck: SavedDeck, humanName: string): GameSta
   const humanId = 'you';
   const aiId = 'ai';
 
+  // Defensive: a transform back face (Hades, Ragnarok, ...) never exists as
+  // its own library card - it's only ever reached by flipping the front
+  // face already in play. The deck builder already refuses to add one, but
+  // this strips out any that snuck into an older saved deck too, so it can
+  // never be drawn or start in an opening hand.
+  const backFaceIds = new Set(CARD_POOL.map((c) => c.transformsInto).filter((id): id is string => !!id));
+  const cardIds = deck.cardIds.filter((id) => !backFaceIds.has(id));
+
   function buildPlayer(id: string, name: string): PlayerState {
-    const library: CardInstance[] = shuffle(deck.cardIds).map((defId) => ({
+    const library: CardInstance[] = shuffle(cardIds).map((defId) => ({
       instanceId: nextInstanceId(),
       defId,
       ownerId: id,
@@ -149,6 +157,13 @@ export function createStateFromDeck(deck: SavedDeck, humanName: string): GameSta
     pendingSurveil: null,
     extraTurnsQueued: [],
     pendingReturnFromGraveyard: null,
+    pendingDiscard: null,
+    pendingOptionalBounce: null,
+    pendingRevealFiltered: null,
+    pendingOptionalDiscardHandForDevotion: null,
+    pendingChooseOneMode: null,
+    pendingPlayerTarget: null,
+    creaturesDiedThisTurn: 0,
   };
 }
 
