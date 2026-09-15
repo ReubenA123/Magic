@@ -1032,6 +1032,7 @@ function chooseTarget(state: GameState, playerId: string, targetInstanceId: stri
     // allows declining; every other pending effect requires an actual target.
     const isOptional =
       (pending.effect.type === 'selfFightTarget' && pending.effect.optional) ||
+      (pending.effect.type === 'destroyTarget' && pending.effect.optional) ||
       pending.effect.type === 'putCounterOnUpToOneOwnCreature' ||
       pending.effect.type === 'bounceUpToOneOtherNonlandPermanent' ||
       pending.effect.type === 'putCounterOnUpToOneOtherCreatureEqualToOwnPower';
@@ -1078,6 +1079,10 @@ function chooseTarget(state: GameState, playerId: string, targetInstanceId: stri
     const isFlyingCreature = targetDef.type === 'creature' && hasKeyword(targetDef.text, 'flying');
     const matchesFilter =
       pending.effect.targetFilter === 'anyPermanent' ||
+      (pending.effect.targetFilter === 'nonlandPermanent' && targetDef.type !== 'land') ||
+      (pending.effect.targetFilter === 'creatureWithMinPower' &&
+        targetDef.type === 'creature' &&
+        effectivePower(targetDef, found.card, state, found.ownerPlayerId) >= (pending.effect.minPower ?? 0)) ||
       (pending.effect.targetFilter === 'artifactEnchantmentOrFlyingCreature' && (targetDef.type === 'artifact' || targetDef.type === 'enchantment' || isFlyingCreature)) ||
       (pending.effect.targetFilter === 'artifactOrEnchantment' && (targetDef.type === 'artifact' || targetDef.type === 'enchantment'));
     if (!matchesFilter) return { ok: false, error: `${targetDef.name} is not a legal target for this ability.` };
@@ -1334,6 +1339,37 @@ function chooseTarget(state: GameState, playerId: string, targetInstanceId: stri
       pendingTarget: null,
       log: [...next.log, `${actor.name} deals ${damageToCreature} damage to ${targetDef.name} and ${equipmentCount} damage to ${targetOwner.name}.`],
     };
+    const damagedTarget = getPlayer(next, found.ownerPlayerId).zones.battlefield.find((c) => c.instanceId === targetInstanceId);
+    const isLethal = !!damagedTarget && !hasKeywordEffective(targetDef, damagedTarget, 'indestructible') && damagedTarget.damageMarked >= effectiveToughness(targetDef, damagedTarget, next, found.ownerPlayerId);
+    if (isLethal) {
+      const lethalResult = moveCreaturesToGraveyardAndTrigger(next, [targetInstanceId], 'dies');
+      next = { ...lethalResult.state, log: [...lethalResult.state.log, ...lethalResult.logLines] };
+    }
+    return { ok: true, state: next };
+  }
+
+  if (pending.effect.type === 'pumpAnotherControlledCreature') {
+    if (targetDef.type !== 'creature') return { ok: false, error: `${targetDef.name} is not a legal target - it must be a creature.` };
+    if (found.ownerPlayerId !== playerId) return { ok: false, error: 'You must choose a creature you control.' };
+    if (targetInstanceId === pending.sourceInstanceId) return { ok: false, error: 'You must choose a creature other than the source.' };
+    const { power, toughness, grantKeyword } = pending.effect;
+    let next = applyTemporaryBuff(state, targetInstanceId, power, toughness);
+    if (grantKeyword) next = grantTemporaryKeyword(next, targetInstanceId, grantKeyword);
+    next = { ...next, pendingTarget: null };
+    const actor = getPlayer(next, playerId);
+    const keywordNote = grantKeyword ? ` and gains ${grantKeyword}` : '';
+    return { ok: true, state: { ...next, log: [...next.log, `${actor.name} targets ${targetDef.name}: it gets +${power}/+${toughness}${keywordNote} until end of turn.`] } };
+  }
+
+  if (pending.effect.type === 'damageTargetCreature') {
+    if (targetDef.type !== 'creature') return { ok: false, error: `${targetDef.name} is not a legal target - it must be a creature.` };
+    const { amount } = pending.effect;
+    const actor = getPlayer(state, playerId);
+    let next = updatePlayer(state, found.ownerPlayerId, (p) => ({
+      ...p,
+      zones: { ...p.zones, battlefield: p.zones.battlefield.map((c) => (c.instanceId === targetInstanceId ? { ...c, damageMarked: c.damageMarked + amount } : c)) },
+    }));
+    next = { ...next, pendingTarget: null, log: [...next.log, `${actor.name} deals ${amount} damage to ${targetDef.name}.`] };
     const damagedTarget = getPlayer(next, found.ownerPlayerId).zones.battlefield.find((c) => c.instanceId === targetInstanceId);
     const isLethal = !!damagedTarget && !hasKeywordEffective(targetDef, damagedTarget, 'indestructible') && damagedTarget.damageMarked >= effectiveToughness(targetDef, damagedTarget, next, found.ownerPlayerId);
     if (isLethal) {

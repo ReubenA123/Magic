@@ -3,6 +3,7 @@ import { CardDefinition, CardInstance, GameAction, GameState, ManaColor, PlayerS
 import { getCardDefinition } from '../data/cards';
 import { parseCostLabel, canPay } from '../engine/mana';
 import { hasKeyword } from '../engine/keywords';
+import { effectivePower } from '../engine/combat';
 import Card from './Card';
 import PhaseBar from './PhaseBar';
 import CardActionsPanel from './CardActionsPanel';
@@ -876,9 +877,17 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     if (effect.type === 'damageTargetAndControllerByEquipmentCount') {
       return def.type === 'creature';
     }
+    if (effect.type === 'pumpAnotherControlledCreature') {
+      return def.type === 'creature' && ownerId === pendingTargetForYou.controllerId && card.instanceId !== pendingTargetForYou.sourceInstanceId;
+    }
+    if (effect.type === 'damageTargetCreature') {
+      return def.type === 'creature';
+    }
     const isFlyingCreature = def.type === 'creature' && hasKeyword(def.text, 'flying');
     return (
       effect.targetFilter === 'anyPermanent' ||
+      (effect.targetFilter === 'nonlandPermanent' && def.type !== 'land') ||
+      (effect.targetFilter === 'creatureWithMinPower' && def.type === 'creature' && effectivePower(def, card, state, ownerId) >= (effect.minPower ?? 0)) ||
       (effect.targetFilter === 'artifactEnchantmentOrFlyingCreature' && (def.type === 'artifact' || def.type === 'enchantment' || isFlyingCreature)) ||
       (effect.targetFilter === 'artifactOrEnchantment' && (def.type === 'artifact' || def.type === 'enchantment'))
     );
@@ -2093,15 +2102,24 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                                   ? `Choose up to one other creature for ${pendingTargetSourceName}'s ability - or Skip.`
                                   : effect.type === 'damageTargetAndControllerByEquipmentCount'
                                   ? `Choose a creature for ${pendingTargetSourceName}'s ability to damage.`
+                                  : effect.type === 'pumpAnotherControlledCreature'
+                                  ? `Choose another creature you control for ${pendingTargetSourceName}'s ability.`
+                                  : effect.type === 'damageTargetCreature'
+                                  ? `Choose a creature for ${pendingTargetSourceName}'s ability to damage.`
                                   : effect.targetFilter === 'artifactOrEnchantment'
                                   ? `Choose an artifact or enchantment for ${pendingTargetSourceName}'s ability (either player's).`
                                   : effect.targetFilter === 'anyPermanent'
                                     ? `Choose any permanent for ${pendingTargetSourceName}'s ability (either player's).`
+                                    : effect.targetFilter === 'nonlandPermanent'
+                                    ? `Choose a nonland permanent for ${pendingTargetSourceName}'s ability (either player's).`
+                                    : effect.targetFilter === 'creatureWithMinPower'
+                                    ? `Choose a creature with power ${effect.minPower ?? 0} or greater for ${pendingTargetSourceName}'s ability.`
                                     : `Choose a target for ${pendingTargetSourceName}'s ability - click an artifact, enchantment, or creature with flying (either player's).`;
           return (
             <div className="pending-target-banner">
               <span>{text}</span>
               {((effect.type === 'selfFightTarget' && effect.optional) ||
+                (effect.type === 'destroyTarget' && effect.optional) ||
                 effect.type === 'putCounterOnUpToOneOwnCreature' ||
                 effect.type === 'bounceUpToOneOtherNonlandPermanent' ||
                 effect.type === 'putCounterOnUpToOneOtherCreatureEqualToOwnPower') && (

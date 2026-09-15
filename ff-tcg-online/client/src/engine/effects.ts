@@ -319,18 +319,24 @@ export function resolveCardEffects(
         logLines.push(`${player.name} surveils ${cards.length}.`);
       }
     } else if (effect.type === 'destroyTarget') {
-      const hasLegalTarget = [...next.players[0].zones.battlefield, ...next.players[1].zones.battlefield].some((c) => {
-        const d = getCardDefinition(c.defId);
-        const isFlyingCreature = d.type === 'creature' && hasKeyword(d.text, 'flying');
-        return (
-          effect.targetFilter === 'anyPermanent' ||
-          (effect.targetFilter === 'artifactEnchantmentOrFlyingCreature' && (d.type === 'artifact' || d.type === 'enchantment' || isFlyingCreature)) ||
-          (effect.targetFilter === 'artifactOrEnchantment' && (d.type === 'artifact' || d.type === 'enchantment'))
-        );
-      });
-      const sourceName = getCardDefinition(findCardAnywhere(next, sourceInstanceId)!.card.defId).name;
+      const hasLegalTarget = next.players.some((p) =>
+        p.zones.battlefield.some((c) => {
+          const d = getCardDefinition(c.defId);
+          const isFlyingCreature = d.type === 'creature' && hasKeyword(d.text, 'flying');
+          return (
+            effect.targetFilter === 'anyPermanent' ||
+            (effect.targetFilter === 'nonlandPermanent' && d.type !== 'land') ||
+            (effect.targetFilter === 'creatureWithMinPower' && d.type === 'creature' && effectivePower(d, c, next, p.id) >= (effect.minPower ?? 0)) ||
+            (effect.targetFilter === 'artifactEnchantmentOrFlyingCreature' && (d.type === 'artifact' || d.type === 'enchantment' || isFlyingCreature)) ||
+            (effect.targetFilter === 'artifactOrEnchantment' && (d.type === 'artifact' || d.type === 'enchantment'))
+          );
+        })
+      );
       if (!hasLegalTarget) {
-        logLines.push(`${sourceName}'s ability has no legal target.`);
+        if (!effect.optional) {
+          const sourceName = getCardDefinition(findCardAnywhere(next, sourceInstanceId)!.card.defId).name;
+          logLines.push(`${sourceName}'s ability has no legal target.`);
+        }
       } else {
         next = { ...next, pendingTarget: { sourceInstanceId, controllerId: playerId, effect } };
       }
@@ -595,12 +601,14 @@ export function resolveCardEffects(
             },
           }));
         }
+        if (effect.power || effect.toughness) next = applyTemporaryBuff(next, c.instanceId, effect.power ?? 0, effect.toughness ?? 0);
         if (effect.grantKeyword) next = grantTemporaryKeyword(next, c.instanceId, effect.grantKeyword);
       }
       if (others.length > 0) {
         const counterNote = effect.counterLabel && effect.counterAmount ? ` a ${effect.counterLabel} counter` : '';
-        const keywordNote = effect.grantKeyword ? `${counterNote ? ' and' : ''} ${effect.grantKeyword} until end of turn` : '';
-        logLines.push(`Other creatures you control each get${counterNote}${keywordNote}.`);
+        const buffNote = effect.power || effect.toughness ? `${counterNote ? ' and' : ''} +${effect.power ?? 0}/+${effect.toughness ?? 0} until end of turn` : '';
+        const keywordNote = effect.grantKeyword ? `${counterNote || buffNote ? ' and' : ''} ${effect.grantKeyword} until end of turn` : '';
+        logLines.push(`Other creatures you control each get${counterNote}${buffNote}${keywordNote}.`);
       }
     } else if (effect.type === 'shuffleGraveyardIntoLibrary') {
       const player = getPlayer(next, playerId);
@@ -760,6 +768,20 @@ export function resolveCardEffects(
         }));
         logLines.push(`${def.name} transforms into ${backDef.name}.`);
       }
+    } else if (effect.type === 'pumpAnotherControlledCreature') {
+      const player = getPlayer(next, playerId);
+      const hasLegalTarget = player.zones.battlefield.some((c) => getCardDefinition(c.defId).type === 'creature' && c.instanceId !== sourceInstanceId);
+      if (hasLegalTarget) {
+        next = { ...next, pendingTarget: { sourceInstanceId, controllerId: playerId, effect } };
+      }
+    } else if (effect.type === 'damageTargetCreature') {
+      const hasLegalTarget = next.players.some((p) => p.zones.battlefield.some((c) => getCardDefinition(c.defId).type === 'creature'));
+      const sourceName = getCardDefinition(findCardAnywhere(next, sourceInstanceId)!.card.defId).name;
+      if (!hasLegalTarget) {
+        logLines.push(`${sourceName}'s ability has no legal target.`);
+      } else {
+        next = { ...next, pendingTarget: { sourceInstanceId, controllerId: playerId, effect } };
+      }
     }
   }
 
@@ -845,6 +867,13 @@ export function triggerLandfall(state: GameState, playerId: string): { state: Ga
       const { power, toughness } = def.landfall.temporaryBuff;
       next = applyTemporaryBuff(next, card.instanceId, power, toughness);
       logLines.push(`Landfall: ${def.name} gets +${power}/+${toughness} until end of turn.`);
+      continue;
+    }
+    if (def.landfall.pumpAnotherControlledCreature) {
+      const { power, toughness, grantKeyword } = def.landfall.pumpAnotherControlledCreature;
+      const resolved = resolveCardEffects(next, playerId, [{ type: 'pumpAnotherControlledCreature', power, toughness, grantKeyword }], card.instanceId);
+      next = resolved.state;
+      logLines.push(`Landfall: ${def.name} triggers.`, ...resolved.logLines);
       continue;
     }
     if (def.landfall.createTokenId) {

@@ -55,7 +55,11 @@ export function hasSelfGrantedKeywordDuringOwnTurn(state: GameState, controllerI
 export function hasEquipGrantedKeyword(state: GameState, controllerId: string, instanceId: string, keyword: string): boolean {
   const controller = state.players.find((p) => p.id === controllerId);
   if (!controller) return false;
-  return controller.zones.battlefield.some((c) => c.attachedToInstanceId === instanceId && getCardDefinition(c.defId).equipGrantsKeyword === keyword);
+  return controller.zones.battlefield.some((c) => {
+    const granted = getCardDefinition(c.defId).equipGrantsKeyword;
+    if (!granted || c.attachedToInstanceId !== instanceId) return false;
+    return Array.isArray(granted) ? granted.includes(keyword) : granted === keyword;
+  });
 }
 
 /** Adds `amount` life to playerId AND tracks it in

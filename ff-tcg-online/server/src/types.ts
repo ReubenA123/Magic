@@ -129,7 +129,28 @@ export interface DestroyTargetEffect {
     | 'artifactOrEnchantment'
     /** "target permanent" - no type restriction at all (Bahamut, Warden of
      * Inferno's Gigaflare). */
-    | 'anyPermanent';
+    | 'anyPermanent'
+    /** "target nonland permanent" (Fate of the Sun-Cryst) - any permanent
+     * except a land, distinct from anyPermanent above. */
+    | 'nonlandPermanent'
+    /** "target creature with power N or greater" (Battle Menu's Magic mode) -
+     * checked against effectivePower at resolution time; requires `minPower`. */
+    | 'creatureWithMinPower';
+  /** Only used with targetFilter: 'creatureWithMinPower'. */
+  minPower?: number;
+  /** "destroy up to one target [filter]" (Summon: Bahamut) - decline-able via
+   * the null-target convention, same as every other "up to one" effect. */
+  optional?: boolean;
+}
+
+/** "[This] deals N damage to target creature" (Light of Judgment) - a plain
+ * targeted damage effect, distinct from every other damage-shaped effect
+ * here (which are all either combat damage or "to each opponent"/"to that
+ * creature's controller" combos). Respects indestructible; lethal damage
+ * goes through the normal death pipeline. */
+export interface DamageTargetCreatureEffect {
+  type: 'damageTargetCreature';
+  amount: number;
 }
 
 /**
@@ -318,6 +339,17 @@ export interface SearchLibraryForLandEffect {
  * same as DestroyTargetEffect. See CardInstance.temporaryKeywords. */
 export interface PumpTargetEffect {
   type: 'pumpTarget';
+  power: number;
+  toughness: number;
+  grantKeyword?: string;
+}
+
+/** "Another target creature you control gets +X/+Y (and gains
+ * [grantKeyword]) until end of turn" (Gladiolus Amicitia's Landfall) - the
+ * "you control, and not the source itself" counterpart to PumpTargetEffect
+ * (which has no controller restriction and doesn't exclude the source). */
+export interface PumpAnotherControlledCreatureEffect {
+  type: 'pumpAnotherControlledCreature';
   power: number;
   toughness: number;
   grantKeyword?: string;
@@ -539,6 +571,11 @@ export interface BuffOtherCreaturesYouControlEffect {
   counterLabel?: string;
   counterAmount?: number;
   grantKeyword?: string;
+  /** "Other creatures you control get +X/+Y until end of turn" (Summon:
+   * Choco/Mog's Stampede!) - a temporary buff alternative to counterLabel/
+   * counterAmount's permanent counter, applied via applyTemporaryBuff. */
+  power?: number;
+  toughness?: number;
 }
 
 /** "Return target nonland permanent to its owner's hand" (Eject) - unlike
@@ -788,7 +825,9 @@ export type CardEffect =
   | DiscardUpToThenDrawThatManyEffect
   | DamageTargetAndControllerByEquipmentCountEffect
   | TransformSelfIfControlledSubtypeCountAtLeastEffect
-  | DrawCardsEffect;
+  | DrawCardsEffect
+  | PumpAnotherControlledCreatureEffect
+  | DamageTargetCreatureEffect;
 
 /** One mode of a "Choose one or more —" modal spell (e.g. Clash of the
  * Eikons) - the caster picks any NONEMPTY subset of modes at cast time (see
@@ -848,6 +887,14 @@ export interface LandfallTrigger {
    * Racetrack). Resolved by re-running the same createToken CardEffect used
    * by onEnter/onCast - see engine/effects.ts: triggerLandfall. */
   createTokenId?: string;
+  /** Alternative payout - "another target creature you control gets +X/+Y
+   * (and gains [grantKeyword]) until end of turn" (Gladiolus Amicitia) -
+   * unlike PumpTargetEffect (no controller restriction, any creature),
+   * this is restricted to a creature the SAME controller owns, and excludes
+   * the landfall permanent itself ("another"). Resolved via
+   * PumpAnotherControlledCreatureEffect - see engine/effects.ts:
+   * triggerLandfall. */
+  pumpAnotherControlledCreature?: { power: number; toughness: number; grantKeyword?: string };
 }
 
 /**
@@ -1122,9 +1169,10 @@ export interface CardDefinition {
    * own). Checked at the same call site (engine/actions.ts: declareBlockers). */
   grantsSelfKeywordDuringOwnTurn?: string;
   /** "Equipped creature has KEYWORD" (Genji Glove's double strike) -
-   * unconditional, unlike equipGrantsKeywordDuringOwnTurn. See
-   * engine/combat.ts: hasEquipGrantedKeyword. */
-  equipGrantsKeyword?: string;
+   * unconditional, unlike equipGrantsKeywordDuringOwnTurn. A string[] grants
+   * more than one keyword at once (Samurai's Katana's trample AND haste).
+   * See engine/combat.ts: hasEquipGrantedKeyword. */
+  equipGrantsKeyword?: string | string[];
   /** "Whenever an artifact you control enters, ..." (Golbez, Crystal
    * Collector) - fires once per artifact entering the battlefield, for as
    * long as this permanent stays out. Checked at the main "a permanent
@@ -1294,7 +1342,9 @@ export interface GameState {
       | BounceTargetEffect
       | BounceUpToOneOtherNonlandPermanentEffect
       | PutCounterOnUpToOneOtherCreatureEqualToOwnPowerEffect
-      | DamageTargetAndControllerByEquipmentCountEffect;
+      | DamageTargetAndControllerByEquipmentCountEffect
+      | PumpAnotherControlledCreatureEffect
+      | DamageTargetCreatureEffect;
     /** Only used by ChooseCreaturesFightEffect: the first (controller's own)
      * creature already chosen, waiting on the second (opponent's) pick. */
     firstInstanceId?: string;
