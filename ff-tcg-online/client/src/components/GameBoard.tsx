@@ -430,7 +430,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   const mutualActive = state.mutualAdjustment.status === 'active';
   const pendingTargetForYou = state.pendingTarget && (state.pendingTarget.controllerId === yourPlayerId || soloControl) ? state.pendingTarget : null;
   const pendingTargetSourceName = pendingTargetForYou ? getCardDefinition(findCard(state, pendingTargetForYou.sourceInstanceId)?.card.defId ?? '')?.name ?? 'Ability' : '';
-  const pendingSacrificeForYou = state.pendingSacrifice && (state.pendingSacrifice.playerId === yourPlayerId || soloControl) ? state.pendingSacrifice : null;
+  const pendingSacrificeForYou = state.pendingSacrifice && (state.pendingSacrifice.remainingPlayerIds[0] === yourPlayerId || soloControl) ? state.pendingSacrifice : null;
 
   const [openPanelId, setOpenPanelId] = useState<string | null>(null);
   const [openZone, setOpenZone] = useState<{ playerId: string; zone: 'graveyard' | 'exile' } | null>(null);
@@ -864,6 +864,18 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
       if (ownerId === pendingTargetForYou.controllerId) return false;
       return def.type === 'creature';
     }
+    if (effect.type === 'bounceTarget') {
+      return def.type !== 'land';
+    }
+    if (effect.type === 'bounceUpToOneOtherNonlandPermanent') {
+      return def.type !== 'land' && card.instanceId !== pendingTargetForYou.sourceInstanceId;
+    }
+    if (effect.type === 'putCounterOnUpToOneOtherCreatureEqualToOwnPower') {
+      return def.type === 'creature' && card.instanceId !== pendingTargetForYou.sourceInstanceId;
+    }
+    if (effect.type === 'damageTargetAndControllerByEquipmentCount') {
+      return def.type === 'creature';
+    }
     const isFlyingCreature = def.type === 'creature' && hasKeyword(def.text, 'flying');
     return (
       effect.targetFilter === 'anyPermanent' ||
@@ -872,15 +884,21 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     );
   }
 
-  /** Is this creature a legal choice for a pendingSacrifice waiting on
-   * ownerId (e.g. Cornered by Black Mages) - unlike isLegalPendingTarget,
-   * ownerId must be the player who has to sacrifice, choosing among their
-   * OWN creatures, not the caster picking something of the opponent's. */
+  /** Is this permanent a legal choice for a pendingSacrifice waiting on
+   * ownerId (e.g. Cornered by Black Mages, Gaius van Baelsar) - unlike
+   * isLegalPendingTarget, ownerId must be the player who has to sacrifice,
+   * choosing among their OWN permanents, not the caster picking something
+   * of the opponent's. */
   function isLegalSacrifice(card: CardInstance, ownerId: string): boolean {
     if (!pendingSacrificeForYou) return false;
-    if (pendingSacrificeForYou.playerId !== ownerId) return false;
+    if (pendingSacrificeForYou.remainingPlayerIds[0] !== ownerId) return false;
     if (ownerId !== yourPlayerId && !soloControl) return false;
-    return getCardDefinition(card.defId).type === 'creature';
+    const def = getCardDefinition(card.defId);
+    const filter = pendingSacrificeForYou.filter;
+    if (filter === 'creature') return def.type === 'creature';
+    if (filter === 'creatureToken') return def.type === 'creature' && !!card.isToken;
+    if (filter === 'nontokenCreature') return def.type === 'creature' && !card.isToken;
+    return def.type === 'enchantment';
   }
 
   /** Is this permanent a legal pick for an ability's sacrificeAnother cost
@@ -2067,7 +2085,15 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                               ? `Choose a creature you control for ${pendingTargetSourceName} to attach to.`
                               : effect.type === 'destroyOpponentCreature'
                                 ? `Choose an opponent's creature for ${pendingTargetSourceName}'s ability to destroy.`
-                                : effect.targetFilter === 'artifactOrEnchantment'
+                                : effect.type === 'bounceTarget'
+                                  ? `Choose a nonland permanent for ${pendingTargetSourceName}'s ability to return to its owner's hand (either player's).`
+                                  : effect.type === 'bounceUpToOneOtherNonlandPermanent'
+                                  ? `Choose up to one other nonland permanent for ${pendingTargetSourceName}'s ability to return to its owner's hand - or Skip.`
+                                  : effect.type === 'putCounterOnUpToOneOtherCreatureEqualToOwnPower'
+                                  ? `Choose up to one other creature for ${pendingTargetSourceName}'s ability - or Skip.`
+                                  : effect.type === 'damageTargetAndControllerByEquipmentCount'
+                                  ? `Choose a creature for ${pendingTargetSourceName}'s ability to damage.`
+                                  : effect.targetFilter === 'artifactOrEnchantment'
                                   ? `Choose an artifact or enchantment for ${pendingTargetSourceName}'s ability (either player's).`
                                   : effect.targetFilter === 'anyPermanent'
                                     ? `Choose any permanent for ${pendingTargetSourceName}'s ability (either player's).`
@@ -2075,7 +2101,10 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           return (
             <div className="pending-target-banner">
               <span>{text}</span>
-              {((effect.type === 'selfFightTarget' && effect.optional) || effect.type === 'putCounterOnUpToOneOwnCreature') && (
+              {((effect.type === 'selfFightTarget' && effect.optional) ||
+                effect.type === 'putCounterOnUpToOneOwnCreature' ||
+                effect.type === 'bounceUpToOneOtherNonlandPermanent' ||
+                effect.type === 'putCounterOnUpToOneOtherCreatureEqualToOwnPower') && (
                 <button className="opponent-view-exit-button" onClick={() => onAction({ type: 'CHOOSE_TARGET', targetInstanceId: null }, pendingTargetForYou.controllerId)}>
                   Skip
                 </button>
@@ -2084,11 +2113,16 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           );
         })()}
 
-      {pendingSacrificeForYou && (
-        <div className="pending-target-banner">
-          <span>Choose a creature to sacrifice.</span>
-        </div>
-      )}
+      {pendingSacrificeForYou &&
+        (() => {
+          const filter = pendingSacrificeForYou.filter;
+          const label = filter === 'creature' ? 'creature' : filter === 'creatureToken' ? 'creature token' : filter === 'nontokenCreature' ? 'nontoken creature' : 'enchantment';
+          return (
+            <div className="pending-target-banner">
+              <span>Choose a {label} to sacrifice.</span>
+            </div>
+          );
+        })()}
 
       {pendingSacrificeCost && (
         <div className="pending-target-banner">
@@ -2140,6 +2174,62 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
             </button>
           </div>
         )}
+
+      {state.pendingOptionalTransform &&
+        (state.pendingOptionalTransform.controllerId === yourPlayerId || soloControl) &&
+        (() => {
+          const pending = state.pendingOptionalTransform;
+          const sourceFound = findCard(state, pending.sourceInstanceId);
+          const sourceName = sourceFound ? getCardDefinition(sourceFound.card.defId).name : 'This permanent';
+          return (
+            <div className="pending-target-banner">
+              <span>You may exile {sourceName}, then return it to the battlefield transformed.</span>
+              <button className="opponent-view-exit-button" onClick={() => onAction({ type: 'RESOLVE_OPTIONAL_TRANSFORM', accept: true }, pending.controllerId)}>
+                Transform
+              </button>
+              <button className="opponent-view-exit-button" onClick={() => onAction({ type: 'RESOLVE_OPTIONAL_TRANSFORM', accept: false }, pending.controllerId)}>
+                Skip
+              </button>
+            </div>
+          );
+        })()}
+
+      {state.pendingGraveyardExile &&
+        (() => {
+          const pending = state.pendingGraveyardExile;
+          const sourceFound = findCard(state, pending.sourceInstanceId);
+          const sourceName = sourceFound ? getCardDefinition(sourceFound.card.defId).name : 'This ability';
+          const eligible = state.players.flatMap((p) => p.zones.graveyard);
+          return (
+            <ReturnFromGraveyardModal
+              sourceName={sourceName}
+              title="Exile a card"
+              description="Choose a card in either graveyard to exile."
+              cards={eligible.map((c) => ({ definition: getCardDefinition(c.defId), instance: c }))}
+              onChoose={(instanceId) => onAction({ type: 'RESOLVE_GRAVEYARD_EXILE', instanceId }, pending.controllerId)}
+            />
+          );
+        })()}
+
+      {state.pendingDiscardUpToThenDraw &&
+        (state.pendingDiscardUpToThenDraw.controllerId === yourPlayerId || soloControl) &&
+        (() => {
+          const pending = state.pendingDiscardUpToThenDraw;
+          const sourceFound = findCard(state, pending.sourceInstanceId);
+          const sourceName = sourceFound ? getCardDefinition(sourceFound.card.defId).name : 'This ability';
+          const controller = state.players.find((p) => p.id === pending.controllerId)!;
+          const remaining = pending.maxCount - pending.discardedSoFar;
+          return (
+            <ReturnFromGraveyardModal
+              sourceName={sourceName}
+              title={`Discard up to ${remaining} more`}
+              description="Choose a card from your hand to discard, then stop whenever you like."
+              cards={controller.zones.hand.map((c) => ({ definition: getCardDefinition(c.defId), instance: c }))}
+              onChoose={(instanceId) => onAction({ type: 'DISCARD_UP_TO_THEN_DRAW', instanceId }, pending.controllerId)}
+              onCancel={() => onAction({ type: 'DISCARD_UP_TO_THEN_DRAW', instanceId: null }, pending.controllerId)}
+            />
+          );
+        })()}
 
       <div className="docked-hand-tray">{renderHandRow(you, false, true)}</div>
 
@@ -2542,6 +2632,43 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
               sourceName={sourceName}
               cards={eligible.map((c) => ({ definition: getCardDefinition(c.defId), instance: c }))}
               onChoose={(instanceId) => onAction({ type: 'RETURN_FROM_GRAVEYARD', instanceId }, pending.controllerId)}
+            />
+          );
+        })()}
+
+      {state.pendingReanimate &&
+        (() => {
+          const pending = state.pendingReanimate;
+          const sourceFound = findCard(state, pending.sourceInstanceId);
+          const sourceName = sourceFound ? getCardDefinition(sourceFound.card.defId).name : 'This ability';
+          const controller = state.players.find((p) => p.id === pending.controllerId)!;
+          const eligible = controller.zones.graveyard.filter((c) => getCardDefinition(c.defId).type === 'creature');
+          return (
+            <ReturnFromGraveyardModal
+              sourceName={sourceName}
+              title="Return a creature"
+              description="Choose a creature card from your graveyard to return to the battlefield."
+              cards={eligible.map((c) => ({ definition: getCardDefinition(c.defId), instance: c }))}
+              onChoose={(instanceId) => onAction({ type: 'RESOLVE_REANIMATE', instanceId }, pending.controllerId)}
+            />
+          );
+        })()}
+
+      {state.pendingReturnCreaturesFromGraveyard &&
+        (() => {
+          const pending = state.pendingReturnCreaturesFromGraveyard;
+          const sourceFound = findCard(state, pending.sourceInstanceId);
+          const sourceName = sourceFound ? getCardDefinition(sourceFound.card.defId).name : 'This ability';
+          const controller = state.players.find((p) => p.id === pending.controllerId)!;
+          const eligible = controller.zones.graveyard.filter((c) => getCardDefinition(c.defId).type === 'creature');
+          return (
+            <ReturnFromGraveyardModal
+              sourceName={sourceName}
+              title={`Return a creature (${pending.remaining} left)`}
+              description="Choose a creature card from your graveyard to return to your hand."
+              cards={eligible.map((c) => ({ definition: getCardDefinition(c.defId), instance: c }))}
+              onChoose={(instanceId) => onAction({ type: 'RESOLVE_RETURN_CREATURE_FROM_GRAVEYARD', instanceId }, pending.controllerId)}
+              onCancel={() => onAction({ type: 'RESOLVE_RETURN_CREATURE_FROM_GRAVEYARD', instanceId: null }, pending.controllerId)}
             />
           );
         })()}

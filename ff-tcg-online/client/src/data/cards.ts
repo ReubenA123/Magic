@@ -890,6 +890,10 @@ export const CARD_POOL: CardDefinition[] = [
       "\nEquipped creature gets +1/+0 and is a Knight in addition to its other types." +
       "\nDuring your turn, equipped creature has flying.\nGae Bolg — Equip 4",
     onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
+    attachesTo: 'creature',
+    equipCost: '4',
+    equipBuff: { power: 1, toughness: 0 },
+    equipGrantsKeywordDuringOwnTurn: 'flying',
     imagePath: '/assets/cards/dragoon-s-lance.webp'
   },
   {
@@ -910,6 +914,8 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: '1U',
     text: "Surveil 1, then draw a card. (To surveil 1, look at the top card of your library. You may put it into your graveyard.) " +
       "\nFlashback 3U (You may cast this card from your graveyard for its flashback cost. Then exile it.)",
+    onCast: [{ type: 'surveil', count: 1, thenDrawCount: 1 }],
+    flashback: { cost: '3U' },
     imagePath: '/assets/cards/dreams-of-laguna.webp'
   },
   {
@@ -920,6 +926,7 @@ export const CARD_POOL: CardDefinition[] = [
     power: 2,
     toughness: 1,
     text: "When this creature dies, create a 1/1 colorless Hero creature token.",
+    onDeath: [{ type: 'createToken', tokenId: 'token-hero' }],
     imagePath: '/assets/cards/dwarven-castle-guard.webp'
   },
   {
@@ -941,6 +948,7 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 5,
     text: "When Edgar enters, draw a card for each artifact you control. " +
       "Two-Headed Coin — The first time you flip one or more coins each turn, those coins come up heads and you win those flips.",
+    onEnter: [{ type: 'drawCardsEqualToControlledTypeCount', cardType: 'artifact' }],
     imagePath: '/assets/cards/edgar-king-of-figaro.webp'
   },
   {
@@ -949,6 +957,7 @@ export const CARD_POOL: CardDefinition[] = [
     type: 'instant',
     costLabel: '3U',
     text: "This spell can\u2019t be countered.\n Return target nonland permanent to its owner\u2019s hand.\n Draw a card.",
+    onCast: [{ type: 'bounceTarget', targetFilter: 'nonland' }, { type: 'loot', drawCount: 1, discardCount: 0 }],
     imagePath: '/assets/cards/eject.webp'
   },
   {
@@ -960,6 +969,15 @@ export const CARD_POOL: CardDefinition[] = [
       "You gain life equal to the number of cards shuffled into your library this way.",
     imagePath: '/assets/cards/elixir.webp',
     entersTapped: true,
+    abilities: [
+      {
+        id: 'elixir-shuffle',
+        label: 'Shuffle',
+        cost: { manaLabel: '5', tap: true, exileSelf: true },
+        effects: [{ type: 'shuffleGraveyardIntoLibrary', filter: 'nonland' }],
+        effectText: 'Shuffle all nonland cards from your graveyard into your library. You gain life equal to the number of cards shuffled in this way.',
+      },
+    ],
   },
   {
     id: 'emet-selch-unsundered',
@@ -1005,6 +1023,8 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: '1G',
     text: "Surveil 2. You gain 2 life. If this spell was cast from a graveyard, exile it, then put it onto the battlefield transformed under its owner\u2019s control " +
       "with a finality counter on it. (If a creature with a finality counter on it would die, exile it instead.)\nFlashback 3G",
+    onCast: [{ type: 'surveil', count: 2 }, { type: 'gainLife', amount: 2 }],
+    flashback: { cost: '3G' },
     imagePath: '/assets/cards/esper-origins.webp'
   },
   {
@@ -1021,6 +1041,7 @@ export const CARD_POOL: CardDefinition[] = [
     type: "sorcery",
     costLabel: "4B",
     text: "Return target creature card from your graveyard to the battlefield with two additional +1/+1 counters on it.",
+    onCast: [{ type: 'reanimateTargetFromGraveyard', extraCounterLabel: '+1/+1', extraCounterAmount: 2 }],
     imagePath: "/assets/cards/evil-reawakened.webp"
   },
   {
@@ -1030,6 +1051,10 @@ export const CARD_POOL: CardDefinition[] = [
     subtype: 'equipment',
     costLabel: '1',
     text: "Whenever you gain life, put a charge counter on Excalibur II.\nEquipped creature gets +1/+1 for each charge counter on Excalibur II.\nEquip 3",
+    onGainLifeTrigger: { counterLabel: 'charge', counterAmount: 1 },
+    attachesTo: 'creature',
+    equipCost: '3',
+    equipBuffPerCounter: { counterLabel: 'charge', power: 1, toughness: 1 },
     imagePath: "/assets/cards/excalibur-ii.webp"
   },
   {
@@ -1041,6 +1066,8 @@ export const CARD_POOL: CardDefinition[] = [
     power: 3,
     toughness: 3,
     text: "When Exdeath enters, you gain 3 life.\nAt the beginning of your end step, if there are six or more permanent cards in your graveyard, transform Exdeath.",
+    onEnter: [{ type: 'gainLife', amount: 3 }],
+    onOwnEndStep: [{ type: 'transformSelfIfGraveyardSizeAtLeast', minGraveyardSize: 6 }],
     imagePath: "/assets/cards/exdeath-void-warlock.webp",
     transformsInto: "neo-exdeath-dimension-s-end"
   },
@@ -1052,6 +1079,8 @@ export const CARD_POOL: CardDefinition[] = [
     power: 0,
     toughness: 3,
     text: "When Exdeath enters, you gain 3 life.\nAt the beginning of your end step, if there are six or more permanent cards in your graveyard, transform Exdeath.",
+    onEnter: [{ type: 'gainLife', amount: 3 }],
+    onOwnEndStep: [{ type: 'transformSelfIfGraveyardSizeAtLeast', minGraveyardSize: 6 }],
     imagePath: '/assets/cards/neo-exdeath-dimension-s-end.webp'
   },
   {
@@ -1079,6 +1108,7 @@ export const CARD_POOL: CardDefinition[] = [
     type: 'instant',
     costLabel: '2B',
     text: "Return up to two target creature cards from your graveyard to your hand.",
+    onCast: [{ type: 'returnCreaturesFromGraveyardToHand', count: 2 }],
     imagePath: '/assets/cards/fight-on.webp'
   },
   {
@@ -1118,6 +1148,7 @@ export const CARD_POOL: CardDefinition[] = [
     subtype: 'Legendary Creature \u2014 Rat Knight',
     costLabel: "R",
     text: "Jump — During your turn, Freya Crescent has flying.\nT: Add R. Spend this mana only to cast an Equipment spell or activate an equip ability",
+    grantsSelfKeywordDuringOwnTurn: 'flying',
     imagePath: '/assets/cards/freya-crescent.webp'
   }, {
     id: 'from-father-to-son',
@@ -1133,6 +1164,7 @@ export const CARD_POOL: CardDefinition[] = [
     type: 'creature',
     costLabel: '2W',
     text: "Flying, vigilance \nAs long as you control two or more artifacts, this creature gets +2/+0.",
+    controlledTypeCountBuff: { type: 'artifact', minCount: 2, power: 2, toughness: 0 },
     imagePath: '/assets/cards/gaelicat.webp'
   }, {
     id: "gaius-van-baelsar",
@@ -1144,6 +1176,16 @@ export const CARD_POOL: CardDefinition[] = [
       "\n• Each player sacrifices a creature token of their choice. " +
       "\n• Each player sacrifices a nontoken creature of their choice. " +
       "\n• Each player sacrifices an enchantment of their choice.",
+    onEnter: [
+      {
+        type: 'chooseOneMode',
+        modes: [
+          { label: 'Each player sacrifices a creature token of their choice.', effects: [{ type: 'eachPlayerSacrifices', filter: 'creatureToken' }] },
+          { label: 'Each player sacrifices a nontoken creature of their choice.', effects: [{ type: 'eachPlayerSacrifices', filter: 'nontokenCreature' }] },
+          { label: 'Each player sacrifices an enchantment of their choice.', effects: [{ type: 'eachPlayerSacrifices', filter: 'enchantment' }] },
+        ],
+      },
+    ],
     imagePath: '/assets/cards/gaius-van-baelsar.webp'
   }, {
     id: "galuf-s-final-act",
@@ -1162,6 +1204,17 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 2,
     text: "Whenever you cast a noncreature spell, surveil 1. (Look at the top card of your library. You may put it into your graveyard.)" +
       "\n3BBRR: Return this card from your graveyard to the battlefield transformed. Activate only as a sorcery.",
+    noncreatureCastTrigger: { surveilCount: 1 },
+    abilities: [
+      {
+        id: 'garland-return-transformed',
+        label: 'Return Transformed',
+        cost: { manaLabel: '3BBRR' },
+        returnFromGraveyardTransformed: true,
+        onlyDuringOwnMainPhase: true,
+        effectText: 'Return this card from your graveyard to the battlefield transformed.',
+      },
+    ],
     imagePath: '/assets/cards/garland-knight-of-cornelia.webp',
     transformsInto: 'chaos-the-endless'
   },
@@ -1173,6 +1226,7 @@ export const CARD_POOL: CardDefinition[] = [
     power: 5,
     toughness: 5,
     text: "Flying \nWhen Chaos dies, put it on the bottom of its owner\u2019s library.",
+    onDeath: [{ type: 'putSelfOnBottomOfLibrary' }],
     imagePath: '/assets/cards/chaos-the-endless.webp'
   },
   {
@@ -1195,6 +1249,9 @@ export const CARD_POOL: CardDefinition[] = [
     text: "Equipped creature has double strike. \n" +
       "Whenever equipped creature attacks, if it\u2019s the first combat phase of the turn, untap it. After this phase, there is an additional combat phase. " +
       "Equip 3",
+    attachesTo: 'creature',
+    equipCost: '3',
+    equipGrantsKeyword: 'double strike',
     imagePath: '/assets/cards/genji-glove.webp'
   }, {
     id: 'gigantoad',
@@ -1275,6 +1332,7 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'Whenever an artifact you control enters, surveil 1. \n' +
       "At the beginning of your end step, if you control four or more artifacts, return target creature card from your graveyard to your hand. " +
       'Then if you control eight or more artifacts, each opponent loses life equal to that card\u2019s power.',
+    onAnyArtifactEnterTrigger: [{ type: 'surveil', count: 1 }],
     imagePath: '/assets/cards/golbez-crystal-collector.webp'
   },
   {
@@ -1307,6 +1365,7 @@ export const CARD_POOL: CardDefinition[] = [
     power: 3,
     toughness: 5,
     text: 'Reach \n The Allagan Eye — Whenever one or more other creatures and/or artifacts you control die, draw a card. This ability triggers only once each turn.',
+    onAnyDeathDraw: true,
     imagePath: '/assets/cards/g-raha-tia.webp'
   },
   {
@@ -1317,6 +1376,15 @@ export const CARD_POOL: CardDefinition[] = [
     power: 1,
     toughness: 1,
     text: 'Deathtouch \n8: Until end of turn, this creature gets +1/+1 for each permanent card in your graveyard.',
+    abilities: [
+      {
+        id: 'gran-pulse-ochu-pump',
+        label: 'Pump',
+        cost: { manaLabel: '8' },
+        effects: [{ type: 'pumpSelfByGraveyardCount', powerPerUnit: 1, toughnessPerUnit: 1 }],
+        effectText: 'Until end of turn, this creature gets +1/+1 for each permanent card in your graveyard.',
+      },
+    ],
     imagePath: '/assets/cards/gran-pulse-ochu.webp'
   },
   {
@@ -1337,6 +1405,7 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'Create a 2/2 green Bird creature token with “Whenever a land you control enters, this token gets +1/+0 until end of turn.”' +
       "\nFlashback {6}",
     onCast: [{ type: 'createToken', tokenId: 'token-bird' }],
+    flashback: { cost: '6' },
     imagePath: '/assets/cards/gysahl-greens.webp'
   }, {
     id: 'haste-magic',
@@ -1344,6 +1413,7 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: '1R',
     type: 'instant',
     text: 'Target creature gets +3/+1 and gains haste until end of turn. Exile the top card of your library. You may play it until your next end step.',
+    onCast: [{ type: 'pumpTarget', power: 3, toughness: 1, grantKeyword: 'haste' }],
     imagePath: '/assets/cards/haste-magic.webp'
   },
   {
@@ -1354,6 +1424,7 @@ export const CARD_POOL: CardDefinition[] = [
     power: 1,
     toughness: 1,
     text: 'When this creature enters, each opponent discards a card.',
+    onEnter: [{ type: 'eachOpponentDiscards', count: 1 }],
     imagePath: '/assets/cards/hecteyes.webp'
   }, {
     id: 'hill-gigas',
@@ -1377,6 +1448,7 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 2,
     text: 'Lifelink \n' +
       'At the beginning of your end step, each opponent mills X cards, where X is the amount of life you gained this turn.',
+    onOwnEndStep: [{ type: 'millOpponentByLifeGainedThisTurn' }],
     imagePath: '/assets/cards/hope-estheim.webp'
   },
   {
@@ -1414,7 +1486,16 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'When Ignis Scientia enters, look at the top six cards of your library. You may put a land card from among them onto the battlefield tapped. ' +
       'Put \u2019the rest on the bottom of your library in a random order. \n' +
       'I\u2019ve Come Up with a New Recipe! — 1GU, Tap: Exile target card from a graveyard. If a creature card was exiled this way, create a Food token.',
-    imagePath: '/assets/cards/ignis-scientia.webp'
+    imagePath: '/assets/cards/ignis-scientia.webp',
+    abilities: [
+      {
+        id: 'ignis-recipe',
+        label: "I've Come Up with a New Recipe!",
+        cost: { manaLabel: '1GU', tap: true },
+        effects: [{ type: 'exileTargetGraveyardCard', createFoodTokenIfCreature: true }],
+        effectText: 'Exile target card from a graveyard. If a creature card was exiled this way, create a Food token.',
+      },
+    ],
   },
   {
     id: 'il-mheg-pixie',
@@ -1424,7 +1505,8 @@ export const CARD_POOL: CardDefinition[] = [
     power: 2,
     toughness: 1,
     text: 'Flying \n Whenever this creature attacks, surveil 1.',
-    imagePath: '/assets/cards/il-mheg-pixie.webp'
+    imagePath: '/assets/cards/il-mheg-pixie.webp',
+    onAttack: [{ type: 'surveil', count: 1 }],
   },
   {
     id: 'insomnia-crown-city',
@@ -1440,9 +1522,23 @@ export const CARD_POOL: CardDefinition[] = [
     id: 'instant-ramen',
     name: 'Instant Ramen',
     costLabel: '2',
-    type: 'instant',
+    // The printed text describes an artifact ("this artifact enters" /
+    // "Sacrifice this artifact") - 'instant' would resolve straight to the
+    // graveyard and make all of it unreachable, so this is corrected to match
+    // what the card actually says.
+    type: 'artifact',
     text: 'Flash \n When this artifact enters, draw a card. \n2, Tap, Sacrifice this artifact: You gain 3 life.',
-    imagePath: '/assets/cards/instant-ramen.webp'
+    imagePath: '/assets/cards/instant-ramen.webp',
+    onEnter: [{ type: 'drawCards', amount: 1 }],
+    abilities: [
+      {
+        id: 'instant-ramen-eat',
+        label: 'Eat',
+        cost: { manaLabel: '2', tap: true, sacrificeSelf: true },
+        effects: [{ type: 'gainLife', amount: 3 }],
+        effectText: 'You gain 3 life.',
+      },
+    ],
   },
   {
     id: 'iron-giant',
@@ -1496,7 +1592,8 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 3,
     text: 'Menace \n Whenever Jecht deals combat damage to a player, you may exile it, then return it to the battlefield transformed under its owner\u2019s control.',
     imagePath: '/assets/cards/jecht-reluctant-guardian.webp',
-    transformsInto: 'braska-s-final-aeon'
+    transformsInto: 'braska-s-final-aeon',
+    onCombatDamageToPlayerMayTransform: true,
   }, {
     id: 'braska-s-final-aeon',
     name: "Braska's Final Aeon",
@@ -1507,7 +1604,13 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'I, II — Jecht Beam — Each opponent discards a card and you draw a card. \n' +
       'III — Ultimate Jecht Shot — Each opponent sacrifices two creatures of their choice. \n' +
       'Menace',
-    imagePath: '/assets/cards/braska-s-final-aeon.webp'
+    imagePath: '/assets/cards/braska-s-final-aeon.webp',
+    saga: {
+      chapters: [
+        { numbers: [1, 2], effects: [{ type: 'eachOpponentDiscards', count: 1 }, { type: 'drawCards', amount: 1 }] },
+        { numbers: [3], effects: [{ type: 'sacrificeCreature', target: 'opponent', count: 2 }] },
+      ],
+    },
   },
   {
     id: 'jenova-ancient-calamity',
@@ -1519,7 +1622,13 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 5,
     text: "At the beginning of combat on your turn, put a number of +1/+1 counters equal to Jenova\u2019s power on up to one other target creature. " +
       "That creature becomes a Mutant in addition to its other types. Whenever a Mutant you control dies during your turn, you draw cards equal to its power.",
-    imagePath: '/assets/cards/jenova-ancient-calamity.webp'
+    imagePath: '/assets/cards/jenova-ancient-calamity.webp',
+    // The "becomes a Mutant in addition to its other types" clause and its
+    // dependent "Whenever a Mutant you control dies..." death-draw trigger
+    // are deferred - there's no mechanism anywhere in this engine for
+    // granting a subtype to an instance (CardInstance has no field for it),
+    // so a downstream trigger keyed on that granted subtype can't be wired.
+    onOwnCombatBegin: [{ type: 'putCounterOnUpToOneOtherCreatureEqualToOwnPower', counterLabel: '+1/+1' }],
   }, {
     id: 'jidoor-aristocratic-capital',
     name: 'Jidoor, Aristocratic Capital',
@@ -1542,7 +1651,18 @@ export const CARD_POOL: CardDefinition[] = [
     text: "When Jill enters, return up to one other target nonland permanent to its owner\u2019s hand.\n" +
       "3UU, Tap: Exile Jill, then return it to the battlefield transformed under its owner\u2019s control. Activate only as a sorcery.",
     imagePath: '/assets/cards/jill-shiva-s-dominant.webp',
-    transformsInto: 'shiva-warden-of-ice'
+    transformsInto: 'shiva-warden-of-ice',
+    onEnter: [{ type: 'bounceUpToOneOtherNonlandPermanent' }],
+    abilities: [
+      {
+        id: 'jill-transform',
+        label: 'Transform',
+        cost: { manaLabel: '3UU', tap: true },
+        exileAndReturnTransformed: true,
+        onlyDuringOwnMainPhase: true,
+        effectText: "Exile Jill, then return it to the battlefield transformed under its owner's control.",
+      },
+    ],
   },
   {
     id: 'shiva-warden-of-ice',
@@ -1553,7 +1673,14 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 5,
     text: "I, II — Mesmerize — Target creature can\u2019t be blocked this turn. \n" +
       "III — Cold Snap — Tap all lands your opponents control. Exile Shiva, then return it to the battlefield (front face up).",
-    imagePath: '/assets/cards/shiva-warden-of-ice.webp'
+    imagePath: '/assets/cards/shiva-warden-of-ice.webp',
+    transformsInto: 'jill-shiva-s-dominant',
+    saga: {
+      chapters: [
+        { numbers: [1, 2], effects: [{ type: 'pumpTarget', power: 0, toughness: 0, grantKeyword: 'unblockable' }] },
+        { numbers: [3], effects: [{ type: 'tapAllOpponentLands' }, { type: 'exileAndReturnTransformedSelf' }] },
+      ],
+    },
   },
   {
     id: 'joshua-phoenix-s-dominant',
@@ -1566,7 +1693,18 @@ export const CARD_POOL: CardDefinition[] = [
     text: "When Joshua enters, discard up to two cards, then draw that many cards. \n" +
       "3RW, Tap: Exile Joshua, then return it to the battlefield transformed under its owner\u2019s control. Activate only as a sorcery.",
     imagePath: '/assets/cards/joshua-phoenix-s-dominant.webp',
-    transformsInto: 'phoenix-warden-of-fire'
+    transformsInto: 'phoenix-warden-of-fire',
+    onEnter: [{ type: 'discardUpToThenDrawThatMany', maxCount: 2 }],
+    abilities: [
+      {
+        id: 'joshua-transform',
+        label: 'Transform',
+        cost: { manaLabel: '3RW', tap: true },
+        exileAndReturnTransformed: true,
+        onlyDuringOwnMainPhase: true,
+        effectText: "Exile Joshua, then return it to the battlefield transformed under its owner's control.",
+      },
+    ],
   },
   {
     id: 'phoenix-warden-of-fire',
@@ -1578,7 +1716,19 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'I, II — Rising Flames — Phoenix deals 2 damage to each opponent. \n' +
       "III — Flames of Rebirth — Return any number of target creature cards with total mana value 6 or less from your graveyard to the battlefield. \n" +
       "Exile Phoenix, then return it to the battlefield (front face up). \nFlying, lifelink",
-    imagePath: '/assets/cards/phoenix-warden-of-fire.webp'
+    imagePath: '/assets/cards/phoenix-warden-of-fire.webp',
+    transformsInto: 'joshua-phoenix-s-dominant',
+    // Chapter III's reanimation clause ("return any number of target creature
+    // cards with total mana value 6 or less") is deferred - there's no
+    // mechanism here for a budget-constrained multi-card choice (as opposed
+    // to ReanimateTargetFromGraveyardEffect's single fixed pick) - but the
+    // self-flip back to the front face still fires on schedule.
+    saga: {
+      chapters: [
+        { numbers: [1, 2], effects: [{ type: 'dealDamageToEachOpponent', amount: 2 }] },
+        { numbers: [3], effects: [{ type: 'exileAndReturnTransformedSelf' }] },
+      ],
+    },
   },
   {
     id: 'judge-magister-gabranth',
@@ -1590,7 +1740,8 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 2,
     text: "Menace \n(This creature can\u2019t be blocked except by two or more creatures.) \n" +
       "Whenever another creature or artifact you control dies, put a +1/+1 counter on Judge Magister Gabranth.",
-    imagePath: '/assets/cards/judge-magister-gabranth.webp'
+    imagePath: '/assets/cards/judge-magister-gabranth.webp',
+    onAnyDeathCounterSelf: { counterLabel: '+1/+1', counterAmount: 1 },
   },
   {
     id: 'judgment-bolt',
@@ -1598,7 +1749,8 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: '3R',
     type: 'instant',
     text: "Judgment Bolt deals 5 damage to target creature and X damage to that creature\u2019s controller, where X is the number of Equipment you control.",
-    imagePath: '/assets/cards/judgment-bolt.webp'
+    imagePath: '/assets/cards/judgment-bolt.webp',
+    onCast: [{ type: 'damageTargetAndControllerByEquipmentCount', damageToCreature: 5 }],
   }, {
     id: 'jumbo-cactuar',
     name: 'Jumbo Cactuar',
@@ -1607,7 +1759,8 @@ export const CARD_POOL: CardDefinition[] = [
     power: 1,
     toughness: 7,
     text: "10,000 Needles — Whenever this creature attacks, it gets +9999/+0 until end of turn.",
-    imagePath: '/assets/cards/jumbo-cactuar.webp'
+    imagePath: '/assets/cards/jumbo-cactuar.webp',
+    onAttack: [{ type: 'pumpSelf', power: 9999, toughness: 0 }],
   },
   {
     id: 'kain-traitorous-dragoon',
@@ -1620,7 +1773,11 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'Jump — During your turn, Kain has flying. \n' +
       "Whenever Kain deals combat damage to a player, that player gains control of Kain. If they do, you draw that many cards, " +
       "create that many tapped Treasure tokens, then lose that much life.",
-    imagePath: '/assets/cards/kain-traitorous-dragoon.webp'
+    imagePath: '/assets/cards/kain-traitorous-dragoon.webp',
+    // The control-change clause ("that player gains control of Kain...") is
+    // deferred - CardInstance has no separate controller concept anywhere in
+    // this engine (only ownerId), so there's nothing for it to change.
+    grantsSelfKeywordDuringOwnTurn: 'flying',
   },
   {
     id: 'kefka-court-mage',
@@ -1633,7 +1790,21 @@ export const CARD_POOL: CardDefinition[] = [
     text: "Whenever Kefka enters or attacks, each player discards a card. Then you draw a card for each card type among cards discarded this way.\n" +
       "8: Each opponent sacrifices a permanent of their choice. Transform Kefka. Activate only as a sorcery.",
     imagePath: '/assets/cards/kefka-court-mage.webp',
-    transformsInto: 'kefka-ruler-of-ruin'
+    transformsInto: 'kefka-ruler-of-ruin',
+    // The "enters or attacks" discard-then-draw-by-distinct-type-count clause
+    // is deferred - counting how many distinct card TYPES were discarded this
+    // way (as opposed to a fixed number of cards) has no existing mechanism.
+    abilities: [
+      {
+        id: 'kefka-transform',
+        label: 'Transform',
+        cost: { manaLabel: '8' },
+        onlyDuringOwnMainPhase: true,
+        effects: [{ type: 'sacrificeCreature', target: 'opponent', filter: 'anyPermanent' }],
+        transformSelf: true,
+        effectText: "Each opponent sacrifices a permanent of their choice. Transform Kefka.",
+      },
+    ],
   },
   {
     id: 'kefka-ruler-of-ruin',
@@ -1643,7 +1814,8 @@ export const CARD_POOL: CardDefinition[] = [
     power: 5,
     toughness: 7,
     text: 'Flying \n Whenever an opponent loses life during your turn, you draw that many cards.',
-    imagePath: '/assets/cards/kefka-ruler-of-ruin.webp'
+    imagePath: '/assets/cards/kefka-ruler-of-ruin.webp',
+    onOpponentLifeLossDuringYourTurn: true,
   },
   {
     id: 'kuja-genome-sorcerer',
@@ -1656,7 +1828,11 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'At the beginning of your end step, create a tapped 0/1 black Wizard creature token with ' +
       '“Whenever you cast a noncreature spell, this token deals 1 damage to each opponent.” Then if you control four or more Wizards, transform Kuja.',
     imagePath: '/assets/cards/kuja-genome-sorcerer.webp',
-    transformsInto: 'trance-kuja-fate-defied'
+    transformsInto: 'trance-kuja-fate-defied',
+    onOwnEndStep: [
+      { type: 'createToken', tokenId: 'token-wizard', tapped: true },
+      { type: 'transformSelfIfControlledSubtypeCountAtLeast', subtype: 'Wizard', minCount: 4 },
+    ],
   },
   {
     id: 'trance-kuja-fate-defied',
@@ -1666,7 +1842,8 @@ export const CARD_POOL: CardDefinition[] = [
     power: 4,
     toughness: 6,
     text: 'Flare Star — If a Wizard you control would deal damage to a permanent or player, it deals double that damage instead.',
-    imagePath: '/assets/cards/trance-kuja-fate-defied.webp'
+    imagePath: '/assets/cards/trance-kuja-fate-defied.webp',
+    doublesSubtypeDamage: 'Wizard',
   },
   {
     id: 'laughing-mad',
@@ -1674,7 +1851,14 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: '2R',
     type: 'instant',
     text: 'As an additional cost to cast this spell, discard a card.\nDraw two cards.\nFlashback 3R',
-    imagePath: '/assets/cards/laughing-mad.webp'
+    imagePath: '/assets/cards/laughing-mad.webp',
+    // Modeled as LootEffect(draw 2, discard 1) rather than a true up-front
+    // "discard as a cost" - net card change and end-of-resolution hand are
+    // identical either way (nothing here cares about discard-before-draw
+    // sequencing), and this reuses the existing draw-then-discard plumbing
+    // instead of needing a new pre-cast-cost/choice mechanism.
+    onCast: [{ type: 'loot', drawCount: 2, discardCount: 1 }],
+    flashback: { cost: '3R' },
   },
   {
     id: 'lightning-army-of-one',
@@ -3875,6 +4059,24 @@ export const TOKEN_POOL: CardDefinition[] = [
     text: 'Whenever you cast a noncreature spell, this token deals 1 damage to each opponent.',
     imagePath: '/assets/cards/token-wizard.webp',
     noncreatureCastTrigger: { damageEachOpponent: 1 },
+  },
+  {
+    id: 'token-food',
+    name: 'Food',
+    type: 'artifact',
+    subtype: 'Food Token',
+    costLabel: '-',
+    text: '2, T, Sacrifice this artifact: You gain 3 life.',
+    imagePath: '/assets/cards/token-food.webp',
+    abilities: [
+      {
+        id: 'token-food-eat',
+        label: 'Eat',
+        cost: { manaLabel: '2', tap: true, sacrificeSelf: true },
+        effects: [{ type: 'gainLife', amount: 3 }],
+        effectText: 'You gain 3 life.',
+      },
+    ],
   },
   {
     id: 'token-bird',

@@ -43,6 +43,7 @@ function buildPlayer(id: string, name: string): PlayerState {
     hasPlayedLandThisTurn: false,
     hasDrawnThisTurn: false,
     commanderDamageTaken: 0,
+    lifeGainedThisTurn: 0,
   };
 }
 
@@ -75,6 +76,11 @@ export function createInitialState(player1Name: string, player2Name: string, pla
     pendingChooseOneMode: null,
     pendingPlayerTarget: null,
     creaturesDiedThisTurn: 0,
+    pendingReanimate: null,
+    pendingReturnCreaturesFromGraveyard: null,
+    pendingOptionalTransform: null,
+    pendingGraveyardExile: null,
+    pendingDiscardUpToThenDraw: null,
   };
 }
 

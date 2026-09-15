@@ -4,7 +4,7 @@
 
 import { CardDefinition, CardInstance, GameState } from '../types';
 import { getCardDefinition } from '../data/cards';
-import { getOpponent, updatePlayer, detachEverythingFrom, nextInstanceId } from './state';
+import { getOpponent, getPlayer, updatePlayer, detachEverythingFrom, nextInstanceId } from './state';
 import { hasKeyword, hasKeywordEffective } from './keywords';
 
 function countLands(state: GameState, controllerId: string): number {
@@ -31,6 +31,94 @@ function lifeBasedBaseStat(state: GameState, controllerId: string, instanceId: s
   return hasLifeBasedEquipment ? controller.life : null;
 }
 
+/** Whether `instanceId` currently has `keyword` from an attached Equipment's
+ * "During your turn, equipped creature has KEYWORD" grant (e.g. Dragoon's
+ * Lance's flying) - true only while it's this creature's controller's own
+ * turn. See CardDefinition.equipGrantsKeywordDuringOwnTurn. */
+export function hasEquipGrantedKeywordDuringOwnTurn(state: GameState, controllerId: string, instanceId: string, keyword: string): boolean {
+  if (state.activePlayerId !== controllerId) return false;
+  const controller = state.players.find((p) => p.id === controllerId);
+  if (!controller) return false;
+  return controller.zones.battlefield.some((c) => c.attachedToInstanceId === instanceId && getCardDefinition(c.defId).equipGrantsKeywordDuringOwnTurn === keyword);
+}
+
+/** Whether `def` currently has `keyword` from its own "During your turn, [this
+ * creature] has KEYWORD" grant (Freya Crescent's Jump) - the self-only
+ * counterpart to hasEquipGrantedKeywordDuringOwnTurn. */
+export function hasSelfGrantedKeywordDuringOwnTurn(state: GameState, controllerId: string, def: CardDefinition, keyword: string): boolean {
+  return state.activePlayerId === controllerId && def.grantsSelfKeywordDuringOwnTurn === keyword;
+}
+
+/** Whether `instanceId` currently has `keyword` from an attached Equipment's
+ * unconditional "Equipped creature has KEYWORD" grant (Genji Glove's double
+ * strike) - the always-on counterpart to hasEquipGrantedKeywordDuringOwnTurn. */
+export function hasEquipGrantedKeyword(state: GameState, controllerId: string, instanceId: string, keyword: string): boolean {
+  const controller = state.players.find((p) => p.id === controllerId);
+  if (!controller) return false;
+  return controller.zones.battlefield.some((c) => c.attachedToInstanceId === instanceId && getCardDefinition(c.defId).equipGrantsKeyword === keyword);
+}
+
+/** Adds `amount` life to playerId AND tracks it in
+ * PlayerState.lifeGainedThisTurn (Hope Estheim) - the one place every
+ * AUTOMATIC life-gain source should go through (lifelink combat damage,
+ * onAnyDeathDrain, a gainLife effect, ...). Deliberately NOT used by the
+ * manual ADJUST_LIFE action, same "manual changes don't feed automatic
+ * triggers" convention as onGainLifeTrigger. */
+export function addLife(state: GameState, playerId: string, amount: number): GameState {
+  return updatePlayer(state, playerId, (p) => ({ ...p, life: p.life + amount, lifeGainedThisTurn: p.lifeGainedThisTurn + amount }));
+}
+
+/** Mirror image of addLife above - the single funnel every AUTOMATIC life-LOSS
+ * source should go through, so onOpponentLifeLossDuringYourTurn watchers
+ * (Kefka, Ruler of Ruin) see it. Fires per-event (not summed over the turn,
+ * unlike lifeGainedThisTurn), only for a watcher whose controller is the
+ * currently active player and whose OPPONENT is the one losing life -
+ * "during your turn" is what the currently-active-player check captures. */
+export function loseLife(state: GameState, playerId: string, amount: number): GameState {
+  let next = updatePlayer(state, playerId, (p) => ({ ...p, life: p.life - amount }));
+  if (amount <= 0) return next;
+  const activePlayer = next.players.find((p) => p.id === next.activePlayerId);
+  if (!activePlayer || activePlayer.id === playerId) return next;
+  const watchers = activePlayer.zones.battlefield.filter((c) => getCardDefinition(c.defId).onOpponentLifeLossDuringYourTurn);
+  for (const watcher of watchers) {
+    const watcherDef = getCardDefinition(watcher.defId);
+    const drawn = getPlayer(next, activePlayer.id).zones.library.slice(0, amount);
+    next = updatePlayer(next, activePlayer.id, (p) => ({
+      ...p,
+      zones: { ...p.zones, library: p.zones.library.slice(drawn.length), hand: [...p.zones.hand, ...drawn] },
+    }));
+    next = { ...next, log: [...next.log, `${watcherDef.name} triggers: ${activePlayer.name} draws ${drawn.length} card(s).`] };
+  }
+  return next;
+}
+
+/** Whether `controllerId` controls a permanent whose doublesSubtypeDamage
+ * (see types.ts) matches `sourceDef`'s own subtype - e.g. Trance Kuja, Fate
+ * Defied's Flare Star doubling all Wizard damage. Returns the multiplier to
+ * apply (1 or 2) so call sites can just multiply by it, rather than a
+ * boolean callers would have to branch on themselves. */
+export function damageMultiplierFor(state: GameState, controllerId: string, sourceDef: CardDefinition): number {
+  if (!sourceDef.subtype) return 1;
+  const controller = state.players.find((p) => p.id === controllerId);
+  if (!controller) return 1;
+  const doubles = controller.zones.battlefield.some((c) => {
+    const d = getCardDefinition(c.defId);
+    return !!d.doublesSubtypeDamage && sourceDef.subtype!.toLowerCase().includes(d.doublesSubtypeDamage.toLowerCase());
+  });
+  return doubles ? 2 : 1;
+}
+
+/** Whether def's controlledTypeCountBuff (see types.ts) is currently active
+ * for this controller - the generalized, any-CardType counterpart to
+ * hasActiveLandCountBuff. */
+function hasActiveControlledTypeCountBuff(def: CardDefinition, state: GameState, controllerId: string): boolean {
+  if (!def.controlledTypeCountBuff) return false;
+  const player = state.players.find((p) => p.id === controllerId);
+  if (!player) return false;
+  const count = player.zones.battlefield.filter((c) => getCardDefinition(c.defId).type === def.controlledTypeCountBuff!.type).length;
+  return count >= def.controlledTypeCountBuff.minCount;
+}
+
 /** Sum of +X/+Y from any Equipment attached to `instanceId` that carries a
  * static equipBuff (e.g. Coral Sword's "+1/+0"). */
 function equipBuffBonus(state: GameState, controllerId: string, instanceId: string): { power: number; toughness: number } {
@@ -39,8 +127,14 @@ function equipBuffBonus(state: GameState, controllerId: string, instanceId: stri
   return controller.zones.battlefield.reduce(
     (acc, c) => {
       if (c.attachedToInstanceId !== instanceId) return acc;
-      const buff = getCardDefinition(c.defId).equipBuff;
-      return buff ? { power: acc.power + buff.power, toughness: acc.toughness + buff.toughness } : acc;
+      const cDef = getCardDefinition(c.defId);
+      const fixed = cDef.equipBuff ?? { power: 0, toughness: 0 };
+      const perCounter = cDef.equipBuffPerCounter;
+      const perCounterAmount = perCounter ? (c.counters.find((ctr) => ctr.label === perCounter.counterLabel)?.amount ?? 0) : 0;
+      return {
+        power: acc.power + fixed.power + (perCounter ? perCounter.power * perCounterAmount : 0),
+        toughness: acc.toughness + fixed.toughness + (perCounter ? perCounter.toughness * perCounterAmount : 0),
+      };
     },
     { power: 0, toughness: 0 }
   );
@@ -51,9 +145,10 @@ export function effectivePower(def: CardDefinition, instance: CardInstance, stat
   const plus = instance.counters.find((c) => c.label === '+1/+1')?.amount ?? 0;
   const minus = instance.counters.find((c) => c.label === '-1/-1')?.amount ?? 0;
   const buff = hasActiveLandCountBuff(def, state, controllerId) ? def.landCountBuff!.power : 0;
+  const typeBuff = hasActiveControlledTypeCountBuff(def, state, controllerId) ? def.controlledTypeCountBuff!.power : 0;
   const temp = instance.temporaryBuff?.power ?? 0;
   const equip = equipBuffBonus(state, controllerId, instance.instanceId).power;
-  return base + plus - minus + buff + temp + equip;
+  return base + plus - minus + buff + typeBuff + temp + equip;
 }
 
 export function effectiveToughness(def: CardDefinition, instance: CardInstance, state: GameState, controllerId: string): number {
@@ -61,9 +156,10 @@ export function effectiveToughness(def: CardDefinition, instance: CardInstance, 
   const plus = instance.counters.find((c) => c.label === '+1/+1')?.amount ?? 0;
   const minus = instance.counters.find((c) => c.label === '-1/-1')?.amount ?? 0;
   const buff = hasActiveLandCountBuff(def, state, controllerId) ? def.landCountBuff!.toughness : 0;
+  const typeBuff = hasActiveControlledTypeCountBuff(def, state, controllerId) ? def.controlledTypeCountBuff!.toughness : 0;
   const temp = instance.temporaryBuff?.toughness ?? 0;
   const equip = equipBuffBonus(state, controllerId, instance.instanceId).toughness;
-  return base + plus - minus + buff + temp + equip;
+  return base + plus - minus + buff + typeBuff + temp + equip;
 }
 
 /** True for a real creature, or for a Vehicle (def.crew set) that's
@@ -104,7 +200,7 @@ function markDamage(state: GameState, instanceId: string, amount: number, isDeat
 }
 
 function dealDirectDamageToDefender(state: GameState, attackerControllerId: string, attackerDefId: string, attackerName: string, defenderId: string, amount: number): GameState {
-  let next = updatePlayer(state, defenderId, (p) => ({ ...p, life: p.life - amount }));
+  let next = loseLife(state, defenderId, amount);
   if (isCommanderAttack(next, attackerControllerId, attackerDefId)) {
     next = updatePlayer(next, defenderId, (p) => ({ ...p, commanderDamageTaken: p.commanderDamageTaken + amount }));
     next = { ...next, log: [...next.log, `${attackerName} deals ${amount} commander damage.`] };
@@ -112,9 +208,9 @@ function dealDirectDamageToDefender(state: GameState, attackerControllerId: stri
   return next;
 }
 
-function strikesInPass(text: string, pass: 1 | 2): boolean {
-  const fs = hasKeyword(text, 'first strike');
-  const ds = hasKeyword(text, 'double strike');
+function strikesInPass(state: GameState, def: CardDefinition, instance: CardInstance, controllerId: string, pass: 1 | 2): boolean {
+  const fs = hasKeyword(def.text, 'first strike') || hasEquipGrantedKeyword(state, controllerId, instance.instanceId, 'first strike');
+  const ds = hasKeyword(def.text, 'double strike') || hasEquipGrantedKeyword(state, controllerId, instance.instanceId, 'double strike');
   return pass === 1 ? fs || ds : ds || (!fs && !ds);
 }
 
@@ -171,16 +267,23 @@ function dealDamagePass(state: GameState, pass: 1 | 2): GameState {
     const isTrample = hasKeywordEffective(attackerDef, attackerFound.instance, 'trample');
     const isLifelink = hasKeyword(attackerDef.text, 'lifelink');
 
-    if (strikesInPass(attackerDef.text, pass)) {
-      const power = effectivePower(attackerDef, attackerFound.instance, next, attackerFound.controllerId);
+    if (strikesInPass(next, attackerDef, attackerFound.instance, attackerFound.controllerId, pass)) {
+      const power = effectivePower(attackerDef, attackerFound.instance, next, attackerFound.controllerId) * damageMultiplierFor(next, attackerFound.controllerId, attackerDef);
 
       if (blockers.length === 0) {
         const defender = getOpponent(next, attackerFound.controllerId);
         next = dealDirectDamageToDefender(next, attackerFound.controllerId, attackerFound.instance.defId, attackerDef.name, defender.id, power);
         next = { ...next, log: [...next.log, `${attackerDef.name} hits ${defender.name} for ${power}.`] };
         if (isLifelink) {
-          next = updatePlayer(next, attackerFound.controllerId, (p) => ({ ...p, life: p.life + power }));
+          next = addLife(next, attackerFound.controllerId, power);
           next = applyGainLifeTriggers(next, attackerFound.controllerId);
+        }
+        // "Whenever [this] deals combat damage to a player, you may exile
+        // it, then return it to the battlefield transformed" (Jecht,
+        // Reluctant Guardian) - pauses on a yes/no choice rather than firing
+        // automatically like every other trigger in this function.
+        if (attackerDef.onCombatDamageToPlayerMayTransform && !next.pendingOptionalTransform) {
+          next = { ...next, pendingOptionalTransform: { sourceInstanceId: attackerFound.instance.instanceId, controllerId: attackerFound.controllerId } };
         }
       } else {
         let remaining = power;
@@ -193,7 +296,7 @@ function dealDamagePass(state: GameState, pass: 1 | 2): GameState {
           next = markDamage(next, blocker.instance.instanceId, assigned, isDeathtouch);
           next = { ...next, log: [...next.log, `${attackerDef.name} deals ${assigned} damage to ${blockerDef.name}.`] };
           if (isLifelink) {
-            next = updatePlayer(next, attackerFound.controllerId, (p) => ({ ...p, life: p.life + assigned }));
+            next = addLife(next, attackerFound.controllerId, assigned);
             next = applyGainLifeTriggers(next, attackerFound.controllerId);
           }
           remaining -= assigned;
@@ -208,14 +311,14 @@ function dealDamagePass(state: GameState, pass: 1 | 2): GameState {
 
     for (const blocker of blockers) {
       const blockerDef = getCardDefinition(blocker.instance.defId);
-      if (!strikesInPass(blockerDef.text, pass)) continue;
+      if (!strikesInPass(next, blockerDef, blocker.instance, blocker.controllerId, pass)) continue;
       if (isPendingDeath(next, attackerFound.instance.instanceId)) continue;
-      const blockerPower = effectivePower(blockerDef, blocker.instance, next, blocker.controllerId);
+      const blockerPower = effectivePower(blockerDef, blocker.instance, next, blocker.controllerId) * damageMultiplierFor(next, blocker.controllerId, blockerDef);
       const blockerHasDeathtouch = hasKeyword(blockerDef.text, 'deathtouch');
       next = markDamage(next, attackerFound.instance.instanceId, blockerPower, blockerHasDeathtouch);
       next = { ...next, log: [...next.log, `${blockerDef.name} deals ${blockerPower} damage to ${attackerDef.name}.`] };
       if (hasKeyword(blockerDef.text, 'lifelink')) {
-        next = updatePlayer(next, blocker.controllerId, (p) => ({ ...p, life: p.life + blockerPower }));
+        next = addLife(next, blocker.controllerId, blockerPower);
         next = applyGainLifeTriggers(next, blocker.controllerId);
       }
     }
@@ -354,7 +457,6 @@ export function moveCreaturesToGraveyard(state: GameState, deadIds: string[], ve
       const { tokenId, count } = def.onDeathExileAndCreateTokens!;
       next = { ...next, log: [...next.log, `${def.name} is exiled, creating ${count} ${getCardDefinition(tokenId).name} token(s).`] };
     }
-
     // "Whenever this creature or another creature or artifact you control
     // dies, target opponent loses X life and you gain Y life" (e.g. Al Bhed
     // Salvagers) - the watcher list is taken from the battlefield BEFORE
@@ -371,13 +473,67 @@ export function moveCreaturesToGraveyard(state: GameState, deadIds: string[], ve
         const { opponentLifeLoss, controllerLifeGain } = watcherDef.onAnyDeathDrain!;
         for (const d of qualifyingDeaths) {
           const dyingDef = getCardDefinition(d.defId);
-          next = updatePlayer(next, player.id, (p) => ({ ...p, life: p.life + controllerLifeGain }));
+          next = addLife(next, player.id, controllerLifeGain);
           next = updatePlayer(next, opponent.id, (p) => ({ ...p, life: p.life - opponentLifeLoss }));
           next = {
             ...next,
             log: [...next.log, `${dyingDef.name}'s death triggers ${watcherDef.name}: ${opponent.name} loses ${opponentLifeLoss} life, ${player.name} gains ${controllerLifeGain} life.`],
           };
         }
+      }
+    }
+
+    // "Whenever one or more OTHER creatures and/or artifacts you control
+    // die, draw a card. This ability triggers only once each turn." (G'raha
+    // Tia) - same watcher shape as onAnyDeathDrain just above, gated by its
+    // own once-per-turn flag instead of scaling with the number of deaths.
+    const drawWatchers = player.zones.battlefield.filter((c) => getCardDefinition(c.defId).onAnyDeathDraw && !c.onAnyDeathDrawUsedThisTurn);
+    if (drawWatchers.length > 0 && qualifyingDeaths.length > 0) {
+      for (const watcher of drawWatchers) {
+        const otherDeaths = qualifyingDeaths.filter((d) => d.instanceId !== watcher.instanceId);
+        if (otherDeaths.length === 0) continue;
+        const watcherDef = getCardDefinition(watcher.defId);
+        const drawn = getPlayer(next, player.id).zones.library.slice(0, 1);
+        next = updatePlayer(next, player.id, (p) => ({
+          ...p,
+          zones: {
+            ...p.zones,
+            battlefield: p.zones.battlefield.map((c) => (c.instanceId === watcher.instanceId ? { ...c, onAnyDeathDrawUsedThisTurn: true } : c)),
+            library: p.zones.library.slice(1),
+            hand: [...p.zones.hand, ...drawn],
+          },
+        }));
+        next = { ...next, log: [...next.log, `${watcherDef.name} triggers: ${player.name} draws a card.`] };
+      }
+    }
+
+    // "Whenever another creature or artifact you control dies, put a
+    // [counterLabel] counter on [this]" (Judge Magister Gabranth) - same
+    // watcher shape as onAnyDeathDrain, but the payout lands on the watcher
+    // itself instead of changing life totals.
+    const counterSelfWatchers = player.zones.battlefield.filter((c) => getCardDefinition(c.defId).onAnyDeathCounterSelf);
+    if (counterSelfWatchers.length > 0 && qualifyingDeaths.length > 0) {
+      for (const watcher of counterSelfWatchers) {
+        const otherDeaths = qualifyingDeaths.filter((d) => d.instanceId !== watcher.instanceId);
+        if (otherDeaths.length === 0) continue;
+        const watcherDef = getCardDefinition(watcher.defId);
+        const { counterLabel, counterAmount } = watcherDef.onAnyDeathCounterSelf!;
+        const totalAmount = counterAmount * otherDeaths.length;
+        next = updatePlayer(next, player.id, (p) => ({
+          ...p,
+          zones: {
+            ...p.zones,
+            battlefield: p.zones.battlefield.map((c) => {
+              if (c.instanceId !== watcher.instanceId) return c;
+              const hasCounter = c.counters.some((ctr) => ctr.label === counterLabel);
+              const counters = hasCounter
+                ? c.counters.map((ctr) => (ctr.label === counterLabel ? { ...ctr, amount: ctr.amount + totalAmount } : ctr))
+                : [...c.counters, { label: counterLabel, amount: totalAmount }];
+              return { ...c, counters };
+            }),
+          },
+        }));
+        next = { ...next, log: [...next.log, `${watcherDef.name} triggers: puts ${totalAmount} ${counterLabel} counter(s) on itself.`] };
       }
     }
 

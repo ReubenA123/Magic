@@ -9,7 +9,7 @@
 
 import { CardDefinition, CardInstance } from '../types';
 
-export type CombatKeyword = 'flying' | 'first strike' | 'double strike' | 'deathtouch' | 'trample' | 'lifelink' | 'vigilance' | 'reach' | 'menace' | 'haste' | 'flash' | 'defender' | 'hexproof' | 'indestructible';
+export type CombatKeyword = 'flying' | 'first strike' | 'double strike' | 'deathtouch' | 'trample' | 'lifelink' | 'vigilance' | 'reach' | 'menace' | 'haste' | 'flash' | 'defender' | 'hexproof' | 'indestructible' | 'unblockable';
 export function hasKeyword(text: string, keyword: CombatKeyword): boolean {
   return text.toLowerCase().includes(keyword);
 }

@@ -132,6 +132,7 @@ export function createStateFromDeck(deck: SavedDeck, humanName: string): GameSta
       hasDrawnThisTurn: false,
       commanderDefId: deck.commanderId,
       commanderDamageTaken: 0,
+      lifeGainedThisTurn: 0,
     };
   }
 
@@ -164,6 +165,11 @@ export function createStateFromDeck(deck: SavedDeck, humanName: string): GameSta
     pendingChooseOneMode: null,
     pendingPlayerTarget: null,
     creaturesDiedThisTurn: 0,
+    pendingReanimate: null,
+    pendingReturnCreaturesFromGraveyard: null,
+    pendingOptionalTransform: null,
+    pendingGraveyardExile: null,
+    pendingDiscardUpToThenDraw: null,
   };
 }
 

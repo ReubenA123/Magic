@@ -185,8 +185,18 @@ export default function CardActionsPanel({
               const upkeepBlocked = !!ability.onlyDuringOwnUpkeep && !mutualActive && !isMyUpkeep;
               const sorceryBlocked = !!ability.onlyDuringOwnMainPhase && !mutualActive && !isMyMainPhase;
               const meldPartnerMissing = !!ability.meldsWith && !ownerBattlefieldDefIds.includes(ability.meldsWith.partnerDefId);
+              const wrongZoneForGraveyardAbility = !!ability.returnFromGraveyardTransformed && currentZone !== 'graveyard';
               const disabled =
-                !affordable || tapBlocked || graveyardBlocked || graveyardSizeBlocked || endStepBlocked || mainPhaseBlocked || upkeepBlocked || sorceryBlocked || meldPartnerMissing;
+                !affordable ||
+                tapBlocked ||
+                graveyardBlocked ||
+                graveyardSizeBlocked ||
+                endStepBlocked ||
+                mainPhaseBlocked ||
+                upkeepBlocked ||
+                sorceryBlocked ||
+                meldPartnerMissing ||
+                wrongZoneForGraveyardAbility;
               const blockedReason = endStepBlocked
                 ? 'Only during your own end step'
                 : mainPhaseBlocked
@@ -201,7 +211,9 @@ export default function CardActionsPanel({
                         ? `Needs at least ${ability.requiresGraveyardSize} cards in your graveyard`
                         : graveyardBlocked
                           ? `Needs ${ability.cost.exileFromGraveyard} cards in your graveyard`
-                          : '';
+                          : wrongZoneForGraveyardAbility
+                            ? 'Only activatable from the graveyard'
+                            : '';
               return (
                 <button key={ability.id} className="card-action-button secondary" disabled={disabled} onClick={() => onActivateAbility(ability.id)} title={blockedReason || ability.effectText}>
                   {ability.label}
