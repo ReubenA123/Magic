@@ -41,6 +41,10 @@ interface CardActionsPanelProps {
    * cycle, flashback) is hidden rather than offering something that isn't yours to do. */
   readOnly?: boolean;
   manaOptions?: ManaColor[];
+  /** Why the Tap/Untap button should be disabled right now (e.g. "this land
+   * entered tapped", "summoning sickness"), or null/undefined if pressing it
+   * is currently legal - see GameBoard.tsx: tapDisabledReason. */
+  tapDisabledReason?: string | null;
   onToggleTap: () => void;
   onChooseTapColor: (color: ManaColor) => void;
   onFlip: () => void;
@@ -85,6 +89,7 @@ export default function CardActionsPanel({
   attachedToName,
   readOnly,
   manaOptions,
+  tapDisabledReason,
   onToggleTap,
   onChooseTapColor,
   onFlip,
@@ -272,9 +277,17 @@ export default function CardActionsPanel({
                 </div>
               </div>
             ) : (
-              <button className="card-action-button card-action-button-play" onClick={handleTapClick}>
-                {instance.tapped ? 'Untap' : 'Tap'}
-              </button>
+              <div className="card-action-tap-wrapper">
+                <button
+                  className="card-action-button card-action-button-play"
+                  onClick={handleTapClick}
+                  disabled={!!tapDisabledReason}
+                  title={tapDisabledReason ?? ''}
+                >
+                  {instance.tapped ? 'Untap' : 'Tap'}
+                </button>
+                {tapDisabledReason && <div className="card-action-disabled-reason">({tapDisabledReason})</div>}
+              </div>
             )}
             {/* Hidden when transform is gated behind a paid ability (see
                 CardAbility.transformSelf, listed above under Abilities) -

@@ -52,8 +52,8 @@ export default function ModalSpellModal({ definition, onConfirm, onCancel }: Mod
           <button className="card-action-button card-action-button-play" disabled={checked.size === 0} onClick={() => onConfirm([...checked])}>
             Cast
           </button>
-          <button className="card-action-button secondary" onClick={onCancel}>
-            Cancel
+          <button className="card-action-button card-action-button-cancel-x" onClick={onCancel} aria-label="Cancel" title="Cancel">
+            {'✕'}
           </button>
         </div>
       </div>

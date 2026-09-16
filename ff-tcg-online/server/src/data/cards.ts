@@ -34,6 +34,9 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 8,
     text: "This spell can\u2019t be countered. Flying, You have protection from each of your opponents. (You can\u2019t be dealt damage, enchanted, or targeted by anything controlled by your opponents.)",
     imagePath: '/assets/cards/absolute-virtue.webp',
+    // "Can't be countered" is moot - this engine has no counterspell/stack
+    // system at all. "Protection from each of your opponents" is deferred -
+    // protection is an established gap (no such mechanic exists).
   },
   {
     id: "adventurer's-airship",
@@ -170,6 +173,14 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 4,
     text: "Demons you control have menace, lifelink, and haste. Starscourge \u2014 At the beginning of combat on your turn, exile up to one target creature card from a graveyard. If you exiled a card this way, create a token thats a copy of that card, except it's a 5/5 black Demon.",
     imagePath: '/assets/cards/ardyn-the-usurper.webp',
+    // Both deferred - the static keyword anthem to Demons would need a
+    // static "grants keyword to every controlled permanent of a subtype"
+    // check threaded through every place a combat keyword is checked
+    // (menace, lifelink, haste each have their own call sites), which is
+    // too invasive for the two cards that currently want it; Starscourge
+    // needs a graveyard-targeted exile-then-copy-with-a-stat/type override,
+    // which no existing copy effect supports (createTokenCopyOfTarget only
+    // copies a battlefield permanent, unchanged).
   },
   {
     id: 'ashe-princess-of-dalmasca',
@@ -266,6 +277,11 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 3,
     text: "Reach. Vehicles you control get +1/+1 and have vigilance and reach. Whenever a Vehicle crewed by Balthier and Fran this turn attacks, if it\u2019s the first combat phase of the turn, you may pay 1RG. If you do, after this phase, there is an additional combat phase.",
     imagePath: '/assets/cards/balthier-and-fran.webp',
+    staticAnthemForControlledSubtype: { subtype: 'Vehicle', power: 1, toughness: 1 },
+    // The "...and have vigilance and reach" keyword half of the anthem is
+    // deferred (see ardyn-the-usurper for why), and the extra-combat-phase
+    // trigger is deferred - there's no "additional combat phase" mechanism
+    // (only whole extra TURNS are supported, via extraTurnsQueued).
   },
   {
     id: 'bards-bow',
@@ -315,6 +331,8 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 3,
     text: "Affinity for Birds (This spell costs {1} less to cast for each Bird you control.) When Bartz and Boko enters, each other Bird you control deals damage equal to its power to target creature an opponent controls.",
     imagePath: '/assets/cards/bartz-and-boko.webp',
+    costReductionPerControlledSubtype: { subtype: 'Bird', amountPerUnit: 1 },
+    onEnter: [{ type: 'damageTargetCreatureEqualToOtherControlledSubtypePower', subtype: 'Bird' }],
   },
   {
     id: 'battle-menu',
@@ -351,6 +369,8 @@ export const CARD_POOL: CardDefinition[] = [
     text: "Vigilance (Attacking doesn\u2019t cause this creature to tap.) At the beginning of combat on your turn, " +
       "you may attach any number of Equipment you control to target creature you control.",
     imagePath: '/assets/cards/beatrix-loyal-general.webp',
+    // Deferred - "attach any number of Equipment" multi-attach is an
+    // established gap.
   },
   {
     id: 'black-mages-rod',
@@ -406,6 +426,10 @@ export const CARD_POOL: CardDefinition[] = [
       "damage by a legendary creature this turn.",
     producesMana: 'any',
     imagePath: '/assets/cards/blitzball.webp',
+    // The GOOOOAAAALLL! ability is deferred - "an opponent was dealt combat
+    // damage by a legendary creature this turn" needs a new per-turn
+    // tracked condition this engine doesn't have (only creaturesDiedThisTurn
+    // exists as a comparable "this turn" tracker, and it doesn't fit).
   },
   {
     id: 'blitzball-shot',
@@ -426,8 +450,12 @@ export const CARD_POOL: CardDefinition[] = [
       "Whenever equipped creature deals combat damage to a player, draw a card, " +
       "then you may cast a spell from your hand with mana value less than or equal to that damage without paying its mana cost. Equip 2",
     imagePath: '/assets/cards/buster-sword.webp',
+    // Was missing its equipBuff entirely, so the "+3/+2" never applied. The
+    // granted "draw, then may cast free from hand" combat-damage trigger is
+    // deferred - no mechanism grants a triggered ability via equip.
     attachesTo: 'creature',
     equipCost: '2',
+    equipBuff: { power: 3, toughness: 2 },
   },
   {
     id: 'cactuar',
@@ -472,7 +500,11 @@ export const CARD_POOL: CardDefinition[] = [
     power: 2,
     toughness: 3,
     text: "Flying, vigilance \n Tap: Add Mana. Spend this mana only to cast an artifact spell or activate an ability of an artifact source. \n Crew 1",
+    // Was missing its mana ability entirely. The "spend this mana only on
+    // artifacts" restriction isn't enforced (this engine's mana pool isn't
+    // tagged by source) - it just produces plain colorless mana.
     crew: 1,
+    producesMana: 'C',
     imagePath: '/assets/cards/cargo-ship.webp',
   },
   {
@@ -486,7 +518,11 @@ export const CARD_POOL: CardDefinition[] = [
     text: "Deathtouch \n Darkness \u2014 Whenever Cecil deals damage, you lose that much life. Then if your life total is less than or equal to half your starting life " +
       "toal, untap Cecil and transform it.",
     imagePath: '/assets/cards/cecil-dark-knight.webp',
-    transformsInto: 'cecil-redeemed-paladin'
+    transformsInto: 'cecil-redeemed-paladin',
+    // Deferred - needs a generic "whenever this deals ANY damage" watcher
+    // (broader than onCombatDamageToPlayer's combat-to-a-player-only scope)
+    // plus a starting-life-total comparison this engine doesn't track
+    // (GameState has no separate "starting life" field to compare against).
   },
   {
     id: 'cecil-redeemed-paladin',
@@ -510,6 +546,10 @@ export const CARD_POOL: CardDefinition[] = [
       "Target creature you control deals damage equal to its power to target creature an opponent controls. If this spell was kicked, \n" +
       "the creature you control deals twice that much damage instead.",
     imagePath: '/assets/cards/chocobo-kick.webp',
+    // Deferred - Kicker is an established-adjacent gap (an additional-cost-
+    // at-cast-time mechanism like Tiered, which is already deferred
+    // elsewhere; no CardAbility/CAST_CARD support for a binary paid-or-not
+    // extra cost with a resulting conditional effect exists).
   },
   {
     id: 'chocobo-racetrack',
@@ -2078,7 +2118,12 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 4,
     text: 'When this creature dies, create a Treasure token. (It\u2019s an artifact with “{T}, Sacrifice this token: Add one mana of any color.”)\n' +
       "2, Tap: Exile target card from a graveyard.",
-    imagePath: '/assets/cards/magic-pot.webp'
+    imagePath: '/assets/cards/magic-pot.webp',
+    onDeath: [{ type: 'createToken', tokenId: 'token-treasure' }],
+    // "2, Tap: Exile target card from a graveyard" is deferred - no
+    // activated-ability CardEffect targets a graveyard card yet (only
+    // GraveyardExileEffect's own dedicated onCast/onEnter pendingGraveyardExile
+    // flow does, not a generic activated ability).
   },
   {
     id: 'magitek-armor',
@@ -2104,7 +2149,17 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 1,
     text: "This creature gets +1/+0 as long as you control another artifact. \n" +
       "2W: Search your library for a card named Magitek Infantry, put it onto the battlefield tapped, then shuffle.",
-    imagePath: '/assets/cards/magitek-infantry.webp'
+    imagePath: '/assets/cards/magitek-infantry.webp',
+    controlledTypeCountBuff: { type: 'artifact', minCount: 1, power: 1, toughness: 0 },
+    abilities: [
+      {
+        id: 'magitek-infantry-search',
+        label: 'Search',
+        cost: { manaLabel: '2W' },
+        effects: [{ type: 'searchLibraryForNamedCard', cardName: 'Magitek Infantry' }],
+        effectText: 'Search your library for a card named Magitek Infantry, put it onto the battlefield tapped, then shuffle.',
+      },
+    ],
   },
   {
     id: 'magitek-scythe',
@@ -2143,7 +2198,8 @@ export const CARD_POOL: CardDefinition[] = [
     power: 1,
     toughness: 4,
     text: "Whenever you scry or surveil, draw a card. (Draw after you scry or surveil.)",
-    imagePath: '/assets/cards/matoya-archon-elder.webp'
+    imagePath: '/assets/cards/matoya-archon-elder.webp',
+    onOwnSurveilDraw: true,
   },
   {
     id: 'memories-returning',
@@ -2178,7 +2234,8 @@ export const CARD_POOL: CardDefinition[] = [
     power: 3,
     toughness: 3,
     text: "Vigilance, lifelink \nWhenever you gain life, put a +1/+1 counter on each Cleric you control.",
-    imagePath: '/assets/cards/minwu-white-mage.webp'
+    imagePath: '/assets/cards/minwu-white-mage.webp',
+    onGainLifeTrigger: { counterLabel: '+1/+1', counterAmount: 1, subtypeFilter: 'Cleric' },
   },
   {
     id: 'monk-s-fist',
@@ -2234,7 +2291,11 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 4,
     text: "When this creature enters, you lose 1 life and create a Treasure token. \n" +
       "Whenever this creature attacks, you may sacrifice another creature or artifact. If you do, surveil 2. ",
-    imagePath: '/assets/cards/namazu-trader.webp'
+    imagePath: '/assets/cards/namazu-trader.webp',
+    onEnter: [{ type: 'loseLife', amount: 1 }, { type: 'createToken', tokenId: 'token-treasure' }],
+    // The attack-trigger optional sacrifice-then-surveil is deferred - no
+    // "whenever this attacks, you may sacrifice X, if you do Y" trigger
+    // mechanism exists yet (only unconditional onAttack effects do).
   },
   {
     id: 'nibelheim-aflame',
@@ -2243,7 +2304,12 @@ export const CARD_POOL: CardDefinition[] = [
     type: 'sorcery',
     text: 'Choose target creature you control. It deals damage equal to its power to each other creature. If this spell was cast from a graveyard, ' +
       'discard your hand and draw four cards. \n Flashback 5RR (You may cast this card from your graveyard for its flashback cost. Then exile it.)',
-    imagePath: '/assets/cards/nibelheim-aflame.webp'
+    imagePath: '/assets/cards/nibelheim-aflame.webp',
+    onCast: [{ type: 'sweepDamageFromChosenCreature' }],
+    flashback: { cost: '5RR' },
+    // The "if cast from a graveyard, discard your hand and draw four cards"
+    // flashback-conditional bonus is deferred - onCast has no way to know
+    // whether it's resolving as a normal cast or a flashback cast.
   },
   {
     id: 'ninja-s-blades',
@@ -2295,7 +2361,11 @@ export const CARD_POOL: CardDefinition[] = [
     type: 'instant',
     text: "Choose one — \n• Exile the top two cards of your library. You may play those cards until your next end step.\n" +
       "• One or two target creatures each get +2/+0 until end of turn",
-    imagePath: '/assets/cards/opera-love-song.webp'
+    imagePath: '/assets/cards/opera-love-song.webp',
+    // Deferred - modal card whose modes are "impulse-draw two cards,
+    // playable until end of next turn" (no such temporary-play-window
+    // mechanic exists) and "pump one OR TWO target creatures" (no
+    // variable-target-count pump effect exists either).
   },
   {
     id: 'overkill',
@@ -2303,7 +2373,8 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: '2B',
     type: 'instant',
     text: 'Target creature gets -0/-9999 until end of turn.',
-    imagePath: '/assets/cards/overkill.webp'
+    imagePath: '/assets/cards/overkill.webp',
+    onCast: [{ type: 'pumpTarget', power: 0, toughness: -9999 }],
   },
   {
     id: 'paladin-s-arms',
@@ -2332,7 +2403,16 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 4,
     text: "Trample \n Sacrifice another artifact or creature: Put a +1/+1 counter on this Vehicle." +
       "It becomes a Spirit artifact creature in addition to its other types until end of turn.",
-    imagePath: '/assets/cards/phantom-train.webp'
+    imagePath: '/assets/cards/phantom-train.webp',
+    abilities: [
+      {
+        id: 'phantom-train-activate',
+        label: 'Activate',
+        cost: { sacrificeAnother: 'artifactOrCreature' },
+        effects: [{ type: 'putCounterOnSelf', counterLabel: '+1/+1', counterAmount: 1 }, { type: 'becomeCreatureUntilEndOfTurn' }],
+        effectText: 'Put a +1/+1 counter on this Vehicle. It becomes a Spirit artifact creature in addition to its other types until end of turn.',
+      },
+    ],
   },
   {
     id: 'phoenix-down',
@@ -2342,7 +2422,19 @@ export const CARD_POOL: CardDefinition[] = [
     text: "1W, Tap, Exile this artifact: Choose one — \n" +
       "• Return target creature card with mana value 4 or less from your graveyard to the battlefield tapped. \n" +
       "• Exile target Skeleton, Spirit, or Zombie.",
-    imagePath: '/assets/cards/phoenix-down.webp'
+    imagePath: '/assets/cards/phoenix-down.webp',
+    // Only mode 1 is implemented - mode 2 ("exile target Skeleton, Spirit, or
+    // Zombie") is deferred since there's no choose-a-mode UI for activated
+    // abilities (only CAST_CARD's chosenModeIndices supports modal choices).
+    abilities: [
+      {
+        id: 'phoenix-down-reanimate',
+        label: 'Reanimate',
+        cost: { manaLabel: '1W', tap: true, exileSelf: true },
+        effects: [{ type: 'reanimateTargetFromGraveyard', maxManaValue: 4, forceEntersTapped: true }],
+        effectText: 'Return target creature card with mana value 4 or less from your graveyard to the battlefield tapped.',
+      },
+    ],
   },
   {
     id: 'plains',
@@ -2360,7 +2452,12 @@ export const CARD_POOL: CardDefinition[] = [
     type: 'sorcery',
     text: "Choose one — \n• All creatures get -1/-1 until end of turn.\n " +
       "• Target player reveals their hand. You choose an artifact or creature card from it. That player discards that card.",
-    imagePath: '/assets/cards/poison-the-waters.webp'
+    imagePath: '/assets/cards/poison-the-waters.webp',
+    // Only mode 1 is implemented - mode 2 ("reveal target player's hand,
+    // choose a card from it, they discard it") is deferred (no
+    // reveal-opponent's-hand-and-choose mechanism exists), and there's no
+    // choose-a-mode UI anyway (see phoenix-down for the same modal-ability gap).
+    onCast: [{ type: 'buffAllCreatures', power: -1, toughness: -1 }],
   },
   {
     id: 'prishe-s-wanderings',
@@ -2369,7 +2466,12 @@ export const CARD_POOL: CardDefinition[] = [
     type: 'instant',
     text: 'Search your library for a basic land card or Town card, put it onto the battlefield tapped, then shuffle. ' +
       'When you search your library this way, put a +1/+1 counter on target creature you control.',
-    imagePath: '/assets/cards/prishe-s-wanderings.webp'
+    imagePath: '/assets/cards/prishe-s-wanderings.webp',
+    // Deferred - SearchLibraryForLandEffect only ever puts the found land
+    // into hand untapped and has no linked "then put a counter on a target
+    // creature" follow-up; this card needs both a battlefield-tapped variant
+    // AND a chained target effect, neither of which the existing search
+    // effect supports.
   },
   {
     id: 'prompto-argentum',
@@ -2380,7 +2482,8 @@ export const CARD_POOL: CardDefinition[] = [
     power: 2,
     toughness: 2,
     text: "Haste \n Selfie Shot — Whenever you cast a noncreature spell, if at least four mana was spent to cast it, create a Treasure token.",
-    imagePath: '/assets/cards/prompto-argentum.webp'
+    imagePath: '/assets/cards/prompto-argentum.webp',
+    noncreatureCastTrigger: { createTokenIfExpensive: { minManaValue: 4, tokenId: 'token-treasure' } },
   },
   {
     id: 'pupu-ufo',
@@ -2392,7 +2495,13 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 4,
     text: "Flying \n Tap: You may put a land card from your hand onto the battlefield.\n" +
       "3: Until end of turn, this creature\u2019s base power becomes equal to the number of Towns you control.",
-    imagePath: '/assets/cards/pupu-ufo.webp'
+    imagePath: '/assets/cards/pupu-ufo.webp',
+    // Both abilities deferred - "put a land card from hand onto the
+    // battlefield" as an activated ability needs a choose-from-hand
+    // mechanism no existing ability effect has, and "base power = number of
+    // Towns you control" needs a dynamic subtype-count base-stat effect
+    // that doesn't exist (only fixed self-buffs and controlledTypeCountBuff,
+    // which is a static +X/+Y bonus, not a base-power override).
   },
   {
     id: 'qiqirn-merchant',
@@ -2403,7 +2512,27 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 4,
     text: "1, Tap: Draw a card, then discard a card. \n" +
       "7, Tap, Sacrifice this creature: Draw three cards. This ability costs 1 less to activate for each Town you control.",
-    imagePath: '/assets/cards/qiqirn-merchant.webp'
+    imagePath: '/assets/cards/qiqirn-merchant.webp',
+    // Both abilities are implemented at their flat printed cost - the "costs
+    // 1 less per Town you control" discount on the second ability is
+    // deferred (no per-ability dynamic cost reduction mechanism exists, only
+    // per-spell-cast reductions).
+    abilities: [
+      {
+        id: 'qiqirn-merchant-loot',
+        label: 'Loot',
+        cost: { manaLabel: '1', tap: true },
+        effects: [{ type: 'loot', drawCount: 1, discardCount: 1 }],
+        effectText: 'Draw a card, then discard a card.',
+      },
+      {
+        id: 'qiqirn-merchant-draw-three',
+        label: 'Draw Three',
+        cost: { manaLabel: '7', tap: true, sacrificeSelf: true },
+        effects: [{ type: 'loot', drawCount: 3, discardCount: 0 }],
+        effectText: 'Draw three cards.',
+      },
+    ],
   },
   {
     id: 'queen-brahne',
@@ -2415,7 +2544,9 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 1,
     text: "Prowess (Whenever you cast a noncreature spell, this creature gets +1/+1 until end of turn.) \n " +
       "Whenever Queen Brahne attacks, create a 0/1 black Wizard creature token with “Whenever you cast a noncreature spell, this token deals 1 damage to each opponent.”",
-    imagePath: '/assets/cards/queen-brahne.webp'
+    imagePath: '/assets/cards/queen-brahne.webp',
+    noncreatureCastTrigger: { pumpSelf: { power: 1, toughness: 1 } },
+    onAttack: [{ type: 'createToken', tokenId: 'token-wizard', tapped: true }],
   },
   {
     id: 'quina-qu-gourmet',
@@ -2427,7 +2558,12 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 3,
     text: 'If one or more tokens would be created under your control, those tokens plus a 1/1 green Frog creature token are created instead. \n' +
       "2, Sacrifice a Frog: Put a +1/+1 counter on Quina.",
-    imagePath: '/assets/cards/quina-qu-gourmet.webp'
+    imagePath: '/assets/cards/quina-qu-gourmet.webp',
+    // Deferred - the "whenever a token would be created, also create a
+    // Frog" clause is a replacement effect on every CreateTokenEffect in the
+    // game, which no general replacement-effect system exists to implement.
+    // The Frog-sacrifice ability alone (without its trigger source) wouldn't
+    // be worth wiring in isolation.
   },
   {
     id: 'quistis-trepe',
@@ -2439,7 +2575,10 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 2,
     text: "Blue Magic — When Quistis Trepe enters, you may cast target instant or sorcery card from a graveyard, " +
       "and mana of any type can be spent to cast that spell. If that spell would be put into a graveyard, exile it instead.",
-    imagePath: '/assets/cards/quistis-trepe.webp'
+    imagePath: '/assets/cards/quistis-trepe.webp',
+    // Deferred - no mechanism casts an arbitrary targeted instant/sorcery
+    // from a graveyard for free-form mana (this engine has no stack/cast
+    // simulation reusable outside the normal hand-casting flow).
   },
   {
     id: 'qutrub-forayer',
@@ -2451,7 +2590,12 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'When this creature enters, choose one — \n' +
       '• Destroy target creature that was dealt damage this turn. \n' +
       '• Exile up to two target cards from a single graveyard.',
-    imagePath: '/assets/cards/qutrub-forayer.webp'
+    imagePath: '/assets/cards/qutrub-forayer.webp',
+    // Only mode 1 is implemented - mode 2 ("exile up to two target cards
+    // from a single graveyard") is deferred (no multi-select
+    // graveyard-targeting mechanism exists), and there's no choose-a-mode UI
+    // for onEnter anyway (see phoenix-down for the same modal gap).
+    onEnter: [{ type: 'destroyTarget', targetFilter: 'creatureWithDamageMarked' }],
   },
   {
     id: 'rabanastre-royal-city',
@@ -2472,7 +2616,8 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 6,
     text: 'Reach, vigilance, menace, trample, haste \n ' +
       'When Ragnarok dies, destroy target permanent and return target nonlegendary permanent card from your graveyard to the battlefield.',
-    imagePath: '/assets/cards/ragnarok-divine-deliverance.webp'
+    imagePath: '/assets/cards/ragnarok-divine-deliverance.webp',
+    onDeath: [{ type: 'destroyTarget', targetFilter: 'anyPermanent' }, { type: 'reanimateTargetFromGraveyard', nonlegendaryPermanentInsteadOfCreature: true }],
   },
   {
     id: 'random-encounter',
@@ -2482,7 +2627,12 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'Shuffle your library, then mill four cards. Put each creature card milled this way onto the battlefield. ' +
       'They gain haste. At the beginning of the next end step, return those creatures to their owner\u2019s hand.\n' +
       'Flashback 6RR',
-    imagePath: '/assets/cards/random-encounter.webp'
+    imagePath: '/assets/cards/random-encounter.webp',
+    // Deferred - "mill four, put creature cards milled onto the battlefield"
+    // needs a mill-then-put-onto-battlefield effect this engine doesn't have
+    // (MillThenReturnEffect only ever mills to the graveyard), and "at the
+    // beginning of the next end step, return them" needs a delayed
+    // end-of-turn trigger queue that doesn't exist either.
   },
   {
     id: 'raubahn-bull-of-ala-mhigo',
@@ -2493,7 +2643,12 @@ export const CARD_POOL: CardDefinition[] = [
     power: 2,
     toughness: 2,
     text: 'Ward—Pay life equal to Raubahn\u2019s power.\n Whenever Raubahn attacks, attach up to one target Equipment you control to target attacking creature.',
-    imagePath: '/assets/cards/raubahn-bull-of-ala-mhigo.webp'
+    imagePath: '/assets/cards/raubahn-bull-of-ala-mhigo.webp',
+    // Deferred - Ward isn't a mechanic this engine implements at all (no
+    // targeting-cost concept), and the attack-trigger "attach up to one
+    // target Equipment to target attacking creature" needs a two-target
+    // (Equipment + creature) attach effect that doesn't exist (the existing
+    // attach effects are all single-target, source-attaches-to-target).
   },
   {
     id: 'reach-the-horizon',
@@ -2530,7 +2685,11 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'This creature can\u2019t be blocked except by three or more creatures. \n' +
       "8: Return this card from your graveyard to the battlefield tapped with a finality counter on it. " +
       "(If a creature with a finality counter on it would die, exile it instead.)",
-    imagePath: '/assets/cards/relentless-x-atm092.webp'
+    imagePath: '/assets/cards/relentless-x-atm092.webp',
+    // Deferred - "can't be blocked except by three or more creatures" needs
+    // a numeric block-threshold beyond menace's fixed two, and the
+    // graveyard-activated ability needs abilities activatable from the
+    // graveyard zone, neither of which this engine supports.
   },
   {
     id: 'relm-s-sketching',
@@ -2538,7 +2697,8 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: '2UU',
     type: 'sorcery',
     text: "Create a token that\u2019s a copy of target artifact, creature, or land.",
-    imagePath: '/assets/cards/relm-s-sketching.webp'
+    imagePath: '/assets/cards/relm-s-sketching.webp',
+    onCast: [{ type: 'createTokenCopyOfTarget' }],
   },
   {
     id: 'reno-and-rude',
@@ -2550,7 +2710,11 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 1,
     text: "Menace \n Whenever Reno and Rude deals combat damage to a player, exile the top card of that player\u2019s library. " +
       "Then you may sacrifice another creature or artifact. If you do, you may play the exiled card this turn, and mana of any type can be spent to cast it.",
-    imagePath: '/assets/cards/reno-and-rude.webp'
+    imagePath: '/assets/cards/reno-and-rude.webp',
+    // Deferred - "exile the top card, then you may sacrifice X, if you do
+    // you may play the exiled card this turn with any mana" chains an
+    // optional sacrifice-for-benefit onto an impulse-draw-style temporary
+    // play window, neither of which this engine has a mechanism for.
   },
   {
     id: 'resentful-revelation',
@@ -2559,7 +2723,9 @@ export const CARD_POOL: CardDefinition[] = [
     type: 'sorcery',
     text: 'Look at the top three cards of your library. Put one of them into your hand and the rest into your graveyard. \n' +
       'Flashback 6B',
-    imagePath: '/assets/cards/resentful-revelation.webp'
+    imagePath: '/assets/cards/resentful-revelation.webp',
+    onCast: [{ type: 'revealFiltered', count: 3, filterType: ['creature', 'instant', 'sorcery', 'land', 'artifact', 'enchantment'], restDestination: 'graveyard' }],
+    flashback: { cost: '6B' },
   },
   {
     id: 'restoration-magic',
@@ -2569,7 +2735,9 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'Tiered (Choose one additional cost.) \n• Cure — 0 — Target permanent gains hexproof and indestructible until end of turn.\n' +
       "• Cura — 1 — Target permanent gains hexproof and indestructible until end of turn. You gain 3 life.\n" +
       "• Curaga — 3W — Permanents you control gain hexproof and indestructible until end of turn. You gain 6 life.",
-    imagePath: '/assets/cards/restoration-magic.webp'
+    imagePath: '/assets/cards/restoration-magic.webp',
+    // Deferred - Tiered (choose one additional cost) is an established gap
+    // (no tiered/kicker cost mechanism exists).
   },
   {
     id: 'retrieve-the-esper',
@@ -2577,7 +2745,12 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: '3U',
     type: 'sorcery',
     text: 'Create a 3/3 blue Robot Warrior artifact creature token. Then if this spell was cast from a graveyard, put two +1/+1 counters on that token. \nFlashback 5U',
-    imagePath: '/assets/cards/retrieve-the-esper.webp'
+    imagePath: '/assets/cards/retrieve-the-esper.webp',
+    onCast: [{ type: 'createToken', tokenId: 'token-robot-warrior' }],
+    flashback: { cost: '5U' },
+    // The flashback-conditional "+2 counters if cast from a graveyard" bonus
+    // is deferred - onCast has no way to know whether it's resolving as a
+    // normal cast or a flashback cast (same gap as Nibelheim Aflame).
   },
   {
     id: 'ride-the-shoopuf',
@@ -2586,7 +2759,11 @@ export const CARD_POOL: CardDefinition[] = [
     type: 'enchantment',
     text: 'Landfall — Whenever a land you control enters, put a +1/+1 counter on target creature you control. \n' +
       "5GG: This enchantment becomes a 7/7 Beast creature in addition to its other types.",
-    imagePath: '/assets/cards/ride-the-shoopuf.webp'
+    imagePath: '/assets/cards/ride-the-shoopuf.webp',
+    landfall: { putCounterOnTargetOwnCreature: { counterLabel: '+1/+1', counterAmount: 1 } },
+    // "5GG: becomes a 7/7 Beast creature" is deferred - unlike
+    // BecomeCreatureUntilEndOfTurnEffect (temporary), this is PERMANENT with
+    // a fixed base power/toughness, which no existing mechanism models.
   },
   {
     id: 'ring-of-the-lucii',
@@ -2594,7 +2771,19 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: '4',
     type: 'artifact',
     text: 'T: Add MM. \n2, Tap, Pay 1 life: Tap target nonland permanent.',
-    imagePath: '/assets/cards/ring-of-the-lucii.webp'
+    imagePath: '/assets/cards/ring-of-the-lucii.webp',
+    // "T: Add MM" (two generic mana from one tap) is deferred - this
+    // engine's lands/mana rocks always produce exactly one mana per tap
+    // (CardDefinition.producesMana has no "amount" concept).
+    abilities: [
+      {
+        id: 'ring-of-the-lucii-tap',
+        label: 'Tap',
+        cost: { manaLabel: '2', tap: true, payLife: 1 },
+        effects: [{ type: 'tapTarget', targetFilter: 'nonlandPermanent' }],
+        effectText: 'Tap target nonland permanent.',
+      },
+    ],
   },
   {
     id: 'rinoa-heartilly',
@@ -2606,7 +2795,12 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 4,
     text: 'When Rinoa Heartilly enters, create Angelo, a legendary 1/1 green and white Dog creature token. \n' +
       'Angelo Cannon — Whenever Rinoa Heartilly attacks, another target creature you control gets +1/+1 until end of turn for each creature you control.',
-    imagePath: '/assets/cards/rinoa-heartilly.webp'
+    imagePath: '/assets/cards/rinoa-heartilly.webp',
+    onEnter: [{ type: 'createToken', tokenId: 'token-angelo' }],
+    // Angelo Cannon's dynamic per-creature-count scaling on ANOTHER target
+    // creature is deferred - PumpAnotherControlledCreatureEffect only
+    // supports a fixed amount, and this needs a live count read at
+    // resolution time instead.
   },
   {
     id: 'rook-turret',
@@ -2617,7 +2811,10 @@ export const CARD_POOL: CardDefinition[] = [
     power: 3,
     toughness: 3,
     text: 'Flying \nWhenever another artifact you control enters, you may draw a card. If you do, discard a card.',
-    imagePath: '/assets/cards/rook-turret.webp'
+    imagePath: '/assets/cards/rook-turret.webp',
+    // The optional "may draw, then discard" trigger is deferred - this
+    // engine's LootEffect draw is always mandatory (same gap as
+    // Adventurer's Airship).
   },
   {
     id: 'rosa-resolute-white-mage',
@@ -2629,7 +2826,8 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 3,
     text: 'Reach \nAt the beginning of combat on your turn, put a +1/+1 counter on target creature you control. ' +
       'It gains lifelink until end of turn. (Damage dealt by the creature also causes you to gain that much life.)',
-    imagePath: '/assets/cards/rosa-resolute-white-mage.webp'
+    imagePath: '/assets/cards/rosa-resolute-white-mage.webp',
+    onOwnCombatBegin: [{ type: 'putCounterOnUpToOneOwnCreature', counterLabel: '+1/+1', counterAmount: 1, grantKeyword: 'lifelink' }],
   },
   {
     id: 'rufus-shinra',
@@ -2640,7 +2838,8 @@ export const CARD_POOL: CardDefinition[] = [
     power: 2,
     toughness: 4,
     text: 'Whenever Rufus Shinra attacks, if you don’t control a creature named Darkstar, create Darkstar, a legendary 2/2 white and black Dog creature token.',
-    imagePath: '/assets/cards/rufus-shinra.webp'
+    imagePath: '/assets/cards/rufus-shinra.webp',
+    onAttack: [{ type: 'createTokenIfNotControllingNamed', tokenId: 'token-darkstar', name: 'Darkstar' }],
   },
   {
     id: 'rydia-s-return',
@@ -2648,7 +2847,16 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: '3GG',
     type: 'sorcery',
     text: 'Choose one — \n• Creatures you control get +3/+3 until end of turn.\n• Return up to two target permanent cards from your graveyard to your hand.',
-    imagePath: '/assets/cards/rydia-s-return.webp'
+    imagePath: '/assets/cards/rydia-s-return.webp',
+    onCast: [
+      {
+        type: 'chooseOneMode',
+        modes: [
+          { label: 'Creatures you control get +3/+3 until end of turn.', effects: [{ type: 'buffOtherCreaturesYouControl', power: 3, toughness: 3 }] },
+          { label: 'Return up to two target permanent cards from your graveyard to your hand.', effects: [{ type: 'returnCreaturesFromGraveyardToHand', count: 2, anyPermanentInsteadOfCreature: true }] },
+        ],
+      },
+    ],
   },
   {
     id: 'rydia-summoner-of-mist',
@@ -2661,7 +2869,12 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'Landfall — Whenever a land you control enters, you may discard a card. If you do, draw a card.\n' +
       'Summon — {X}, {T}: Return target Saga card with mana value X from your graveyard to the battlefield with ' +
       'a finality counter on it. It gains haste until end of turn. Activate only as a sorcery.',
-    imagePath: '/assets/cards/rydia-summoner-of-mist.webp'
+    imagePath: '/assets/cards/rydia-summoner-of-mist.webp',
+    // Both deferred - the landfall is an optional cost-conditioned rummage
+    // (same "may X, if you do Y" gap as Rook Turret), and the Summon
+    // ability needs an {X} cost on an ACTIVATED ability (only CAST_CARD/
+    // CAST_FROM_GRAVEYARD support chosenX) plus a "mana value exactly X,
+    // and must be a Saga" reanimate filter, neither of which exist.
   },
   {
     id: 'sabotender',
@@ -2671,7 +2884,8 @@ export const CARD_POOL: CardDefinition[] = [
     power: 2,
     toughness: 1,
     text: 'Reach \nLandfall — Whenever a land you control enters, this creature deals 1 damage to each opponent.',
-    imagePath: '/assets/cards/sabotender.webp'
+    imagePath: '/assets/cards/sabotender.webp',
+    landfall: { damageEachOpponent: 1 },
   },
   {
     id: 'sage-s-nouliths',
@@ -2698,7 +2912,8 @@ export const CARD_POOL: CardDefinition[] = [
     power: 1,
     toughness: 3,
     text: 'Whenever you cast a noncreature spell, if at least four mana was spent to cast it, put a +1/+1 counter on this creature and it can\u2019t be blocked this turn.',
-    imagePath: '/assets/cards/sahagin.webp'
+    imagePath: '/assets/cards/sahagin.webp',
+    noncreatureCastTrigger: { counterIfExpensive: { minManaValue: 4, counterLabel: '+1/+1', counterAmount: 1, grantKeyword: 'unblockable' } },
   },
   {
     id: 'samurai-s-katana',
@@ -2726,7 +2941,11 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 4,
     text: 'Haste \n' +
       'When this creature enters, destroy target land. Its controller may search their library for a basic land card, put it onto the battlefield tapped, then shuffle.',
-    imagePath: '/assets/cards/sandworm.webp'
+    imagePath: '/assets/cards/sandworm.webp',
+    onEnter: [{ type: 'destroyTarget', targetFilter: 'land' }],
+    // The destroyed land's controller's optional replacement search is
+    // deferred - no mechanism links a follow-up effect to "whoever just lost
+    // the thing that was destroyed".
   },
   {
     id: 'sazh-katzroy',
@@ -2738,7 +2957,11 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 3,
     text: 'When Sazh Katzroy enters, you may search your library for a Bird or basic land card, reveal it, put it into your hand, then shuffle.\n' +
       'Whenever Sazh Katzroy attacks, put a +1/+1 counter on target creature, then double the number of +1/+1 counters on that creature.',
-    imagePath: '/assets/cards/sazh-katzroy.webp'
+    imagePath: '/assets/cards/sazh-katzroy.webp',
+    // Both deferred - the ETB tutor needs an "OR" search (subtype Bird OR
+    // basic land type), unlike SearchLibraryForLandEffect's single exact
+    // name; the attack trigger needs a counter-doubling mechanism, neither
+    // of which exists.
   },
   {
     id: 'sazh-s-chocobo',
@@ -2775,7 +2998,12 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'Whenever a creature you control attacks alone, it gains double strike until end of turn. \n' +
       'Fire Cross — Whenever Seifer Almasy deals combat damage to a player, you may cast target instant or ' +
       'sorcery card with mana value 3 or less from your graveyard without paying its mana cost. If that spell would be put into your graveyard, exile it instead.',
-    imagePath: '/assets/cards/seifer-almasy.webp'
+    imagePath: '/assets/cards/seifer-almasy.webp',
+    attacksAloneGrantsKeyword: 'double strike',
+    // Fire Cross is deferred - no mechanism casts an arbitrary targeted
+    // instant/sorcery from a graveyard for free (this engine has no
+    // stack/cast simulation reusable outside the normal hand-casting flow;
+    // same gap as Quistis Trepe).
   },
   {
     id: 'self-destruct',
@@ -2783,7 +3011,10 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: '1R',
     type: 'instant',
     text: 'Target creature you control deals X damage to any other target and X damage to itself, where X is its power.',
-    imagePath: '/assets/cards/self-destruct.webp'
+    imagePath: '/assets/cards/self-destruct.webp',
+    // Deferred - "any other target" means a creature OR a player, and this
+    // engine has no single targeting effect that spans both permanents and
+    // players (pendingPlayerTarget only exists for DrawCardsFromTargetPlayerEffect).
   },
   {
     id: 'sephiroth-fabled-soldier',
@@ -2797,6 +3028,10 @@ export const CARD_POOL: CardDefinition[] = [
       'Whenever another creature dies, target opponent loses 1 life and you gain 1 life. If this is the fourth time this ability has resolved this turn, transform Sephiroth.',
     imagePath: '/assets/cards/sephiroth-fabled-soldier.webp',
     transformsInto: 'sephiroth-one-winged-angel',
+    // Both abilities deferred - the enters-or-attacks sacrifice-for-a-card
+    // is the established "may sacrifice X, if you do Y" gap, and the
+    // death-drain-with-a-per-turn-resolution-counter-that-transforms is a
+    // one-off tracking mechanism this engine doesn't have.
   },
   {
     id: 'sephiroth-one-winged-angel',
@@ -2809,7 +3044,10 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'Super Nova — As this creature transforms into Sephiroth, One-Winged Angel, you get an emblem with "Whenever a creature dies, ' +
       'target opponent loses 1 life and you gain 1 life."\n' +
       'Whenever Sephiroth attacks, you may sacrifice any number of other creatures. If you do, draw that many cards.',
-    imagePath: '/assets/cards/sephiroth-one-winged-angel.webp'
+    imagePath: '/assets/cards/sephiroth-one-winged-angel.webp',
+    // Both deferred - emblems are an established gap (no emblem system),
+    // and "sacrifice any number of other creatures, draw that many" needs a
+    // general "any number of X" multi-select mechanism that doesn't exist.
   },
   {
     id: 'sephiroth-planet-s-heir',
@@ -2822,7 +3060,11 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'Vigilance (Attacking doesn\u2019t cause this creature to tap.) \n' +
       'When Sephiroth enters, creatures your opponents control get -2/-2 until end of turn. \n' +
       'Whenever a creature an opponent controls dies, put a +1/+1 counter on Sephiroth.',
-    imagePath: '/assets/cards/sephiroth-planet-s-heir.webp'
+    imagePath: '/assets/cards/sephiroth-planet-s-heir.webp',
+    onEnter: [{ type: 'debuffOpponentCreatures', power: -2, toughness: -2 }],
+    // "Whenever a creature an opponent controls dies, put a counter on
+    // Sephiroth" is deferred - onAnyDeathCounterSelf/onAnyDeathDrain only
+    // watch the CONTROLLER's own creatures dying, not an opponent's.
   },
   {
     id: 'sephiroth-s-intervention',
@@ -2830,7 +3072,8 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: '3B',
     type: 'instant',
     text: 'Destroy target creature. You gain 2 life.',
-    imagePath: '/assets/cards/sephiroth-s-intervention.webp'
+    imagePath: '/assets/cards/sephiroth-s-intervention.webp',
+    onCast: [{ type: 'destroyTarget', targetFilter: 'creature' }, { type: 'gainLife', amount: 2 }],
   },
   {
     id: 'serah-farron',
@@ -2843,7 +3086,13 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'The first legendary creature spell you cast each turn costs 2 less to cast. \n' +
       'At the beginning of combat on your turn, if you control two or more other legendary creatures, you may transform Serah Farron.',
     imagePath: '/assets/cards/serah-farron.webp',
-    transformsInto: 'crystallized-serah'
+    transformsInto: 'crystallized-serah',
+    // Both deferred - "first legendary creature spell each turn costs 2
+    // less" is an established cost-reduction gap (only
+    // costReductionPerGraveyardPermanent-style scaling exists, no
+    // once-per-turn/first-spell tracking), and the transform condition
+    // ("control two or more other legendary creatures") would need its own
+    // onOwnCombatBegin check even if the cost reduction were implemented.
   },
   {
     id: 'crystallized-serah',
@@ -2853,7 +3102,12 @@ export const CARD_POOL: CardDefinition[] = [
     subtype: 'Legendary Artifact',
     text: 'The first legendary creature spell you cast each turn costs 2 less to cast. \n' +
       'Legendary creatures you control get +2/+2.',
-    imagePath: '/assets/cards/crystallized-serah.webp'
+    imagePath: '/assets/cards/crystallized-serah.webp',
+    // Both deferred - the cost reduction (see above) and the static
+    // per-subtype anthem ("Legendary creatures you control get +2/+2") are
+    // both established gaps (no anthem-style effect exists, only
+    // controlledTypeCountBuff, which buffs the SOURCE only, not every
+    // controlled creature of a subtype).
   },
   {
     id: 'seymour-flux',
@@ -2864,7 +3118,10 @@ export const CARD_POOL: CardDefinition[] = [
     power: 5,
     toughness: 5,
     text: 'At the beginning of your upkeep, you may pay 1 life. If you do, draw a card and put a +1/+1 counter on Seymour Flux.',
-    imagePath: '/assets/cards/seymour-flux.webp'
+    imagePath: '/assets/cards/seymour-flux.webp',
+    // Deferred - "you may pay 1 life, if you do..." is the established
+    // optional-cost-for-benefit gap (same as Rook Turret's "may draw, then
+    // discard").
   },
   {
     id: 'shambling-cie-th',
@@ -2877,6 +3134,8 @@ export const CARD_POOL: CardDefinition[] = [
       'Whenever you cast a noncreature spell, you may pay B. If you do, return this card from your graveyard to your hand.',
     imagePath: '/assets/cards/shambling-cie-th.webp',
     entersTapped: true,
+    // The graveyard-recursion trigger is deferred - another instance of the
+    // established optional-cost-for-benefit gap.
   },
   {
     id: 'shantotto-tactician-magician',
@@ -2887,7 +3146,8 @@ export const CARD_POOL: CardDefinition[] = [
     power: 0,
     toughness: 4,
     text: 'Whenever you cast a noncreature spell, Shantotto gets +X/+0 until end of turn, where X is the amount of mana spent to cast that spell. If X is 4 or more, draw a card.',
-    imagePath: '/assets/cards/shantotto-tactician-magician.webp'
+    imagePath: '/assets/cards/shantotto-tactician-magician.webp',
+    noncreatureCastTrigger: { pumpSelfByManaSpent: { drawIfAtLeast: 4 } },
   },
   {
     id: 'sharlayan-nation-of-scholars',
@@ -2907,7 +3167,8 @@ export const CARD_POOL: CardDefinition[] = [
     power: 2,
     toughness: 3,
     text: 'When this creature enters, mill three cards and you gain 3 life.',
-    imagePath: '/assets/cards/shinra-reinforcements.webp'
+    imagePath: '/assets/cards/shinra-reinforcements.webp',
+    onEnter: [{ type: 'millSelf', count: 3 }, { type: 'gainLife', amount: 3 }],
   },
   {
     id: 'sidequest-card-collection',
@@ -2916,7 +3177,11 @@ export const CARD_POOL: CardDefinition[] = [
     type: 'enchantment',
     text: 'When this enchantment enters, draw three cards, then discard two cards. \n' +
       'At the beginning of your end step, if eight or more cards are in your graveyard, transform this enchantment.',
-    imagePath: '/assets/cards/sidequest-card-collection.webp'
+    imagePath: '/assets/cards/sidequest-card-collection.webp',
+    onEnter: [{ type: 'loot', drawCount: 3, discardCount: 2 }],
+    // The transform trigger is deferred - this card has no printed back
+    // face/transformsInto target defined anywhere in this set, so there's
+    // nothing for transformSelfIfGraveyardSizeAtLeast to point to.
   },
   {
     id: 'sidequest-catch-a-fish',
@@ -2926,7 +3191,11 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'At the beginning of your upkeep, look at the top card of your library. If it\u2019s an artifact or creature card, ' +
       'you may reveal it and put it into your hand. If you put a card into your hand this way, create a Food token and transform this enchantment.',
     imagePath: '/assets/cards/sidequest-catch-a-fish.webp',
-    transformsInto: 'cooking-campsite'
+    transformsInto: 'cooking-campsite',
+    // Deferred - "look at the top card, if it's an artifact/creature you may
+    // reveal and put it into hand" is a conditional-optional library peek
+    // this engine has no mechanism for, and the Food token + transform are
+    // both gated on that same optional pick actually happening.
   },
   {
     id: 'cooking-campsite',
@@ -2936,7 +3205,21 @@ export const CARD_POOL: CardDefinition[] = [
     text: ': Add W. \n ' +
       '3, Tap, Sacrifice an artifact: Put a +1/+1 counter on each creature you control. Activate only as a sorcery.',
     imagePath: '/assets/cards/cooking-campsite.webp',
-    producesMana: 'W'
+    producesMana: 'W',
+    // Implemented fully even though the front face's transform trigger that
+    // would reach this card is deferred (see sidequest-catch-a-fish) -
+    // matches this session's convention of keeping back faces functional
+    // regardless of front-face reachability.
+    abilities: [
+      {
+        id: 'cooking-campsite-counters',
+        label: 'Cook',
+        cost: { manaLabel: '3', tap: true, sacrificeAnother: 'artifact' },
+        onlyDuringOwnMainPhase: true,
+        effects: [{ type: 'buffOtherCreaturesYouControl', counterLabel: '+1/+1', counterAmount: 1 }],
+        effectText: 'Put a +1/+1 counter on each creature you control.',
+      },
+    ],
   },
   {
     id: 'sidequest-hunt-the-mark',
@@ -2947,7 +3230,11 @@ export const CARD_POOL: CardDefinition[] = [
       'At the beginning of your end step, if a creature died under an opponent\u2019s control this turn, ' +
       'create a Treasure token. Then if you control three or more Treasures, transform this enchantment.',
     imagePath: '/assets/cards/sidequest-hunt-the-mark.webp',
-    transformsInto: 'yiazmat-ultimate-mark'
+    transformsInto: 'yiazmat-ultimate-mark',
+    onEnter: [{ type: 'destroyTarget', targetFilter: 'creature', optional: true }],
+    // The end-step Treasure-creation/transform chain is deferred - "a
+    // creature died under an OPPONENT's control this turn" isn't tracked
+    // (creaturesDiedThisTurn is a single global counter, not per-controller).
   },
   {
     id: 'yiazmat-ultimate-mark',
@@ -2956,7 +3243,18 @@ export const CARD_POOL: CardDefinition[] = [
     type: 'creature',
     subtype: 'Legendary Creature Dragon',
     text: '1B, Sacrifice another creature or artifact: Yiazmat gains indestructible until end of turn. Tap it.',
-    imagePath: '/assets/cards/yiazmat-ultimate-mark.webp'
+    imagePath: '/assets/cards/yiazmat-ultimate-mark.webp',
+    // Implemented fully even though the front face's transform trigger that
+    // would reach this card is deferred (see sidequest-hunt-the-mark).
+    abilities: [
+      {
+        id: 'yiazmat-ultimate-mark-activate',
+        label: 'Activate',
+        cost: { manaLabel: '1B', sacrificeAnother: 'artifactOrCreature' },
+        effects: [{ type: 'pumpSelf', power: 0, toughness: 0, grantKeyword: 'indestructible', tapSelf: true }],
+        effectText: 'Yiazmat gains indestructible until end of turn. Tap it.',
+      },
+    ],
   },
   {
     id: 'sidequest-play-blitzball',
@@ -2966,7 +3264,15 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'At the beginning of combat on your turn, target creature you control gets +2/+0 until end of turn.\n' +
       'At the end of combat on your turn, if a player was dealt 6 or more combat damage this turn, transform this enchantment, then attach it to a creature you control.',
     imagePath: '/assets/cards/sidequest-play-blitzball.webp',
-    transformsInto: 'world-champion-celestial-weapon'
+    transformsInto: 'world-champion-celestial-weapon',
+    onOwnCombatBegin: [{ type: 'pumpAnotherControlledCreature', power: 2, toughness: 0 }],
+    // "target creature you control" is approximated via
+    // PumpAnotherControlledCreatureEffect (excludes the source, which isn't
+    // a creature anyway, so this is effectively "any creature you control").
+    // The end-of-combat transform-then-attach chain is deferred - there's no
+    // "end of combat" trigger phase hook, no combat-damage-dealt-this-turn
+    // tracking, and no "transform, then immediately attach the new face"
+    // mechanism.
   },
   {
     id: 'world-champion-celestial-weapon',
@@ -2990,6 +3296,7 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'When this enchantment enters, create a 2/2 green Bird creature token with “Whenever a land you control enters, this token gets +1/+0 until end of turn.”\n' +
       'At the beginning of your first main phase, if you control four or more Birds, transform this enchantment.',
     onEnter: [{ type: 'createToken', tokenId: 'token-bird' }],
+    onOwnFirstMainPhase: [{ type: 'transformSelfIfControlledSubtypeCountAtLeast', subtype: 'Bird', minCount: 4 }],
     imagePath: '/assets/cards/sidequest-raise-a-chocobo.webp',
     transformsInto: 'black-chocobo'
   },
@@ -3002,7 +3309,12 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 2,
     text: 'When this permanent transforms into Black Chocobo, search your library for a land card, put it onto the battlefield tapped, then shuffle.\n' +
       'Landfall — Whenever a land you control enters, Birds you control get +1/+0 until end of turn.',
-    imagePath: '/assets/cards/black-chocobo.webp'
+    imagePath: '/assets/cards/black-chocobo.webp',
+    landfall: { pumpControlledSubtype: { subtype: 'Bird', power: 1, toughness: 0 } },
+    // The transform-trigger "search your library for a land card" is
+    // deferred - every search effect in this engine targets an exact card
+    // name (or a fixed basic-land-type list), and there's no "any land,
+    // no name restriction" search variant.
   },
   {
     id: 'sin-spira-s-punishment',
@@ -3025,7 +3337,8 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: '1W',
     type: 'instant',
     text: 'Slash of Light deals damage equal to the number of creatures you control plus the number of Equipment you control to target creature.',
-    imagePath: '/assets/cards/slash-of-light.webp'
+    imagePath: '/assets/cards/slash-of-light.webp',
+    onCast: [{ type: 'damageTargetCreatureEqualToCreaturesAndEquipment' }],
   },
   {
     id: 'sleep-magic',
@@ -3036,7 +3349,12 @@ export const CARD_POOL: CardDefinition[] = [
       'When this Aura enters, tap enchanted creature. \n' +
       'Enchanted creature doesn\u2019t untap during its controller\u2019s untap step.\n' +
       'When enchanted creature is dealt damage, sacrifice this Aura.',
-    imagePath: '/assets/cards/sleep-magic.webp'
+    imagePath: '/assets/cards/sleep-magic.webp',
+    onCast: [{ type: 'attachSelfToTarget', allowAnyController: true, tapTarget: true }],
+    attachedPreventsUntap: true,
+    // "When enchanted creature is dealt damage, sacrifice this Aura" is
+    // deferred - no cross-cutting hook watches every damage-dealing code
+    // path (combat AND effect damage) for a single-card trigger like this.
   },
   {
     id: 'snow-villiers',
@@ -3045,7 +3363,9 @@ export const CARD_POOL: CardDefinition[] = [
     type: 'creature',
     subtype: 'Legendary Creature Human Rebel Monk',
     text: 'Vigilance \nSnow Villiers\u2019s power is equal to the number of creatures you control.',
-    imagePath: '/assets/cards/snow-villiers.webp'
+    imagePath: '/assets/cards/snow-villiers.webp',
+    // Deferred - dynamic "base power = count of creatures you control" is an
+    // established gap (no such base-stat-override mechanism exists).
   },
   {
     id: 'sorceress-s-schemes',
@@ -3054,7 +3374,12 @@ export const CARD_POOL: CardDefinition[] = [
     type: 'sorcery',
     text: 'Return target instant or sorcery card from your graveyard or exiled card with flashback you own to your hand. Add R. \n' +
       'Flashback 4R',
-    imagePath: '/assets/cards/sorceress-s-schemes.webp'
+    imagePath: '/assets/cards/sorceress-s-schemes.webp',
+    // Deferred - no targeted "return card from graveyard to hand" effect
+    // exists for instants/sorceries specifically (only the creature-only
+    // ReturnCreaturesFromGraveyardToHandEffect does), and the "or exiled
+    // card with flashback" alternate source is an even narrower edge case
+    // this engine doesn't track at all.
   },
   {
     id: 'squall-seed-mercenary',
@@ -3064,7 +3389,11 @@ export const CARD_POOL: CardDefinition[] = [
     subtype: 'Legendary Creature Human Knight Mercenary',
     text: 'Rough Divide — Whenever a creature you control attacks alone, it gains double strike until end of turn. \n' +
       'Whenever Squall deals combat damage to a player, return target permanent card with mana value 3 or less from your graveyard to the battlefield.',
-    imagePath: '/assets/cards/squall-seed-mercenary.webp'
+    imagePath: '/assets/cards/squall-seed-mercenary.webp',
+    attacksAloneGrantsKeyword: 'double strike',
+    onCombatDamageToPlayer: [{ type: 'reanimateTargetFromGraveyard', maxManaValue: 3, nonlegendaryPermanentInsteadOfCreature: true }],
+    // onCombatDamageToPlayer approximates "deals combat damage to a player"
+    // as "is unblocked" - see engine/actions.ts: applyCombatDamageToPlayerTriggers.
   },
   {
     id: 'starting-town',
@@ -3075,7 +3404,12 @@ export const CARD_POOL: CardDefinition[] = [
       'Tap: Add C. \n' +
       'Tap, Pay 1 life: Add one mana of any color.',
     imagePath: '/assets/cards/starting-town.webp',
-    producesMana: 'C'
+    producesMana: 'C',
+    // Both deferred - the conditional-entersTapped (based on turn number) and
+    // the alternate "pay 1 life for any color" mana ability aren't
+    // supported: lands always tap via the single fixed producesMana value,
+    // not the CardAbility system, so there's no way to offer a second,
+    // differently-costed mana option on the same land.
   },
   {
   id: 'stiltzkin-moogle-merchant',
@@ -3087,7 +3421,9 @@ export const CARD_POOL: CardDefinition[] = [
   toughness: 2,
   text: 'Lifelink \n' +
   '2, Tap: Target opponent gains control of another target permanent you control. If they do, you draw a card.',
-  imagePath:'/assets/cards/stiltzkin-moogle-merchant.webp'
+  imagePath:'/assets/cards/stiltzkin-moogle-merchant.webp',
+  // The tap ability is deferred - true control-change is an established gap
+  // (this engine only tracks ownerId, no separate controller concept).
   },
   {
   id: 'stolen-uniform',
@@ -3096,7 +3432,9 @@ export const CARD_POOL: CardDefinition[] = [
   type: 'instant',
   text: 'Choose target creature you control and target Equipment. Gain control of that Equipment until end of turn. ' +
   'Attach it to the chosen creature. When you lose control of that Equipment this turn, if it\u2019s attached to a creature you control, unattach it.',
-  imagePath: '/assets/cards/stolen-uniform.webp'
+  imagePath: '/assets/cards/stolen-uniform.webp',
+  // Deferred - true control-change is an established gap (this engine only
+  // tracks ownerId, no separate controller concept).
   },
   {
   id: 'stuck-in-summoner-s-sanctum',
@@ -3108,7 +3446,10 @@ export const CARD_POOL: CardDefinition[] = [
   'Enchant artifact or creature \n' +
   'When this Aura enters, tap enchanted permanent. \n' +
   'Enchanted permanent doesn\u2019t untap during its controller\u2019s untap step and its activated abilities can\u2019t be activated.',
-  imagePath:'/assets/cards/stuck-in-summoner-s-sanctum.webp'
+  imagePath:'/assets/cards/stuck-in-summoner-s-sanctum.webp',
+  onCast: [{ type: 'attachSelfToTarget', allowAnyController: true, targetTypeFilter: 'artifactOrCreature', tapTarget: true }],
+  attachedPreventsUntap: true,
+  attachedPreventsAbilities: true,
   },
   {
   id: 'summon-anima',
@@ -3165,7 +3506,11 @@ export const CARD_POOL: CardDefinition[] = [
   text: '(As this Saga enters and after your draw step, add a lore counter. Sacrifice after III.) \n' +
   'I — Chain — Exile the top card of your library. During any turn you put a lore counter on this Saga, you may play that card. \n' +
   'II, III — Gestalt Mode — When you next cast a creature spell this turn, it gains haste until end of turn.',
-  imagePath:'/assets/cards/summon-brynhildr.webp'
+  imagePath:'/assets/cards/summon-brynhildr.webp',
+  // Both chapters deferred - chapter I needs a persistent-condition impulse
+  // play window ("during any turn you put a lore counter on this"), and
+  // chapters II/III need a delayed "next spell cast this turn gets X"
+  // trigger - both established gaps.
   },
   {
   id: 'summon-choco-mog',
@@ -3609,7 +3954,19 @@ export const CARD_POOL: CardDefinition[] = [
   text: 'Lands you control enter untapped. \n' +
   'The Minstrel\u2019s Ballad — At the beginning of combat on your turn, if you control five or more Towns, create a 2/2 Elemental creature token thats all colors. \n' +
   '{3}{W}{U}{B}{R}{G}: Other creatures you control get +X/+X until end of turn, where X is the number of Towns you control.',
-  imagePath: '/assets/cards/the-wandering-minstrel.webp'
+  imagePath: '/assets/cards/the-wandering-minstrel.webp',
+  // "Lands you control enter untapped" is deferred - no replacement effect
+  // overrides CardDefinition.entersTapped for a controller's own lands.
+  onOwnCombatBegin: [{ type: 'createTokenIfControlledSubtypeCountAtLeast', subtype: 'Town', minCount: 5, tokenId: 'token-elemental' }],
+  abilities: [
+    {
+      id: 'the-wandering-minstrel-ballad',
+      label: 'Ballad',
+      cost: { manaLabel: '3WUBRG' },
+      effects: [{ type: 'buffOtherCreaturesYouControlByControlledSubtypeCount', subtype: 'Town' }],
+      effectText: 'Other creatures you control get +X/+X until end of turn, where X is the number of Towns you control.',
+    },
+  ],
   },
   {
   id: 'the-water-crystal',
@@ -3620,7 +3977,19 @@ export const CARD_POOL: CardDefinition[] = [
   text: 'Blue spells you cast cost {1} less to cast. \n' +
   'If an opponent would mill one or more cards, they mill that many cards plus four instead. \n' +
   '{4}{U}{U}, {T}: Each opponent mills cards equal to the number of cards in your hand.',
-  imagePath: '/assets/cards/the-water-crystal.webp'
+  imagePath: '/assets/cards/the-water-crystal.webp',
+  // The blue-spell cost reduction and the opponent-mill replacement effect
+  // are both deferred (established gaps: no per-color cost reduction, no
+  // general damage/mill/life-gain replacement effects).
+  abilities: [
+    {
+      id: 'the-water-crystal-mill',
+      label: 'Mill',
+      cost: { manaLabel: '4UU', tap: true },
+      effects: [{ type: 'millEachOpponentByYourHandSize' }],
+      effectText: 'Each opponent mills cards equal to the number of cards in your hand.',
+    },
+  ],
   },
   {
   id: 'the-wind-crystal',
@@ -3631,7 +4000,22 @@ export const CARD_POOL: CardDefinition[] = [
   text: 'White spells you cast cost {1} less to cast. \n' +
   'If you would gain life, you gain twice that much life instead. \n' +
   '{4}{W}{W}, {T}: Creatures you control gain flying and lifelink until end of turn.',
-  imagePath: '/assets/cards/the-wind-crystal.webp'
+  imagePath: '/assets/cards/the-wind-crystal.webp',
+  // The white-spell cost reduction and life-gain doubling are both deferred
+  // (established gaps: no per-color cost reduction, no general life-gain
+  // replacement effect).
+  abilities: [
+    {
+      id: 'the-wind-crystal-empower',
+      label: 'Empower',
+      cost: { manaLabel: '4WW', tap: true },
+      effects: [
+        { type: 'buffOtherCreaturesYouControl', grantKeyword: 'flying' },
+        { type: 'buffOtherCreaturesYouControl', grantKeyword: 'lifelink' },
+      ],
+      effectText: 'Creatures you control gain flying and lifelink until end of turn.',
+    },
+  ],
   },
   {
   id: 'thief-s-knife',
@@ -3659,7 +4043,8 @@ export const CARD_POOL: CardDefinition[] = [
   '• Thunder — {0} — Thunder Magic deals 2 damage to target creature. \n' +
   '• Thundara — {3} — Thunder Magic deals 4 damage to target creature. \n' +
   '• Thundaga — {5}{R} — Thunder Magic deals 8 damage to target creature.',
-  imagePath: '/assets/cards/thunder-magic.webp'
+  imagePath: '/assets/cards/thunder-magic.webp',
+  // Deferred - Tiered (choose one additional cost) is an established gap.
   },
   {
   id: 'tidus-blitzball-star',
@@ -3669,16 +4054,22 @@ export const CARD_POOL: CardDefinition[] = [
   subtype: 'Legendary Creature Human Warrior',
   text: 'Whenever an artifact you control enters, put a +1/+1 counter on Tidus. \n' +
   'Whenever Tidus attacks, tap target creature an opponent controls.',
-  imagePath: '/assets/cards/tidus-blitzball-star.webp'
+  imagePath: '/assets/cards/tidus-blitzball-star.webp',
+  onAnyArtifactEnterTrigger: [{ type: 'putCounterOnSelf', counterLabel: '+1/+1', counterAmount: 1 }],
+  onAttack: [{ type: 'tapAndStun', targetController: 'opponent', targetType: 'creature', noStunCounter: true }],
   },
   {
   id: 'tifa-lockhart',
   name: 'Tifa Lockhart',
   costLabel: '1G',
   type: 'creature',
+  // Was missing power/toughness entirely.
+  power: 2,
+  toughness: 2,
   text: 'Trample \n' +
   'Landfall — Whenever a land you control enters, double Tifa Lockhart\u2019s power until end of turn.',
-  imagePath: '/assets/cards/tifa-lockhart.webp'
+  imagePath: '/assets/cards/tifa-lockhart.webp',
+  landfall: { doubleSelfPowerUntilEndOfTurn: true },
   },
   {
   id: 'tifa-s-limit-break',
@@ -3689,7 +4080,8 @@ export const CARD_POOL: CardDefinition[] = [
   '• Somersault — {0} — Target creature gets +2/+2 until end of turn. \n' +
   '• Meteor Strikes — {2} — Double target creature’s power and toughness until end of turn. \n' +
   '• Final Heaven — {6}{G} — Triple target creature’s power and toughness until end of turn.',
-  imagePath: '/assets/cards/tifa-s-limit-break.webp'
+  imagePath: '/assets/cards/tifa-s-limit-break.webp',
+  // Deferred - Tiered (choose one additional cost) is an established gap.
   },
   {
   id: 'tonberry',
@@ -3697,10 +4089,15 @@ export const CARD_POOL: CardDefinition[] = [
   costLabel: 'B',
   type: 'creature',
   subtype: 'Creature Salamander Horror',
+  // Was missing power/toughness entirely.
+  power: 2,
+  toughness: 2,
   text: 'This creature enters tapped with a stun counter on it. (If it would become untapped, remove a stun counter from it instead.) \n' +
   'Chef\u2019s Knife — During your turn, this creature has first strike and deathtouch.',
   imagePath: '/assets/cards/tonberry.webp',
   entersTapped: true,
+  onEnter: [{ type: 'putCounterOnSelf', counterLabel: 'Stun', counterAmount: 1 }],
+  grantsSelfKeywordDuringOwnTurn: ['first strike', 'deathtouch'],
   },
   {
   id: 'torgal-a-fine-hound',
@@ -3712,7 +4109,12 @@ export const CARD_POOL: CardDefinition[] = [
   toughness: 2,
   text: 'Whenever you cast your first Human creature spell each turn, that creature enters with an additional +1/+1 counter on it for each Dog and/or Wolf you control. \n' +
   '{T}: Add one mana of any color.',
-  imagePath: '/assets/cards/torgal-a-fine-hound.webp'
+  imagePath: '/assets/cards/torgal-a-fine-hound.webp',
+  // The "first Human creature spell each turn enters with additional
+  // counters" trigger is deferred - needs a once-per-turn-per-spell-type
+  // tracker plus modifying the ETB of a DIFFERENT permanent than the one
+  // carrying the trigger, neither of which exists.
+  producesMana: 'any',
   },
   {
   id: 'town-greeter',
@@ -3723,7 +4125,11 @@ export const CARD_POOL: CardDefinition[] = [
   power: 1,
   toughness: 1,
   text: 'When this creature enters, mill four cards. You may put a land card from among them into your hand. If you put a Town card into your hand this way, you gain 2 life',
-  imagePath: '/assets/cards/town-greeter.webp'
+  imagePath: '/assets/cards/town-greeter.webp',
+  // Deferred - needs an optional land-only pick restricted to just the newly
+  // milled batch (unlike millThenReturn, which pulls from the whole
+  // graveyard and isn't land-restricted), plus a subtype-conditional bonus
+  // on top of that pick - no existing effect combines all three.
   },
   {
   id: 'traveling-chocobo',
@@ -3736,7 +4142,10 @@ export const CARD_POOL: CardDefinition[] = [
   text: 'You may look at the top card of your library any time. \n' +
   'You may play lands and cast Bird spells from the top of your library. \n' +
   'If a land or Bird you control entering the battlefield causes a triggered ability of a permanent you control to trigger, that ability triggers an additional time.',
-  imagePath: '/assets/cards/traveling-chocobo.webp'
+  imagePath: '/assets/cards/traveling-chocobo.webp',
+  // Deferred - "play lands and cast spells from the top of your library"
+  // is a persistent play-from-a-zone-other-than-hand mechanic (an
+  // established gap), and the trigger-doubling clause depends on it.
   },
   {
   id: 'travel-the-overworld',
@@ -3745,7 +4154,9 @@ export const CARD_POOL: CardDefinition[] = [
   type: 'sorcery',
   text: 'Affinity for Towns (This spell costs {1} less to cast for each Town you control.) \n' +
   'Draw four cards.',
-  imagePath: '/assets/cards/travel-the-overworld.webp'
+  imagePath: '/assets/cards/travel-the-overworld.webp',
+  costReductionPerControlledSubtype: { subtype: 'Town', amountPerUnit: 1 },
+  onCast: [{ type: 'drawCards', amount: 4 }],
   },
   {
   id: 'treno-dark-city',
@@ -3765,7 +4176,11 @@ export const CARD_POOL: CardDefinition[] = [
   type: 'enchantment',
   text: 'At the beginning of your upkeep, each player exiles the top card of their library. Until end of turn, \n' +
   'you may play the card you own exiled this way and each other card exiled this way with lesser mana value than it without paying their mana costs.',
-  imagePath: '/assets/cards/triple-triad.webp'
+  imagePath: '/assets/cards/triple-triad.webp',
+  // Deferred - simultaneous each-player exile-then-free-cast with a
+  // mana-value comparison across the whole batch is well beyond the
+  // established "play from exile" gap; no mechanism here handles even the
+  // simpler single-player version of this.
   },
   {
     id: 'ultima',
@@ -3774,6 +4189,10 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: '3WW',
     text: 'Destroy all artifacts and creatures. End the turn. (Exile all spells and abilities from the stack, including this card. The player whose turn it is discards down to their maximum hand size. Damage wears off, and “this turn” and “until end of turn” effects end.) “Such devastation … this was not my intention!” —Gaius van Baelsar',
     imagePath: '/assets/cards/ultima.webp',
+    onCast: [{ type: 'destroyAll', targetFilter: 'artifactAndCreature' }],
+    // "End the turn" is deferred - there's no phase-skip/reset-turn effect
+    // (discard to hand size, clear damage/until-end-of-turn effects, and
+    // jump straight to the next player's turn all at once).
   },
   {
   id: 'ultima-origin-of-oblivion',
@@ -3787,7 +4206,12 @@ export const CARD_POOL: CardDefinition[] = [
   'Whenever Ultima attacks, put a blight counter on target land. For as long as that land has a blight counter on it, ' +
   'it loses all land types and abilities and has “{T}: Add {M}.”\n' +
   'Whenever you tap a land for {M}, add an additional {M}.',
-  imagePath: '/assets/cards/ultima-origin-of-oblivion.webp'
+  imagePath: '/assets/cards/ultima-origin-of-oblivion.webp',
+  // Both deferred - "put a blight counter on target land, and for as long as
+  // it has one it loses all abilities and gains a new one" is a persistent
+  // characteristic-changing effect no mechanism supports, and "whenever you
+  // tap a land for mana, add an additional one" needs a mana-doubling hook
+  // this engine's simple per-tap producesMana model doesn't have.
   },
   {
   id: 'ultima-weapon',
@@ -3815,7 +4239,9 @@ export const CARD_POOL: CardDefinition[] = [
   toughness: 4,
   text: 'When Ultimecia enters, tap all creatures your opponents control. \n' +
   'Whenever a creature you control deals combat damage to a player, draw a card.',
-  imagePath: '/assets/cards/ultimecia-temporal-threat.webp'
+  imagePath: '/assets/cards/ultimecia-temporal-threat.webp',
+  onEnter: [{ type: 'tapAllOpponentCreatures' }],
+  onAnyControlledCreatureCombatDamageToPlayer: [{ type: 'drawCards', amount: 1 }],
   },
   {
   id: 'ultimecia-time-sorceress',
@@ -3862,10 +4288,17 @@ export const CARD_POOL: CardDefinition[] = [
   costLabel: '1U',
   type: 'creature',
   subtype: 'Legendary Creature Octopus',
+  // NOTE: this card has no power/toughness in the data at all (pre-existing,
+  // not something this pass introduced) - please fill in the real printed
+  // values from the card image/source; left blank rather than guessed.
   text: 'Whenever you cast a noncreature spell, if at least four mana was spent to cast it, tap target creature an opponent controls ' +
   'and put a stun counter on it. (If a permanent with a stun counter would become untapped, remove one from it instead.)\n' +
   'Whenever you cast a noncreature spell, if at least eight mana was spent to cast it, put eight +1/+1 counters on Ultros.',
-  imagePath: '/assets/cards/ultros-obnoxious-octopus.webp'
+  imagePath: '/assets/cards/ultros-obnoxious-octopus.webp',
+  noncreatureCastTrigger: {
+    tapAndStunOpponentCreatureIfExpensive: { minManaValue: 4 },
+    counterIfExpensive: { minManaValue: 8, counterLabel: '+1/+1', counterAmount: 8 },
+  },
   },
   {
   id: 'undercity-dire-rat',
@@ -3876,7 +4309,8 @@ export const CARD_POOL: CardDefinition[] = [
   power: 2,
   toughness: 2,
   text: 'Rat Tail — When this creature dies, create a Treasure token. (It’s an artifact with “{T}, Sacrifice this token: Add one mana of any color.”)',
-  imagePath: '/assets/cards/undercity-dire-rat.webp'
+  imagePath: '/assets/cards/undercity-dire-rat.webp',
+  onDeath: [{ type: 'createToken', tokenId: 'token-treasure' }],
   },
   {
   id: 'unexpected-request',
@@ -3885,7 +4319,9 @@ export const CARD_POOL: CardDefinition[] = [
   type: 'sorcery',
   text: 'Gain control of target creature until end of turn. Untap that creature. It gains haste until end of turn. ' +
   'You may attach an Equipment you control to that creature. If you do, unattach it at the beginning of the next end step.',
-  imagePath: '/assets/cards/unexpected-request.webp'
+  imagePath: '/assets/cards/unexpected-request.webp',
+  // Deferred - true control-change is an established gap (this engine only
+  // tracks ownerId, no separate controller concept).
   },
   {
   id: 'vaan-street-thief',
@@ -3898,7 +4334,13 @@ export const CARD_POOL: CardDefinition[] = [
   text: 'Whenever one or more Scouts, Pirates, and/or Rogues you control deal combat damage to a player, ' +
   'exile the top card of that player\u2019s library. You may cast it. If you don\u2019t, create a Treasure token. \n' +
   'Whenever you cast a spell you don\u2019t own, put a +1/+1 counter on each Scout, Pirate, and Rogue you control.',
-  imagePath: '/assets/cards/vaan-street-thief.webp'
+  imagePath: '/assets/cards/vaan-street-thief.webp',
+  // Both deferred - the first ability needs a subtype-filtered combat-damage
+  // watcher (only Scouts/Pirates/Rogues, unlike onAnyControlledCreatureCombatDamageToPlayer's
+  // any-creature watcher) plus an impulse-cast-with-a-fallback mechanism; the
+  // second needs to track "cast a spell you don't own", a condition this
+  // engine (which barely supports casting foreign-owned cards at all) has no
+  // way to detect.
   },
   {
   id: 'valkyrie-aerial-unit',
@@ -4352,6 +4794,39 @@ export const TOKEN_POOL: CardDefinition[] = [
     imagePath: '/assets/cards/token-treasure.webp',
     producesMana: 'any',
     sacrificesOnTap: true,
+  },
+  {
+    id: 'token-angelo',
+    name: 'Angelo',
+    type: 'creature',
+    subtype: 'Legendary Dog Token',
+    costLabel: '-',
+    power: 1,
+    toughness: 1,
+    text: '',
+    imagePath: '/assets/cards/token-angelo.webp',
+  },
+  {
+    id: 'token-darkstar',
+    name: 'Darkstar',
+    type: 'creature',
+    subtype: 'Legendary Dog Token',
+    costLabel: '-',
+    power: 2,
+    toughness: 2,
+    text: '',
+    imagePath: '/assets/cards/token-darkstar.webp',
+  },
+  {
+    id: 'token-robot-warrior',
+    name: 'Robot Warrior',
+    type: 'creature',
+    subtype: 'Artifact Robot Warrior Token',
+    costLabel: '-',
+    power: 3,
+    toughness: 3,
+    text: '',
+    imagePath: '/assets/cards/token-robot-warrior.webp',
   },
 ];
 

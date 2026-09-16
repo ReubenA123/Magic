@@ -46,7 +46,9 @@ export function hasEquipGrantedKeywordDuringOwnTurn(state: GameState, controller
  * creature] has KEYWORD" grant (Freya Crescent's Jump) - the self-only
  * counterpart to hasEquipGrantedKeywordDuringOwnTurn. */
 export function hasSelfGrantedKeywordDuringOwnTurn(state: GameState, controllerId: string, def: CardDefinition, keyword: string): boolean {
-  return state.activePlayerId === controllerId && def.grantsSelfKeywordDuringOwnTurn === keyword;
+  if (state.activePlayerId !== controllerId || !def.grantsSelfKeywordDuringOwnTurn) return false;
+  const granted = def.grantsSelfKeywordDuringOwnTurn;
+  return Array.isArray(granted) ? granted.includes(keyword) : granted === keyword;
 }
 
 /** Whether `instanceId` currently has `keyword` from an attached Equipment's
@@ -144,6 +146,24 @@ function equipBuffBonus(state: GameState, controllerId: string, instanceId: stri
   );
 }
 
+/** Sum of +X/+Y from any OTHER permanent controllerId controls with a
+ * static "[subtype]s you control get +X/+Y" anthem (Balthier and Fran's
+ * "Vehicles you control get +1/+1") matching `def`'s own subtype. Unlike
+ * equipBuffBonus (attachment-based), this scans the controller's WHOLE
+ * battlefield for a matching source. */
+function anthemBuffBonus(state: GameState, controllerId: string, def: CardDefinition): { power: number; toughness: number } {
+  const controller = state.players.find((p) => p.id === controllerId);
+  if (!controller || !def.subtype) return { power: 0, toughness: 0 };
+  return controller.zones.battlefield.reduce(
+    (acc, c) => {
+      const anthem = getCardDefinition(c.defId).staticAnthemForControlledSubtype;
+      if (!anthem || !def.subtype!.toLowerCase().includes(anthem.subtype.toLowerCase())) return acc;
+      return { power: acc.power + anthem.power, toughness: acc.toughness + anthem.toughness };
+    },
+    { power: 0, toughness: 0 }
+  );
+}
+
 export function effectivePower(def: CardDefinition, instance: CardInstance, state: GameState, controllerId: string): number {
   const base = lifeBasedBaseStat(state, controllerId, instance.instanceId) ?? (def.power ?? 0);
   const plus = instance.counters.find((c) => c.label === '+1/+1')?.amount ?? 0;
@@ -152,7 +172,8 @@ export function effectivePower(def: CardDefinition, instance: CardInstance, stat
   const typeBuff = hasActiveControlledTypeCountBuff(def, state, controllerId) ? def.controlledTypeCountBuff!.power : 0;
   const temp = instance.temporaryBuff?.power ?? 0;
   const equip = equipBuffBonus(state, controllerId, instance.instanceId).power;
-  return base + plus - minus + buff + typeBuff + temp + equip;
+  const anthem = anthemBuffBonus(state, controllerId, def).power;
+  return base + plus - minus + buff + typeBuff + temp + equip + anthem;
 }
 
 export function effectiveToughness(def: CardDefinition, instance: CardInstance, state: GameState, controllerId: string): number {
@@ -163,7 +184,8 @@ export function effectiveToughness(def: CardDefinition, instance: CardInstance, 
   const typeBuff = hasActiveControlledTypeCountBuff(def, state, controllerId) ? def.controlledTypeCountBuff!.toughness : 0;
   const temp = instance.temporaryBuff?.toughness ?? 0;
   const equip = equipBuffBonus(state, controllerId, instance.instanceId).toughness;
-  return base + plus - minus + buff + typeBuff + temp + equip;
+  const anthem = anthemBuffBonus(state, controllerId, def).toughness;
+  return base + plus - minus + buff + typeBuff + temp + equip + anthem;
 }
 
 /** True for a real creature, or for a Vehicle (def.crew set) that's
@@ -172,7 +194,7 @@ export function effectiveToughness(def: CardDefinition, instance: CardInstance, 
  * legality or death purposes goes through this instead, so a crewed Vehicle
  * can attack, block, and die like any other creature until end of turn. */
 export function isEffectivelyCreature(def: CardDefinition, instance: CardInstance): boolean {
-  return def.type === 'creature' || (def.crew !== undefined && !!instance.crewedUntilEndOfTurn);
+  return def.type === 'creature' || (def.crew !== undefined && !!instance.crewedUntilEndOfTurn) || !!instance.temporarilyCreatureUntilEndOfTurn;
 }
 
 function findInstance(state: GameState, instanceId: string) {
@@ -232,13 +254,20 @@ export function applyGainLifeTriggers(state: GameState, playerId: string): GameS
   for (const card of getPlayerBattlefield(next, playerId)) {
     const def = getCardDefinition(card.defId);
     if (!def.onGainLifeTrigger) continue;
-    const { counterLabel, counterAmount } = def.onGainLifeTrigger;
+    const { counterLabel, counterAmount, subtypeFilter } = def.onGainLifeTrigger;
     next = updatePlayer(next, playerId, (p) => ({
       ...p,
       zones: {
         ...p.zones,
         battlefield: p.zones.battlefield.map((c) => {
-          if (c.instanceId !== card.instanceId) return c;
+          // Unfiltered: only the watcher itself. subtypeFilter set (e.g.
+          // Minwu, White Mage's "each Cleric you control"): every controlled
+          // creature matching that subtype, which may or may not include
+          // the watcher itself depending on its own subtype.
+          const matches = subtypeFilter
+            ? getCardDefinition(c.defId).type === 'creature' && !!getCardDefinition(c.defId).subtype?.toLowerCase().includes(subtypeFilter.toLowerCase())
+            : c.instanceId === card.instanceId;
+          if (!matches) return c;
           const hasCounter = c.counters.some((ctr) => ctr.label === counterLabel);
           const counters = hasCounter
             ? c.counters.map((ctr) => (ctr.label === counterLabel ? { ...ctr, amount: ctr.amount + counterAmount } : ctr))
@@ -247,7 +276,8 @@ export function applyGainLifeTriggers(state: GameState, playerId: string): GameS
         }),
       },
     }));
-    next = { ...next, log: [...next.log, `${def.name} triggers, gaining a ${counterLabel} counter.`] };
+    const targetNote = subtypeFilter ? `each ${subtypeFilter} you control` : def.name;
+    next = { ...next, log: [...next.log, `${def.name} triggers: ${targetNote} gets a ${counterLabel} counter.`] };
   }
   return next;
 }

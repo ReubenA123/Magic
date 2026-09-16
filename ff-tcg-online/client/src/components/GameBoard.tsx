@@ -2,8 +2,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { CardDefinition, CardInstance, GameAction, GameState, ManaColor, PlayerState, ZoneName } from '../types';
 import { getCardDefinition } from '../data/cards';
 import { parseCostLabel, canPay } from '../engine/mana';
-import { hasKeyword } from '../engine/keywords';
-import { effectivePower } from '../engine/combat';
+import { hasKeyword, hasKeywordEffective } from '../engine/keywords';
+import { effectivePower, effectiveToughness } from '../engine/combat';
 import Card from './Card';
 import PhaseBar from './PhaseBar';
 import CardActionsPanel from './CardActionsPanel';
@@ -64,48 +64,20 @@ function splitBattlefield(cards: CardInstance[]) {
 }
 
 
-function countLandsForOwner(state: GameState, ownerId: string): number {
-  const player = state.players.find((p) => p.id === ownerId);
-  if (!player) return 0;
-  return player.zones.battlefield.filter((c) => getCardDefinition(c.defId).type === 'land').length;
-}
-
 /**
  * Whether this instance's current power/toughness differs from its printed
- * stats right now - either because a landCountBuff (see types.ts) is active,
- * or because it has +1/+1 / -1/-1 counters on it. Returns the creature's
- * actual current power/toughness (base + counters + the buff), not just the
- * delta, so the badge reads as "here's what it is right now" rather than
- * making the player do the addition themselves.
+ * stats right now - reuses effectivePower/effectiveToughness (the same
+ * functions engine/combat.ts's real damage pass uses) rather than a
+ * GameBoard-local reimplementation, so the badge can never disagree with
+ * what combat actually does. Returns the creature's actual current
+ * power/toughness (not just the delta), so the badge reads as "here's what
+ * it is right now" rather than making the player do the addition themselves.
  */
-/** Whether any Aura/Equipment attached to this instance sets its base power
- * and toughness to the controller's life total (e.g. Aettir and Priwen) -
- * mirrors engine/combat.ts's lifeBasedBaseStat exactly, so this preview
- * never disagrees with what the engine actually computes. */
-function lifeBasedBaseStat(state: GameState, ownerId: string, instanceId: string): number | null {
-  const owner = state.players.find((p) => p.id === ownerId);
-  if (!owner) return null;
-  const hasLifeBasedEquipment = owner.zones.battlefield.some(
-    (c) => c.attachedToInstanceId === instanceId && getCardDefinition(c.defId).setsBasePowerToughnessToControllerLife
-  );
-  return hasLifeBasedEquipment ? owner.life : null;
-}
-
 function activeStatBadge(def: ReturnType<typeof getCardDefinition>, instance: CardInstance, state: GameState) {
-  const landBuffActive = !!def.landCountBuff && countLandsForOwner(state, instance.ownerId) >= def.landCountBuff.minLands;
-  const plus = instance.counters.find((c) => c.label === '+1/+1')?.amount ?? 0;
-  const minus = instance.counters.find((c) => c.label === '-1/-1')?.amount ?? 0;
-  const lifeBased = lifeBasedBaseStat(state, instance.ownerId, instance.instanceId) !== null;
-  if (!landBuffActive && !lifeBased && plus === 0 && minus === 0) return null;
-  return { power: counterAdjustedStat(def, instance, 'power', state), toughness: counterAdjustedStat(def, instance, 'toughness', state) };
-}
-
-function counterAdjustedStat(def: ReturnType<typeof getCardDefinition>, instance: CardInstance, stat: 'power' | 'toughness', state: GameState): number {
-  const base = lifeBasedBaseStat(state, instance.ownerId, instance.instanceId) ?? (stat === 'power' ? def.power : def.toughness) ?? 0;
-  const plus = instance.counters.find((c) => c.label === '+1/+1')?.amount ?? 0;
-  const minus = instance.counters.find((c) => c.label === '-1/-1')?.amount ?? 0;
-  const buff = def.landCountBuff && countLandsForOwner(state, instance.ownerId) >= def.landCountBuff.minLands ? def.landCountBuff[stat] : 0;
-  return base + plus - minus + buff;
+  const power = effectivePower(def, instance, state, instance.ownerId);
+  const toughness = effectiveToughness(def, instance, state, instance.ownerId);
+  if (power === (def.power ?? 0) && toughness === (def.toughness ?? 0)) return null;
+  return { power, toughness };
 }
 
 /**
@@ -148,16 +120,26 @@ function canTransformNow(def: ReturnType<typeof getCardDefinition>, instance: Ca
 function previewSingleBlockDeaths(
   attackerDef: ReturnType<typeof getCardDefinition>,
   attackerInstance: CardInstance,
+  attackerControllerId: string,
   blockerDef: ReturnType<typeof getCardDefinition>,
   blockerInstance: CardInstance,
+  blockerControllerId: string,
   state: GameState,
 ) {
-  const attackerPower = counterAdjustedStat(attackerDef, attackerInstance, 'power', state);
-  const blockerPower = counterAdjustedStat(blockerDef, blockerInstance, 'power', state);
-  const attackerToughnessLeft = Math.max(0, counterAdjustedStat(attackerDef, attackerInstance, 'toughness', state) - attackerInstance.damageMarked);
-  const blockerToughnessLeft = Math.max(0, counterAdjustedStat(blockerDef, blockerInstance, 'toughness', state) - blockerInstance.damageMarked);
-  const attackerIndestructible = hasKeyword(attackerDef.text, 'indestructible');
-  const blockerIndestructible = hasKeyword(blockerDef.text, 'indestructible');
+  // Reuses the SAME stat/keyword functions engine/combat.ts's real damage
+  // pass uses (rather than a separate, partial reimplementation) so this
+  // preview can never disagree with what Resolve Combat actually does - it
+  // previously used a GameBoard-local counterAdjustedStat that only knew
+  // about +1/+1 counters and landCountBuff, missing temporaryBuff (any pump
+  // effect/spell) and Equipment bonuses entirely, which could grey out a
+  // creature as "about to die" when a buff or equipped bonus it wasn't
+  // counting actually kept it alive.
+  const attackerPower = effectivePower(attackerDef, attackerInstance, state, attackerControllerId);
+  const blockerPower = effectivePower(blockerDef, blockerInstance, state, blockerControllerId);
+  const attackerToughnessLeft = Math.max(0, effectiveToughness(attackerDef, attackerInstance, state, attackerControllerId) - attackerInstance.damageMarked);
+  const blockerToughnessLeft = Math.max(0, effectiveToughness(blockerDef, blockerInstance, state, blockerControllerId) - blockerInstance.damageMarked);
+  const attackerIndestructible = hasKeywordEffective(attackerDef, attackerInstance, 'indestructible');
+  const blockerIndestructible = hasKeywordEffective(blockerDef, blockerInstance, 'indestructible');
   const attackerDeathtouch = hasKeyword(attackerDef.text, 'deathtouch');
   const blockerDeathtouch = hasKeyword(blockerDef.text, 'deathtouch');
   return {
@@ -630,8 +612,26 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   // exception: both players explicitly agreed to suspend this.
   const openCardIsReadOnly = !!openCard && openCard.player.id !== yourPlayerId && !mutualActive;
 
-  const isDeclaringAttackers = state.phase === 'declare_attackers' && state.activePlayerId === yourPlayerId;
-  const isDeclaringBlockers = state.phase === 'declare_blockers' && state.activePlayerId !== yourPlayerId;
+  // soloControl (VS AI) means the same person plays both sides, so whichever
+  // side needs to declare attackers/blockers right now, it's them - without
+  // the soloControl check here, these both stayed hard-wired to "only the
+  // side matching yourPlayerId" (fixed to the human, player[0]), which meant
+  // attacking on your OWN turn against the AI never showed the blocker
+  // step at all (activePlayerId === yourPlayerId, so isDeclaringBlockers was
+  // always false) - combat just got stuck with no way to assign blocks
+  // (or decline to) and nothing to click.
+  const isDeclaringAttackers = state.phase === 'declare_attackers' && (soloControl || state.activePlayerId === yourPlayerId);
+  const isDeclaringBlockers = state.phase === 'declare_blockers' && (soloControl || state.activePlayerId !== yourPlayerId);
+  /** The attacker's own side of declare_blockers - genuinely nothing to do
+   * but wait on the defending player. Without this, PhaseBar (which only
+   * gates its Next/End Turn buttons on isYourTurn, and it's still your turn
+   * here) showed an enabled "Next" button that engine/actions.ts: nextPhase
+   * always rejects with "Waiting on the defending player's blocks." -
+   * clicking it did nothing visible beyond a brief error toast, which read
+   * as the game being frozen. Not shown in soloControl (VS AI) - there the
+   * same person controls both sides, so there's no separate opponent to
+   * "wait" on. */
+  const isWaitingOnBlockers = !soloControl && state.phase === 'declare_blockers' && state.activePlayerId === yourPlayerId;
   const showCombatZones = isDeclaringAttackers || isDeclaringBlockers || state.phase === 'combat_damage' || state.phase === 'combat_end';
   // Combat needs both sides visible to declare attackers/blockers sensibly,
   // so it always shows Full Board regardless of what's selected below.
@@ -856,10 +856,17 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
       return !!def.saga && ownerId === pendingTargetForYou.controllerId;
     }
     if (effect.type === 'tapTarget') {
-      return def.type === 'creature';
+      return effect.targetFilter === 'nonlandPermanent' ? def.type !== 'land' : def.type === 'creature';
     }
-    if (effect.type === 'putCounterOnUpToOneOwnCreature' || effect.type === 'attachSelfToTarget') {
+    if (effect.type === 'putCounterOnUpToOneOwnCreature') {
       return def.type === 'creature' && ownerId === pendingTargetForYou.controllerId;
+    }
+    if (effect.type === 'attachSelfToTarget') {
+      const matchesType = effect.targetTypeFilter === 'artifactOrCreature' ? def.type === 'artifact' || def.type === 'creature' : def.type === 'creature';
+      return matchesType && (effect.allowAnyController || ownerId === pendingTargetForYou.controllerId);
+    }
+    if (effect.type === 'createTokenCopyOfTarget') {
+      return def.type === 'artifact' || def.type === 'creature' || def.type === 'land';
     }
     if (effect.type === 'destroyOpponentCreature') {
       if (ownerId === pendingTargetForYou.controllerId) return false;
@@ -883,13 +890,19 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     if (effect.type === 'damageTargetCreature') {
       return def.type === 'creature';
     }
+    if (effect.type === 'sweepDamageFromChosenCreature') {
+      return def.type === 'creature' && ownerId === pendingTargetForYou.controllerId;
+    }
     const isFlyingCreature = def.type === 'creature' && hasKeyword(def.text, 'flying');
     return (
       effect.targetFilter === 'anyPermanent' ||
       (effect.targetFilter === 'nonlandPermanent' && def.type !== 'land') ||
       (effect.targetFilter === 'creatureWithMinPower' && def.type === 'creature' && effectivePower(def, card, state, ownerId) >= (effect.minPower ?? 0)) ||
       (effect.targetFilter === 'artifactEnchantmentOrFlyingCreature' && (def.type === 'artifact' || def.type === 'enchantment' || isFlyingCreature)) ||
-      (effect.targetFilter === 'artifactOrEnchantment' && (def.type === 'artifact' || def.type === 'enchantment'))
+      (effect.targetFilter === 'artifactOrEnchantment' && (def.type === 'artifact' || def.type === 'enchantment')) ||
+      (effect.targetFilter === 'creatureWithDamageMarked' && def.type === 'creature' && card.damageMarked > 0) ||
+      (effect.targetFilter === 'land' && def.type === 'land') ||
+      (effect.targetFilter === 'creature' && def.type === 'creature')
     );
   }
 
@@ -970,6 +983,32 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     if (producesMana && !Array.isArray(producesMana) && producesMana !== 'any') {
       return [producesMana];
     }
+    return null;
+  }
+
+  /** Why the Tap/Untap button in CardActionsPanel should be disabled for this
+   * card right now, or null if pressing it is currently legal - mirrors
+   * engine/actions.ts: toggleTap's own validation exactly (mutual adjustment
+   * always allows it; untapping needs unspent mana it was tapped for;
+   * tapping a summoning-sick mana creature isn't allowed), just precomputed
+   * here so the button can be grayed out instead of failing after a click. */
+  function tapDisabledReason(def: CardDefinition, instance: CardInstance, owner: PlayerState): string | null {
+    if (mutualActive) return null;
+    if (state.pendingManaColorChoice?.instanceId === instance.instanceId) return 'Choose a mana color for this permanent first';
+    if (instance.tapped) {
+      if (!instance.producedManaColor) return "This permanent isn't tapped for mana - it'll untap automatically at your next untap step";
+      if (owner.manaPool[instance.producedManaColor] <= 0) return 'Its mana has already been spent';
+      return null;
+    }
+    const producesMana = !!(def.producesMana ?? grantedManaAbility(instance));
+    if (def.type === 'creature' && producesMana && instance.summoningSick) return "This creature has summoning sickness and can't tap for mana yet";
+    // Tapping a permanent with no mana ability does nothing at all - it's not
+    // how attacking works (that's its own declare-attackers flow) and it's
+    // not how a {T}-cost ability's cost is paid (ACTIVATE_ABILITY handles
+    // that itself). Manually tapping it here would just be a pointless
+    // "tapped for no reason" state with no way back except waiting for the
+    // untap step.
+    if (!producesMana) return 'Tapping this has no effect - it has no mana ability';
     return null;
   }
 
@@ -1295,13 +1334,21 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   function renderStackedCard(
     group: CardInstance[],
     front: CardInstance,
-    frontProps: { selected?: boolean; onClick: () => void; onDoubleClick: () => void },
+    frontProps: { selected?: boolean; onClick: () => void },
     canControl: boolean,
   ) {
     if (group.length === 1) {
       const def = getCardDefinition(front.defId);
       const pipOptions = manaPipOptions(def, front);
       if (!pipOptions) {
+        // No mana ability at all - tapping this would do nothing, so the
+        // only way to tap/untap it is the panel's Tap button (which
+        // disables itself with a reason when that wouldn't do anything
+        // either - see tapDisabledReason). Deliberately no onDoubleClick
+        // here anymore: it used to quick-toggle tap as a side effect of
+        // double-clicking to open the panel and read the card, which both
+        // tapped things by accident and let you "tap" a card with no tap
+        // effect for no reason at all.
         return <Card definition={def} instance={front} {...frontProps} staticBuff={activeStatBadge(def, front, state)} transformReady={canTransformNow(def, front, state)} />;
       }
 
@@ -1427,22 +1474,32 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     // so clicking a stack does the useful thing instead of a coin-flip instance.
     const c = group.find((g) => !g.tapped && !g.summoningSick) ?? group.find((g) => !g.tapped) ?? group[0];
     const isDead = state.pendingDeaths.includes(c.instanceId);
-    const canAttackThis = !isDead && isDeclaringAttackers && !isOpponentSide && !c.tapped && !c.summoningSick;
-    const canBeBlocker = !isDead && isDeclaringBlockers && !isOpponentSide && !c.tapped;
+    const canControl = canControlCard(ownerId) || !!soloControl;
+    // Whether this creature's OWNER is the attacking (vs defending) side of
+    // combat right now - based on state.activePlayerId, not the isOpponentSide
+    // visual/layout flag, which only happens to line up with it for the
+    // DEFENDER's own view in a real 2-player game. Under soloControl the same
+    // person plays both sides, so isOpponentSide alone can't tell attacker
+    // from defender - without this, declaring blockers for the AI's side
+    // while you were the attacker (isOpponentSide there being true from
+    // your board's perspective) had no way to ever select a blocker at all,
+    // getting combat stuck with nothing to click.
+    const isAttackingSide = ownerId === state.activePlayerId;
+    const canAttackThis = !isDead && isDeclaringAttackers && isAttackingSide && canControl && !c.tapped && !c.summoningSick;
+    const canBeBlocker = !isDead && isDeclaringBlockers && !isAttackingSide && canControl && !c.tapped;
     const combatDraggable = canAttackThis || canBeBlocker;
     const reorderAllowed = stackCount === 1 && !isDead && !isDeclaringAttackers && !isDeclaringBlockers && (!isOpponentSide || !!soloControl);
     // A row can also accept a drop of an already-selected attacker, or an
     // already-assigned blocker, being dragged back out to change your mind -
     // right up until "Attack with X" / "Confirm blockers" is pressed.
-    const acceptsAttackerRemoval = isDeclaringAttackers && !isOpponentSide;
-    const acceptsBlockerRemoval = isDeclaringBlockers && !isOpponentSide;
+    const acceptsAttackerRemoval = isDeclaringAttackers && isAttackingSide && canControl;
+    const acceptsBlockerRemoval = isDeclaringBlockers && !isAttackingSide && canControl;
     const isLegalTarget = isLegalPendingTarget(c, ownerId);
     const isSacrificeChoice = isLegalSacrifice(c, ownerId);
     const isSacrificeCostChoice = isLegalSacrificeCostChoice(c, ownerId);
     const isCrewChoice = isLegalCrewChoice(c, ownerId);
     const isCrewSelected = !!pendingCrew?.selected.includes(c.instanceId);
     const selected = pendingBlocker === c.instanceId || multiSelected.has(c.instanceId) || isLegalTarget || isSacrificeChoice || isSacrificeCostChoice || isCrewSelected;
-    const canControl = canControlCard(ownerId);
 
     return (
       <div key={c.instanceId} className={isDead ? 'destroyed-card-wrapper' : ''} ref={(el) => registerCardRef(c.instanceId, el)}>
@@ -1486,7 +1543,6 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                 else if (canBeBlocker) handleBlockerCandidateClick(c.instanceId);
                 else setOpenPanelId(c.instanceId);
               },
-              onDoubleClick: () => canControl && !isDead && stackCount === 1 && handleToggleTap(c),
             },
             canControl,
           )}
@@ -1525,7 +1581,6 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                 } else if (isLegalTarget) onAction({ type: 'CHOOSE_TARGET', targetInstanceId: c.instanceId });
                 else setOpenPanelId(c.instanceId);
               },
-              onDoubleClick: () => canControl && stackCount === 1 && handleToggleTap(c),
             },
             canControl,
           )}
@@ -1808,11 +1863,13 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
       : 'Declare no attackers'
     : isDeclaringBlockers
       ? 'Confirm blockers'
-      : state.phase === 'combat_damage'
-        ? youAreReadyForCombat
-          ? 'Waiting on opponent\u2026'
-          : 'Resolve Combat'
-        : undefined;
+      : isWaitingOnBlockers
+        ? 'Waiting on opponent\u2019s blocks\u2026'
+        : state.phase === 'combat_damage'
+          ? youAreReadyForCombat
+            ? 'Waiting on opponent\u2026'
+            : 'Resolve Combat'
+          : undefined;
 
   // --- Combat zone: attacker cards on top, an empty (until you drop
   // something into it) blocker slot directly below each one. Nothing is
@@ -1899,7 +1956,15 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           // still has to choose a damage order before it's determined at all.
           const soleBlocker = blockers.length === 1 ? findCard(state, blockers[0]) : null;
           const singleBlockPreview = soleBlocker
-            ? previewSingleBlockDeaths(getCardDefinition(found.card.defId), found.card, getCardDefinition(soleBlocker.card.defId), soleBlocker.card, state)
+            ? previewSingleBlockDeaths(
+                getCardDefinition(found.card.defId),
+                found.card,
+                found.player.id,
+                getCardDefinition(soleBlocker.card.defId),
+                soleBlocker.card,
+                soleBlocker.player.id,
+                state,
+              )
             : null;
           const attackerCellEl = (
             <div
@@ -2087,12 +2152,14 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                       : effect.type === 'modifySagaLoreCounter'
                         ? `Choose a Saga you control for ${pendingTargetSourceName}'s ability.`
                         : effect.type === 'tapTarget'
-                          ? `Choose a creature for ${pendingTargetSourceName}'s ability to tap (either player's).`
+                          ? `Choose a ${effect.targetFilter === 'nonlandPermanent' ? 'nonland permanent' : 'creature'} for ${pendingTargetSourceName}'s ability to tap (either player's).`
                           : effect.type === 'putCounterOnUpToOneOwnCreature'
                             ? `Choose up to one creature you control for ${pendingTargetSourceName}'s ability - or Skip.`
                             : effect.type === 'attachSelfToTarget'
-                              ? `Choose a creature you control for ${pendingTargetSourceName} to attach to.`
-                              : effect.type === 'destroyOpponentCreature'
+                              ? `Choose a${effect.targetTypeFilter === 'artifactOrCreature' ? 'n artifact or creature' : ' creature'}${effect.allowAnyController ? ' (either player’s)' : ' you control'} for ${pendingTargetSourceName} to attach to.`
+                              : effect.type === 'createTokenCopyOfTarget'
+                                ? `Choose an artifact, creature, or land for ${pendingTargetSourceName} to create a token copy of (either player's).`
+                                : effect.type === 'destroyOpponentCreature'
                                 ? `Choose an opponent's creature for ${pendingTargetSourceName}'s ability to destroy.`
                                 : effect.type === 'bounceTarget'
                                   ? `Choose a nonland permanent for ${pendingTargetSourceName}'s ability to return to its owner's hand (either player's).`
@@ -2106,6 +2173,8 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                                   ? `Choose another creature you control for ${pendingTargetSourceName}'s ability.`
                                   : effect.type === 'damageTargetCreature'
                                   ? `Choose a creature for ${pendingTargetSourceName}'s ability to damage.`
+                                  : effect.type === 'sweepDamageFromChosenCreature'
+                                  ? `Choose a creature you control for ${pendingTargetSourceName}'s ability - it deals damage equal to its power to every other creature.`
                                   : effect.targetFilter === 'artifactOrEnchantment'
                                   ? `Choose an artifact or enchantment for ${pendingTargetSourceName}'s ability (either player's).`
                                   : effect.targetFilter === 'anyPermanent'
@@ -2114,6 +2183,12 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                                     ? `Choose a nonland permanent for ${pendingTargetSourceName}'s ability (either player's).`
                                     : effect.targetFilter === 'creatureWithMinPower'
                                     ? `Choose a creature with power ${effect.minPower ?? 0} or greater for ${pendingTargetSourceName}'s ability.`
+                                    : effect.targetFilter === 'creatureWithDamageMarked'
+                                    ? `Choose a creature that was dealt damage this turn for ${pendingTargetSourceName}'s ability.`
+                                    : effect.targetFilter === 'land'
+                                    ? `Choose a land for ${pendingTargetSourceName}'s ability (either player's).`
+                                    : effect.targetFilter === 'creature'
+                                    ? `Choose a creature for ${pendingTargetSourceName}'s ability (either player's).`
                                     : `Choose a target for ${pendingTargetSourceName}'s ability - click an artifact, enchantment, or creature with flying (either player's).`;
           return (
             <div className="pending-target-banner">
@@ -2442,11 +2517,12 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           turnNumber={state.turnNumber}
           isYourTurn={isYourTurn || state.phase === 'combat_damage'}
           nextLabel={nextLabel}
-          hideEndTurn={isDeclaringAttackers || isDeclaringBlockers || state.phase === 'combat_damage'}
-          nextDisabled={state.phase === 'combat_damage' && youAreReadyForCombat}
+          hideEndTurn={isDeclaringAttackers || isDeclaringBlockers || isWaitingOnBlockers || state.phase === 'combat_damage'}
+          nextDisabled={isWaitingOnBlockers || (state.phase === 'combat_damage' && youAreReadyForCombat)}
           onNextPhase={() => {
             if (isDeclaringAttackers) confirmAttackers();
             else if (isDeclaringBlockers) confirmBlockers();
+            else if (isWaitingOnBlockers) return;
             else onAction({ type: 'NEXT_PHASE' }, yourPlayerId);
           }}
           onEndTurn={() => onAction({ type: 'END_TURN' }, state.activePlayerId)}
@@ -2479,6 +2555,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
             openCard.card.attachedToInstanceId ? getCardDefinition(findCard(state, openCard.card.attachedToInstanceId)?.card.defId ?? '')?.name ?? null : null
           }
           manaOptions={manaTapOptions(getCardDefinition(openCard.card.defId), openCard.card) ?? undefined}
+          tapDisabledReason={tapDisabledReason(getCardDefinition(openCard.card.defId), openCard.card, openCard.player)}
           onToggleTap={() => {
             onAction({ type: 'TOGGLE_TAP', instanceId: openCard.card.instanceId });
             setOpenPanelId(null);

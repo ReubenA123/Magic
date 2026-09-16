@@ -89,7 +89,22 @@ export function registerSocketHandlers(io: Server) {
         return;
       }
 
-      const result = applyAction(session.state, action, seat.playerId);
+      // applyAction is expected to report illegal moves via { ok: false,
+      // error } rather than throwing, but if some code path ever does throw
+      // (a bad card definition, an unanticipated state shape, ...), letting
+      // it escape uncaught here would silently drop the action: no state
+      // update broadcasts, no action-error reaches the client either, and
+      // the game just looks frozen with no explanation. Catching it keeps
+      // the session state untouched and tells the player what happened
+      // instead of leaving both sides stuck staring at a stale board.
+      let result;
+      try {
+        result = applyAction(session.state, action, seat.playerId);
+      } catch (err) {
+        console.error('applyAction threw for action', action, err);
+        socket.emit('action-error', 'Something went wrong applying that action - the game state was not changed. Please try a different action.');
+        return;
+      }
       if (!result.ok) {
         socket.emit('action-error', result.error);
         return;

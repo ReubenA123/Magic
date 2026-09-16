@@ -367,10 +367,60 @@ button {
   display: flex;
   gap: 6px;
   min-height: 160px;
-  flex-wrap: wrap;
+  /* Wrapping to a second row was the source of the "flickers, doesn't know
+     what to do" report when a board got crowded (the browser can end up
+     oscillating between fitting N-per-row and N-1-per-row as the wrapped
+     height itself changes the row's own available width). A single row that
+     scrolls horizontally instead is stable regardless of how many creatures
+     are on it. */
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
   background: rgba(255, 255, 255, 0.02);
   border-radius: 6px;
   padding: 4px;
+}
+
+/* A tapped card's rotated bounding box is wider than its own layout slot
+   (width and height swap on rotate(90deg), so the card visually spills out
+   past its edges) - the lands row sits directly next to the deck/mana
+   corner column, so a tapped land at the row's edge could bleed into it.
+   Extra inline padding keeps that overflow inside the row instead. */
+.battlefield-row.lands-row {
+  padding-left: 32px;
+  padding-right: 32px;
+}
+
+/* Custom, thin, theme-colored scrollbar for the horizontally-scrolling
+   permanent rows (creatures/others/lands and the combat attacker/blocker
+   lanes), replacing the bulky OS-default one. Firefox uses the scrollbar-*
+   properties; everything else (Chrome/Edge/Safari) uses ::-webkit-scrollbar. */
+.battlefield-row,
+.combat-columns-row {
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent) rgba(255, 255, 255, 0.06);
+}
+
+.battlefield-row::-webkit-scrollbar,
+.combat-columns-row::-webkit-scrollbar {
+  height: 8px;
+}
+
+.battlefield-row::-webkit-scrollbar-track,
+.combat-columns-row::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+}
+
+.battlefield-row::-webkit-scrollbar-thumb,
+.combat-columns-row::-webkit-scrollbar-thumb {
+  background: var(--accent);
+  border-radius: 4px;
+}
+
+.battlefield-row::-webkit-scrollbar-thumb:hover,
+.combat-columns-row::-webkit-scrollbar-thumb:hover {
+  background: var(--holy);
 }
 
 .battlefield-row-group {
@@ -1845,6 +1895,24 @@ button {
   flex: 1;
   margin-bottom: 0;
 }
+
+/* The small square red "X" cancel/decline button that sits next to Cast in
+   CastConfirmModal/ModalSpellModal - deliberately NOT flex:1 like Cast above,
+   so Cast reads as the primary, much bigger action and this stays a compact
+   secondary escape hatch. */
+.card-action-button-cancel-x {
+  flex: 0 0 44px;
+  width: 44px;
+  padding: 10px 0;
+  margin-bottom: 0;
+  background: var(--danger);
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 .game-board-main {
   flex: 3;
   min-width: 0;
@@ -2135,6 +2203,24 @@ button {
 .card-action-button:disabled {
   opacity: 0.35;
   cursor: not-allowed;
+  filter: grayscale(60%);
+}
+
+.card-action-tap-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.card-action-tap-wrapper .card-action-button {
+  margin-bottom: 0;
+}
+
+.card-action-disabled-reason {
+  font-size: 11px;
+  color: var(--text-dim);
+  text-align: center;
 }
 
 .bottom-right-controls {
@@ -2585,7 +2671,13 @@ button {
 .combat-columns-row {
   display: flex;
   gap: 24px;
-  flex-wrap: wrap;
+  /* Wrapping to a second row of attacker/blocker columns mid-combat is
+     exactly the "displays them all with two rows" flicker reported with a
+     crowded board - one row that scrolls horizontally instead stays stable
+     regardless of how many creatures are attacking. */
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
   min-height: 100px;
 }
 
