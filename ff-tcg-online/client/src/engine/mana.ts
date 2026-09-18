@@ -5,7 +5,8 @@
 // '4BB') into something the engine can actually check and pay against.
 // ============================================================================
 
-import { ManaColor, ManaPool } from '../types';
+import { CardDefinition, ManaColor, ManaPool, PlayerState } from '../types';
+import { getCardDefinition } from '../data/cards';
 
 export function emptyManaPool(): ManaPool {
   return { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 };
@@ -77,4 +78,47 @@ export function payCost(pool: ManaPool, cost: ParsedCost, extraGeneric: number):
 export function manaValue(cost: ParsedCost): number {
   const colourTotal = Object.values(cost.colors).reduce((a, b) => a + (b ?? 0), 0);
   return cost.generic + colourTotal;
+}
+
+/** How much `def`'s GENERIC cost is reduced right now for `player`, from its
+ * own dynamic cost-reduction fields (costReductionPerGraveyardPermanent -
+ * Diamond Weapon; costReductionPerControlledSubtype - Travel the Overworld;
+ * costReductionPerControlledType - Valkyrie Aerial Unit). Never reduces
+ * coloured pips, and the caller still has to cap it at the printed cost's
+ * own generic amount (Math.min(printedCost.generic, this)) - this just
+ * returns the raw, uncapped total. Shared by engine/actions.ts: castCard
+ * (which actually pays the reduced cost) and the client's hand-dimming,
+ * auto-scroll-to-lands, and CardActionsPanel afford/display logic in
+ * GameBoard.tsx/CardActionsPanel.tsx - those used to check affordability
+ * against the full printed cost, so a card like Diamond Weapon could sit
+ * looking unplayable (dimmed in hand, Cast button disabled) even once its
+ * graveyard discount made it actually affordable. */
+export function dynamicCostReduction(def: CardDefinition, player: PlayerState): number {
+  const graveyardPermanentCount = def.costReductionPerGraveyardPermanent
+    ? player.zones.graveyard.filter((c) => {
+        const d = getCardDefinition(c.defId);
+        return d.type === 'creature' || d.type === 'artifact' || d.type === 'enchantment' || d.type === 'land';
+      }).length
+    : 0;
+  const controlledSubtypeCount = def.costReductionPerControlledSubtype
+    ? player.zones.battlefield.filter((c) => getCardDefinition(c.defId).subtype?.toLowerCase().includes(def.costReductionPerControlledSubtype!.subtype.toLowerCase())).length
+    : 0;
+  const controlledTypeCount = def.costReductionPerControlledType
+    ? player.zones.battlefield.filter((c) => getCardDefinition(c.defId).type === def.costReductionPerControlledType!.type).length
+    : 0;
+  return (
+    (def.costReductionPerGraveyardPermanent ? def.costReductionPerGraveyardPermanent * graveyardPermanentCount : 0) +
+    (def.costReductionPerControlledSubtype ? def.costReductionPerControlledSubtype.amountPerUnit * controlledSubtypeCount : 0) +
+    (def.costReductionPerControlledType ? def.costReductionPerControlledType.amountPerUnit * controlledTypeCount : 0)
+  );
+}
+
+/** `parseCostLabel(def.costLabel)` with dynamicCostReduction already applied
+ * and capped - the actual cost `player` would pay to cast `def` right now.
+ * Shared convenience wrapper so call sites don't have to repeat the
+ * cap-and-apply arithmetic themselves. */
+export function effectiveCastCost(def: CardDefinition, player: PlayerState): ParsedCost {
+  const printed = parseCostLabel(def.costLabel);
+  const reduction = Math.min(printed.generic, dynamicCostReduction(def, player));
+  return reduction > 0 ? { ...printed, generic: printed.generic - reduction } : printed;
 }

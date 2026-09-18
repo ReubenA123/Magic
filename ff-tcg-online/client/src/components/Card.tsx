@@ -18,9 +18,34 @@ interface CardProps {
    * GameBoard's canTransformNow) - drawn as a red outer border/glow so the
    * player notices they can transform this permanent right now. */
   transformReady?: boolean;
+  /** RevealTopThenLoseLifeByManaValueEffect's (Dark Confidant) two-state
+   * indicator - 'red' while GameState.pendingRevealPickup is waiting on this
+   * permanent's controller to pick up the reveal, 'purple' (deliberately
+   * dimmer - see .card-reveal-purple) from the moment they pick it up until
+   * their next upkeep re-triggers it red. See GameBoard's revealOutlineFor. */
+  revealOutline?: 'red' | 'purple';
+  /** MayPayLifeThenEffect's (Seymour Flux) "you may" is outstanding on this
+   * exact permanent right now (GameState.pendingOptionalPayLife) - a bold
+   * purple outline/glow so the pending-target-banner's yes/no choice is
+   * obviously tied to this specific card. See GameBoard's
+   * awaitingOptionalPayLife. Distinct from revealOutline's dimmer 'purple'
+   * (that one just means "already resolved, informational"). */
+  awaitingOptionalChoice?: boolean;
 }
 
-export default function Card({ definition, instance, faceDown, selected, dimmed, onClick, onDoubleClick, staticBuff, transformReady }: CardProps) {
+export default function Card({
+  definition,
+  instance,
+  faceDown,
+  selected,
+  dimmed,
+  onClick,
+  onDoubleClick,
+  staticBuff,
+  transformReady,
+  revealOutline,
+  awaitingOptionalChoice,
+}: CardProps) {
   const [imageFailed, setImageFailed] = useState(false);
   const [backImageFailed, setBackImageFailed] = useState(false);
 
@@ -36,6 +61,9 @@ export default function Card({ definition, instance, faceDown, selected, dimmed,
     'card',
     selected ? 'card-selected' : '',
     transformReady ? 'card-transform-ready' : '',
+    revealOutline === 'red' ? 'card-reveal-red' : '',
+    revealOutline === 'purple' ? 'card-reveal-purple' : '',
+    awaitingOptionalChoice ? 'card-optional-choice-purple' : '',
     onClick ? 'card-clickable' : '',
     instance?.tapped ? 'card-tapped' : '',
     dimmed ? 'card-dimmed' : '',

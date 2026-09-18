@@ -18,6 +18,11 @@ export default function ZoneModal({ title, cards, onClose, onCardClick }: ZoneMo
 
   const filtered = useMemo(() => {
     return [...cards].reverse().filter((c) => {
+      // A face-down card (Clive's Hideaway) always passes both filters,
+      // regardless of what they are - letting search/type-filter results
+      // include or exclude it would itself leak information about an
+      // identity that's supposed to be hidden from both players.
+      if (c.faceDown) return true;
       const def = getCardDefinition(c.defId);
       const matchesType = filter === 'all' || def.type === filter;
       const matchesQuery = def.name.toLowerCase().includes(query.toLowerCase());
@@ -50,9 +55,13 @@ export default function ZoneModal({ title, cards, onClose, onCardClick }: ZoneMo
           <p className="card-actions-hint">No matching cards.</p>
         ) : (
           <div className="zone-modal-grid">
-            {filtered.map((c) => (
-              <Card key={c.instanceId} definition={getCardDefinition(c.defId)} instance={{ ...c, tapped: false }} onClick={() => onCardClick(c.instanceId)} />
-            ))}
+            {filtered.map((c) =>
+              c.faceDown ? (
+                <Card key={c.instanceId} definition={{ id: '', name: '', type: 'creature', costLabel: '', text: '', imagePath: '' }} faceDown />
+              ) : (
+                <Card key={c.instanceId} definition={getCardDefinition(c.defId)} instance={{ ...c, tapped: false }} onClick={() => onCardClick(c.instanceId)} />
+              )
+            )}
           </div>
         )}
       </div>

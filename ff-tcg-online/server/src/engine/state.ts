@@ -68,6 +68,8 @@ export function createInitialState(player1Name: string, player2Name: string, pla
     pendingSacrifice: null,
     pendingSurveil: null,
     extraTurnsQueued: [],
+    extraCombatPhasesQueued: 0,
+    combatPhaseNumberThisTurn: 0,
     pendingReturnFromGraveyard: null,
     pendingDiscard: null,
     pendingOptionalBounce: null,
@@ -79,8 +81,14 @@ export function createInitialState(player1Name: string, player2Name: string, pla
     pendingReanimate: null,
     pendingReturnCreaturesFromGraveyard: null,
     pendingOptionalTransform: null,
+    pendingOptionalPayLife: null,
     pendingGraveyardExile: null,
     pendingDiscardUpToThenDraw: null,
+    pendingRevealPickup: null,
+    pendingCoinFlip: null,
+    lastCoinFlip: null,
+    pendingHideaway: null,
+    battlefieldLeaveWatchers: [],
   };
 }
 

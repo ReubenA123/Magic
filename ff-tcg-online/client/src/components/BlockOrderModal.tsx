@@ -45,14 +45,14 @@ export default function BlockOrderModal({ attackerDefinition, attackerInstance, 
     });
   }
 
-  const isDeathtouch = hasKeyword(attackerDefinition.text, 'deathtouch');
-  const isTrample = hasKeyword(attackerDefinition.text, 'trample');
+  const isDeathtouch = hasKeyword(attackerDefinition, 'deathtouch');
+  const isTrample = hasKeyword(attackerDefinition, 'trample');
   const attackerPower = counterAdjustedStat(attackerDefinition.power, attackerInstance);
 
   let remaining = attackerPower;
   const previews = order.map((id) => {
     const entry = byId.get(id)!;
-    const isIndestructible = hasKeyword(entry.definition.text, 'indestructible');
+    const isIndestructible = hasKeyword(entry.definition, 'indestructible');
     const toughnessLeft = Math.max(0, counterAdjustedStat(entry.definition.toughness, entry.instance) - entry.instance.damageMarked);
     if (remaining <= 0) return { ...entry, assigned: 0, remainingToughness: toughnessLeft, dies: false };
     const lethal = isDeathtouch ? 1 : toughnessLeft;

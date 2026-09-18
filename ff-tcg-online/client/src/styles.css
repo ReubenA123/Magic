@@ -578,6 +578,33 @@ button {
   box-shadow: 0 0 8px rgba(201, 82, 79, 0.7);
 }
 
+/* RevealTopThenLoseLifeByManaValueEffect (Dark Confidant): red while its
+   reveal is waiting to be picked up (GameState.pendingRevealPickup). */
+.card-reveal-red {
+  outline: 3px solid var(--danger);
+  box-shadow: 0 0 8px rgba(201, 82, 79, 0.7);
+}
+
+/* Same effect, right after its reveal was picked up - deliberately less
+   visible than card-reveal-red (thinner outline, softer glow), since this
+   is a placeholder for a future "this gave its controller some advantage"
+   signal rather than something urgent to notice. Reverts to
+   .card-reveal-red at the controller's next upkeep. */
+.card-reveal-purple {
+  outline: 2px solid var(--shadow);
+  box-shadow: 0 0 4px rgba(139, 111, 209, 0.35);
+}
+
+/* MayPayLifeThenEffect (Seymour Flux): bold purple while GameState.
+   pendingOptionalPayLife is waiting on this exact permanent's controller to
+   accept or decline - deliberately as bold as card-reveal-red/
+   card-transform-ready (an active decision needs noticing now), just in the
+   family's purple rather than red. */
+.card-optional-choice-purple {
+  outline: 3px solid var(--shadow);
+  box-shadow: 0 0 8px rgba(139, 111, 209, 0.7);
+}
+
 .card-art {
   width: 100%;
   height: 100%;
@@ -773,6 +800,46 @@ button {
   margin: 0 0 14px;
 }
 
+.card-actions-type-line {
+  color: var(--text);
+  font-size: 12px;
+  font-style: italic;
+  margin: 0 0 6px;
+}
+
+/* A subtype granted by an attached Equipment/Aura (e.g. "Knight" from Dark
+   Knight's Greatsword) rather than printed on the card itself - hover/title
+   names the source, same idea as .card-ability-effect-text making a cost
+   readable without a tooltip alone, just inline instead of a full caption
+   since this only ever adds a couple of words to the type line. */
+.card-actions-granted-subtype {
+  text-decoration: underline dotted;
+  cursor: help;
+  color: var(--accent);
+}
+
+.equipment-contributions-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.equipment-contributions-list li {
+  margin-bottom: 3px;
+}
+
+.equipment-contributions-list strong {
+  color: var(--text);
+}
+
+/* Each contribution's stat/keyword/type lines, stacked under its source
+   name (or under nothing, for CardActionsPanel's self-granted "Until end of
+   turn" section) instead of being joined into one run-on line. */
+.modifier-entry-line {
+  margin-top: 2px;
+}
+
 /* CastConfirmModal's "what's about to happen" call-outs (mill, sacrifice,
    create a token, ...) - a literal highlighter look, distinct from the
    card's own accent color so it doesn't get lost against other UI gold. */
@@ -828,6 +895,44 @@ button {
   font-size: 12px;
 }
 
+/* One ability button plus its own effect-text caption (see
+   CardActionsPanel: abilityButtonLabel) - keeps a card with several tap-cost
+   abilities (Ring of the Lucii, Clive's Hideaway, ...) from showing several
+   identically-labeled "Tap" buttons with no visible way to tell them apart. */
+.card-ability-row {
+  margin-bottom: 6px;
+}
+
+.card-ability-row .card-action-button {
+  margin-bottom: 4px;
+}
+
+.card-ability-effect-text {
+  margin: 0 0 6px;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+/* RevealTopThenLoseLifeByManaValueEffect's (Dark Confidant) running reveal
+   history - visible to both players, since knowing what a Dark Confidant
+   has added to its controller's hand is the entire point of the card. */
+.revealed-cards-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+}
+
+.revealed-cards-list li {
+  margin-bottom: 2px;
+}
+
+/* No longer in the controller's hand (played, discarded, ...) - kept in the
+   list instead of removed, just greyed out. */
+.revealed-card-gone {
+  color: var(--text-dim);
+  text-decoration: line-through;
+}
+
 .counter-row {
   display: flex;
   align-items: center;
@@ -872,6 +977,60 @@ button {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+/* CoinFlipModal (The Gold Saucer's "Flip a coin") */
+.coin-flip-modal {
+  text-align: center;
+}
+
+.coin-flip-stage {
+  perspective: 600px;
+  display: flex;
+  justify-content: center;
+  margin: 20px 0;
+}
+
+.coin-flip-coin {
+  position: relative;
+  width: 84px;
+  height: 84px;
+  transform-style: preserve-3d;
+  animation: coin-flip-spin 1.2s cubic-bezier(0.2, 0.8, 0.3, 1) forwards;
+}
+
+@keyframes coin-flip-spin {
+  from {
+    transform: rotateY(0deg);
+  }
+  to {
+    transform: rotateY(var(--coin-final-rotation));
+  }
+}
+
+.coin-face {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 30px;
+  backface-visibility: hidden;
+  border: 3px solid var(--holy);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+}
+
+.coin-face-heads {
+  background: linear-gradient(135deg, #f4d35e, #c9a13b);
+  color: #1a1a1a;
+}
+
+.coin-face-tails {
+  background: linear-gradient(135deg, #c7d0da, #8b95a1);
+  color: #1a1a1a;
+  transform: rotateY(180deg);
 }
 
 .app-shell {
@@ -2453,6 +2612,13 @@ button {
   box-shadow: 0 0 12px rgba(244, 211, 94, 0.6);
 }
 
+/* Dark Confidant (RevealTopThenLoseLifeByManaValueEffect): the revealed top
+   card sits here face-up, for both players, until its controller clicks it. */
+.library-stack-reveal-pending .card {
+  outline: 3px solid var(--danger);
+  box-shadow: 0 0 12px rgba(201, 82, 79, 0.6);
+}
+
 .library-stack-count {
   position: absolute;
   top: 50%;
@@ -2476,6 +2642,20 @@ button {
   position: relative;
   cursor: pointer;
   text-align: center;
+}
+
+/* Equipment/Auras attached to a creature (see GameBoard.tsx:
+   renderCreatureCard) stack LITERALLY underneath it - the creature is
+   .battlefield-stack's one always-on-top front layer, each attached
+   permanent is a .battlefield-stack-layer back layer peeking out from
+   behind it (same diagonal-offset positioning .battlefield-stack-layer-back
+   uses for several of the SAME land stacked together), instead of floating
+   in the unrelated "others" row. Unlike that same-card case, each of these
+   IS a different, individually meaningful card, so (unlike
+   .battlefield-stack-layer-back) it stays clickable rather than
+   pointer-events: none. */
+.attached-equipment-back-layer {
+  cursor: pointer;
 }
 
 .card-empty-pile {
@@ -2858,6 +3038,40 @@ button {
 
 .battlefield-stack-layer-back {
   pointer-events: none;
+}
+
+/* Cycle arrows for an equipment/creature battlefield-stack (renderCreatureCard) -
+   sit just outside the stack's own footprint on either side, above every
+   layer, so they're always reachable no matter how deep the stack or which
+   card currently happens to be on top. */
+.stack-cycle-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1000;
+  width: 18px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: rgba(10, 10, 16, 0.75);
+  color: var(--text);
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.stack-cycle-arrow:hover {
+  background: rgba(10, 10, 16, 0.92);
+  color: var(--accent);
+}
+
+.stack-cycle-arrow-left {
+  left: -22px;
+}
+
+.stack-cycle-arrow-right {
+  right: -22px;
 }
 
 .battlefield-stack-count {

@@ -3,11 +3,12 @@
 // ============================================================================
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { GameAction, GameState, ManaColor } from '../types';
+import { CardInstance, GameAction, GameState, ManaColor } from '../types';
 import { applyAction } from '../engine/actions';
 import { getCardDefinition } from '../data/cards';
 import { canPay, parseCostLabel } from '../engine/mana';
 import { hasKeyword } from '../engine/keywords';
+import { effectivePower, effectiveToughness, isLegalPendingTarget } from '../engine/combat';
 
 const MAX_HISTORY = 25;
 const AI_PLAYER_ID = 'ai';
@@ -80,6 +81,67 @@ export function useLocalGame(initialState: GameState) {
     return () => clearTimeout(timer);
   }, [state.phase, state.combatReadyPlayers, state.mutualAdjustment.status, state.winnerId, dispatch]);
 
+  // --- AI: choose a target for its own pending targeted ability ---------
+  // Without this, the AI could cast something like a tap-and-stun creature
+  // or Omega's Wave Cannon and then just leave GameState.pendingTarget
+  // sitting there forever - nobody else is allowed to choose for the AI, so
+  // the "choose a target" banner would never clear. Deliberately simple, not
+  // remotely optimal: prefers the biggest creature (power + toughness
+  // combined, ties broken at random - same shape as engine/effects.ts:
+  // resolveSacrificeQueue's own AI heuristic) among legal candidates;
+  // failing that, the first legal artifact or enchantment; failing that,
+  // whatever's first; only declines if nothing at all is legal (shouldn't
+  // normally happen - the engine only ever offers a target when at least
+  // one exists). See engine/combat.ts: isLegalPendingTarget for the shared
+  // legality rules (same ones the human-facing UI uses).
+  useEffect(() => {
+    if (state.winnerId) return;
+    if (state.mutualAdjustment.status !== 'inactive') return;
+    const pending = state.pendingTarget;
+    if (!pending || pending.controllerId !== AI_PLAYER_ID) return;
+
+    const timer = setTimeout(() => {
+      const candidates = state.players.flatMap((p) =>
+        p.zones.battlefield.filter((c) => isLegalPendingTarget(state, pending, c, p.id)).map((c) => ({ card: c, ownerId: p.id }))
+      );
+
+      if (candidates.length === 0) {
+        dispatch({ type: 'CHOOSE_TARGET', targetInstanceId: null }, AI_PLAYER_ID);
+        return;
+      }
+
+      const creatures = candidates.filter((c) => getCardDefinition(c.card.defId).type === 'creature');
+      let chosen: CardInstance;
+      if (creatures.length > 0) {
+        let best = creatures[0];
+        let bestScore = -Infinity;
+        let tieCount = 0;
+        for (const c of creatures) {
+          const d = getCardDefinition(c.card.defId);
+          const score = effectivePower(d, c.card, state, c.ownerId) + effectiveToughness(d, c.card, state, c.ownerId);
+          if (score > bestScore) {
+            best = c;
+            bestScore = score;
+            tieCount = 1;
+          } else if (score === bestScore) {
+            tieCount += 1;
+            if (Math.random() < 1 / tieCount) best = c;
+          }
+        }
+        chosen = best.card;
+      } else {
+        const artifactOrEnchantment = candidates.find((c) => {
+          const t = getCardDefinition(c.card.defId).type;
+          return t === 'artifact' || t === 'enchantment';
+        });
+        chosen = (artifactOrEnchantment ?? candidates[0]).card;
+      }
+
+      dispatch({ type: 'CHOOSE_TARGET', targetInstanceId: chosen.instanceId }, AI_PLAYER_ID);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [state, dispatch]);
+
   // --- AI: step through its own turn -----------------------------------
   // Main phase logic: play a land if it hasn't yet, then tap untapped
   // lands one at a time (building its mana pool over several ticks) and
@@ -91,6 +153,13 @@ export function useLocalGame(initialState: GameState) {
     if (state.activePlayerId !== AI_PLAYER_ID) return;
     if (state.mutualAdjustment.status !== 'inactive') return;
     if (state.phase === 'untap' || state.phase === 'declare_blockers') return;
+    // Let the targeting effect above fully resolve first - otherwise this
+    // effect could fire on the same stale state and dispatch something else
+    // (e.g. cast another card) while a target is still outstanding, and
+    // since pendingTarget only ever holds one at a time, a second cast that
+    // also needs a target would silently clobber the first, leaving it
+    // stuck forever.
+    if (state.pendingTarget?.controllerId === AI_PLAYER_ID) return;
 
     const timer = setTimeout(() => {
       const ai = state.players.find((p) => p.id === AI_PLAYER_ID)!;
@@ -150,7 +219,7 @@ export function useLocalGame(initialState: GameState) {
         case 'declare_attackers': {
           const attackers = ai.zones.battlefield.filter((c) => {
             const d = getCardDefinition(c.defId);
-            return d.type === 'creature' && !c.tapped && !c.summoningSick && !hasKeyword(d.text, 'defender');
+            return d.type === 'creature' && !c.tapped && !c.summoningSick && !hasKeyword(d, 'defender');
           });
           dispatch({ type: 'DECLARE_ATTACKERS', instanceIds: attackers.map((c) => c.instanceId) }, AI_PLAYER_ID);
           break;

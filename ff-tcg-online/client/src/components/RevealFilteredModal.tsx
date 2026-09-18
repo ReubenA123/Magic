@@ -8,6 +8,9 @@ interface RevealFilteredModalProps {
   cards: { definition: CardDefinition; instance: CardInstance }[];
   onChoose: (instanceId: string) => void;
   onSkip: () => void;
+  /** Defaults to 'hand'. 'battlefieldTapped' (Ignis Scientia) adjusts the
+   * copy below to match RevealFilteredEffect.takenDestination. */
+  takenDestination?: 'hand' | 'battlefieldTapped';
 }
 
 /**
@@ -19,15 +22,16 @@ interface RevealFilteredModalProps {
  * `filterType` is clickable; Skip sends everything to the bottom in a random
  * order (RESOLVE_REVEAL_FILTERED with instanceId: null).
  */
-export default function RevealFilteredModal({ sourceName, filterType, cards, onChoose, onSkip }: RevealFilteredModalProps) {
+export default function RevealFilteredModal({ sourceName, filterType, cards, onChoose, onSkip, takenDestination = 'hand' }: RevealFilteredModalProps) {
   const filterTypes = Array.isArray(filterType) ? filterType : [filterType];
+  const destinationNote = takenDestination === 'battlefieldTapped' ? 'put it onto the battlefield tapped' : 'take it into your hand';
   return (
     <div className="card-actions-overlay">
       <div className="zone-modal">
         <div className="card-actions-header">
           <strong>{sourceName} - Reveal</strong>
         </div>
-        <p className="card-actions-text">You may take a {filterTypes.join(' or ')} card from among these. The rest go to the bottom of your library in a random order.</p>
+        <p className="card-actions-text">You may choose a {filterTypes.join(' or ')} card from among these to {destinationNote}. The rest go to the bottom of your library in a random order.</p>
         <div className="zone-modal-grid">
           {cards.map((c) => {
             const eligible = filterTypes.includes(c.definition.type);

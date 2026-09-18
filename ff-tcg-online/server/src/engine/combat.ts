@@ -146,6 +146,45 @@ function equipBuffBonus(state: GameState, controllerId: string, instanceId: stri
   );
 }
 
+/** Per-attachment breakdown of what each Equipment/Aura attached to
+ * `instanceId` is individually contributing right now (static +X/+Y,
+ * unconditional or during-your-turn granted keywords, a granted subtype) -
+ * the same underlying fields equipBuffBonus/hasEquipGrantedKeyword/
+ * hasEquipGrantedKeywordDuringOwnTurn already read, just split out per
+ * source instead of summed/flattened into a single yes-or-no, so the UI can
+ * show "which card is giving which" (components/CardActionsPanel.tsx).
+ * Omits an attachment that isn't currently contributing anything (e.g. an
+ * Aura that only taps its target on attach, nothing ongoing). */
+export interface EquipmentContribution {
+  sourceInstanceId: string;
+  sourceName: string;
+  power: number;
+  toughness: number;
+  keywords: string[];
+  subtype?: string;
+}
+
+export function equipmentContributions(state: GameState, controllerId: string, instanceId: string): EquipmentContribution[] {
+  const controller = state.players.find((p) => p.id === controllerId);
+  if (!controller) return [];
+  const result: EquipmentContribution[] = [];
+  for (const c of controller.zones.battlefield) {
+    if (c.attachedToInstanceId !== instanceId) continue;
+    const cDef = getCardDefinition(c.defId);
+    const fixed = cDef.equipBuff ?? { power: 0, toughness: 0 };
+    const perCounter = cDef.equipBuffPerCounter;
+    const perCounterAmount = perCounter ? (c.counters.find((ctr) => ctr.label === perCounter.counterLabel)?.amount ?? 0) : 0;
+    const power = fixed.power + (perCounter ? perCounter.power * perCounterAmount : 0);
+    const toughness = fixed.toughness + (perCounter ? perCounter.toughness * perCounterAmount : 0);
+    const keywords: string[] = [];
+    if (cDef.equipGrantsKeyword) keywords.push(...(Array.isArray(cDef.equipGrantsKeyword) ? cDef.equipGrantsKeyword : [cDef.equipGrantsKeyword]));
+    if (cDef.equipGrantsKeywordDuringOwnTurn && state.activePlayerId === controllerId) keywords.push(cDef.equipGrantsKeywordDuringOwnTurn);
+    if (power === 0 && toughness === 0 && keywords.length === 0 && !cDef.equipGrantsSubtype) continue;
+    result.push({ sourceInstanceId: c.instanceId, sourceName: cDef.name, power, toughness, keywords, subtype: cDef.equipGrantsSubtype });
+  }
+  return result;
+}
+
 /** Sum of +X/+Y from any OTHER permanent controllerId controls with a
  * static "[subtype]s you control get +X/+Y" anthem (Balthier and Fran's
  * "Vehicles you control get +1/+1") matching `def`'s own subtype. Unlike
@@ -165,7 +204,7 @@ function anthemBuffBonus(state: GameState, controllerId: string, def: CardDefini
 }
 
 export function effectivePower(def: CardDefinition, instance: CardInstance, state: GameState, controllerId: string): number {
-  const base = lifeBasedBaseStat(state, controllerId, instance.instanceId) ?? (def.power ?? 0);
+  const base = instance.temporaryBaseStats?.power ?? lifeBasedBaseStat(state, controllerId, instance.instanceId) ?? (def.power ?? 0);
   const plus = instance.counters.find((c) => c.label === '+1/+1')?.amount ?? 0;
   const minus = instance.counters.find((c) => c.label === '-1/-1')?.amount ?? 0;
   const buff = hasActiveLandCountBuff(def, state, controllerId) ? def.landCountBuff!.power : 0;
@@ -177,7 +216,7 @@ export function effectivePower(def: CardDefinition, instance: CardInstance, stat
 }
 
 export function effectiveToughness(def: CardDefinition, instance: CardInstance, state: GameState, controllerId: string): number {
-  const base = lifeBasedBaseStat(state, controllerId, instance.instanceId) ?? (def.toughness ?? 0);
+  const base = instance.temporaryBaseStats?.toughness ?? lifeBasedBaseStat(state, controllerId, instance.instanceId) ?? (def.toughness ?? 0);
   const plus = instance.counters.find((c) => c.label === '+1/+1')?.amount ?? 0;
   const minus = instance.counters.find((c) => c.label === '-1/-1')?.amount ?? 0;
   const buff = hasActiveLandCountBuff(def, state, controllerId) ? def.landCountBuff!.toughness : 0;
@@ -186,6 +225,107 @@ export function effectiveToughness(def: CardDefinition, instance: CardInstance, 
   const equip = equipBuffBonus(state, controllerId, instance.instanceId).toughness;
   const anthem = anthemBuffBonus(state, controllerId, def).toughness;
   return base + plus - minus + buff + typeBuff + temp + equip + anthem;
+}
+
+/** Is `card` (controlled by `ownerId`) a legal choice for `pendingTarget`
+ * right now? Pure and state-only (no visibility/whose-turn-is-it gating -
+ * that's the caller's job) so it's usable both by the human-facing UI
+ * (client/src/components/GameBoard.tsx, gated there by pendingTargetForYou)
+ * and by the local VS AI's own targeting decisions (useLocalGame.ts) - both
+ * need to agree on exactly the same legality rules, or the AI could end up
+ * trying to CHOOSE_TARGET something the engine (and a human) would never
+ * have been offered, silently failing and leaving the pending target banner
+ * stuck forever.
+ *
+ * tapAndStun and debuffTargetByGraveyard only ever target the opponent's
+ * permanents; destroyTarget (e.g. Airship Crash), pumpTarget (e.g.
+ * Blitzball Shot), and putCounterOnTarget (e.g. Cloudbound Moogle) name no
+ * controller restriction at all, so either player's permanents are fair
+ * game there. */
+export function isLegalPendingTarget(state: GameState, pendingTarget: NonNullable<GameState['pendingTarget']>, card: CardInstance, ownerId: string): boolean {
+  const def = getCardDefinition(card.defId);
+  const effect = pendingTarget.effect;
+  if (effect.type === 'tapAndStun') {
+    if (ownerId === pendingTarget.controllerId) return false;
+    return effect.targetType === 'artifactOrCreature' ? def.type === 'artifact' || def.type === 'creature' : def.type === effect.targetType;
+  }
+  if (effect.type === 'tapStunAndGainLifeForNonbasicLands') {
+    if (ownerId === pendingTarget.controllerId) return false;
+    return def.type !== 'land';
+  }
+  if (effect.type === 'chooseCreatureDebuffOthersAndWatchLeave') {
+    if (ownerId === pendingTarget.controllerId) return false;
+    return def.type === 'creature';
+  }
+  if (effect.type === 'grantTemporaryBaseStatsAndDeathReturn') {
+    return def.type === 'creature' && ownerId === pendingTarget.controllerId;
+  }
+  if (effect.type === 'pumpTarget' || effect.type === 'putCounterOnTarget') {
+    return def.type === 'creature';
+  }
+  if (effect.type === 'debuffTargetByGraveyard') {
+    if (ownerId === pendingTarget.controllerId) return false;
+    return def.type === 'creature';
+  }
+  if (effect.type === 'selfFightTarget') {
+    return def.type === 'creature' && card.instanceId !== pendingTarget.sourceInstanceId;
+  }
+  if (effect.type === 'chooseCreaturesFight') {
+    if (def.type !== 'creature') return false;
+    return pendingTarget.firstInstanceId ? ownerId !== pendingTarget.controllerId : ownerId === pendingTarget.controllerId;
+  }
+  if (effect.type === 'modifySagaLoreCounter') {
+    return !!def.saga && ownerId === pendingTarget.controllerId;
+  }
+  if (effect.type === 'tapTarget') {
+    return effect.targetFilter === 'nonlandPermanent' ? def.type !== 'land' : def.type === 'creature';
+  }
+  if (effect.type === 'putCounterOnUpToOneOwnCreature') {
+    return def.type === 'creature' && ownerId === pendingTarget.controllerId;
+  }
+  if (effect.type === 'attachSelfToTarget') {
+    const matchesType = effect.targetTypeFilter === 'artifactOrCreature' ? def.type === 'artifact' || def.type === 'creature' : def.type === 'creature';
+    return matchesType && (effect.allowAnyController || ownerId === pendingTarget.controllerId);
+  }
+  if (effect.type === 'createTokenCopyOfTarget') {
+    return def.type === 'artifact' || def.type === 'creature' || def.type === 'land';
+  }
+  if (effect.type === 'destroyOpponentCreature') {
+    if (ownerId === pendingTarget.controllerId) return false;
+    return def.type === 'creature';
+  }
+  if (effect.type === 'bounceTarget') {
+    return def.type !== 'land';
+  }
+  if (effect.type === 'bounceUpToOneOtherNonlandPermanent') {
+    return def.type !== 'land' && card.instanceId !== pendingTarget.sourceInstanceId;
+  }
+  if (effect.type === 'putCounterOnUpToOneOtherCreatureEqualToOwnPower') {
+    return def.type === 'creature' && card.instanceId !== pendingTarget.sourceInstanceId;
+  }
+  if (effect.type === 'damageTargetAndControllerByEquipmentCount') {
+    return def.type === 'creature';
+  }
+  if (effect.type === 'pumpAnotherControlledCreature') {
+    return def.type === 'creature' && ownerId === pendingTarget.controllerId && card.instanceId !== pendingTarget.sourceInstanceId;
+  }
+  if (effect.type === 'damageTargetCreature') {
+    return def.type === 'creature';
+  }
+  if (effect.type === 'sweepDamageFromChosenCreature') {
+    return def.type === 'creature' && ownerId === pendingTarget.controllerId;
+  }
+  const isFlyingCreature = def.type === 'creature' && hasKeyword(def, 'flying');
+  return (
+    effect.targetFilter === 'anyPermanent' ||
+    (effect.targetFilter === 'nonlandPermanent' && def.type !== 'land') ||
+    (effect.targetFilter === 'creatureWithMinPower' && def.type === 'creature' && effectivePower(def, card, state, ownerId) >= (effect.minPower ?? 0)) ||
+    (effect.targetFilter === 'artifactEnchantmentOrFlyingCreature' && (def.type === 'artifact' || def.type === 'enchantment' || isFlyingCreature)) ||
+    (effect.targetFilter === 'artifactOrEnchantment' && (def.type === 'artifact' || def.type === 'enchantment')) ||
+    (effect.targetFilter === 'creatureWithDamageMarked' && def.type === 'creature' && card.damageMarked > 0) ||
+    (effect.targetFilter === 'land' && def.type === 'land') ||
+    (effect.targetFilter === 'creature' && def.type === 'creature')
+  );
 }
 
 /** True for a real creature, or for a Vehicle (def.crew set) that's
@@ -225,18 +365,39 @@ function markDamage(state: GameState, instanceId: string, amount: number, isDeat
   }));
 }
 
-function dealDirectDamageToDefender(state: GameState, attackerControllerId: string, attackerDefId: string, attackerName: string, defenderId: string, amount: number): GameState {
+function dealDirectDamageToDefender(
+  state: GameState,
+  attackerControllerId: string,
+  attackerInstanceId: string,
+  attackerDefId: string,
+  attackerName: string,
+  defenderId: string,
+  amount: number
+): GameState {
   let next = loseLife(state, defenderId, amount);
   if (isCommanderAttack(next, attackerControllerId, attackerDefId)) {
     next = updatePlayer(next, defenderId, (p) => ({ ...p, commanderDamageTaken: p.commanderDamageTaken + amount }));
     next = { ...next, log: [...next.log, `${attackerName} deals ${amount} commander damage.`] };
   }
+  // "Whenever this creature deals combat damage to a player, that player
+  // loses the game." (Summon: Primal Odin's Zantetsuken chapter) - every
+  // path that deals combat damage to a player (unblocked, or trampling over
+  // blockers) routes through this one function, so this is the single place
+  // to check the granted flag. Only for actual damage, and only if nothing
+  // else already ended the game this same instant.
+  if (amount > 0 && !next.winnerId) {
+    const attackerInstance = findInstance(next, attackerInstanceId)?.instance;
+    if (attackerInstance?.grantedCombatDamageToPlayerCausesLoss) {
+      const defenderName = getPlayer(next, defenderId).name;
+      next = { ...next, winnerId: attackerControllerId, log: [...next.log, `${attackerName} causes ${defenderName} to lose the game.`] };
+    }
+  }
   return next;
 }
 
 function strikesInPass(state: GameState, def: CardDefinition, instance: CardInstance, controllerId: string, pass: 1 | 2): boolean {
-  const fs = hasKeyword(def.text, 'first strike') || hasEquipGrantedKeyword(state, controllerId, instance.instanceId, 'first strike');
-  const ds = hasKeyword(def.text, 'double strike') || hasEquipGrantedKeyword(state, controllerId, instance.instanceId, 'double strike');
+  const fs = hasKeyword(def, 'first strike') || hasEquipGrantedKeyword(state, controllerId, instance.instanceId, 'first strike');
+  const ds = hasKeyword(def, 'double strike') || hasEquipGrantedKeyword(state, controllerId, instance.instanceId, 'double strike');
   return pass === 1 ? fs || ds : ds || (!fs && !ds);
 }
 
@@ -297,16 +458,16 @@ function dealDamagePass(state: GameState, pass: 1 | 2): GameState {
       .map((id) => findInstance(next, id))
       .filter((b): b is NonNullable<typeof b> => !!b)
       .filter((b) => !isPendingDeath(next, b.instance.instanceId));
-    const isDeathtouch = hasKeyword(attackerDef.text, 'deathtouch');
+    const isDeathtouch = hasKeyword(attackerDef, 'deathtouch');
     const isTrample = hasKeywordEffective(attackerDef, attackerFound.instance, 'trample');
-    const isLifelink = hasKeyword(attackerDef.text, 'lifelink');
+    const isLifelink = hasKeyword(attackerDef, 'lifelink');
 
     if (strikesInPass(next, attackerDef, attackerFound.instance, attackerFound.controllerId, pass)) {
       const power = effectivePower(attackerDef, attackerFound.instance, next, attackerFound.controllerId) * damageMultiplierFor(next, attackerFound.controllerId, attackerDef);
 
       if (blockers.length === 0) {
         const defender = getOpponent(next, attackerFound.controllerId);
-        next = dealDirectDamageToDefender(next, attackerFound.controllerId, attackerFound.instance.defId, attackerDef.name, defender.id, power);
+        next = dealDirectDamageToDefender(next, attackerFound.controllerId, attackerFound.instance.instanceId, attackerFound.instance.defId, attackerDef.name, defender.id, power);
         next = { ...next, log: [...next.log, `${attackerDef.name} hits ${defender.name} for ${power}.`] };
         if (isLifelink) {
           next = addLife(next, attackerFound.controllerId, power);
@@ -337,7 +498,7 @@ function dealDamagePass(state: GameState, pass: 1 | 2): GameState {
         }
         if (isTrample && remaining > 0) {
           const defender = getOpponent(next, attackerFound.controllerId);
-          next = dealDirectDamageToDefender(next, attackerFound.controllerId, attackerFound.instance.defId, attackerDef.name, defender.id, remaining);
+          next = dealDirectDamageToDefender(next, attackerFound.controllerId, attackerFound.instance.instanceId, attackerFound.instance.defId, attackerDef.name, defender.id, remaining);
           next = { ...next, log: [...next.log, `${attackerDef.name} tramples ${remaining} over to ${defender.name}.`] };
         }
       }
@@ -348,10 +509,10 @@ function dealDamagePass(state: GameState, pass: 1 | 2): GameState {
       if (!strikesInPass(next, blockerDef, blocker.instance, blocker.controllerId, pass)) continue;
       if (isPendingDeath(next, attackerFound.instance.instanceId)) continue;
       const blockerPower = effectivePower(blockerDef, blocker.instance, next, blocker.controllerId) * damageMultiplierFor(next, blocker.controllerId, blockerDef);
-      const blockerHasDeathtouch = hasKeyword(blockerDef.text, 'deathtouch');
+      const blockerHasDeathtouch = hasKeyword(blockerDef, 'deathtouch');
       next = markDamage(next, attackerFound.instance.instanceId, blockerPower, blockerHasDeathtouch);
       next = { ...next, log: [...next.log, `${blockerDef.name} deals ${blockerPower} damage to ${attackerDef.name}.`] };
-      if (hasKeyword(blockerDef.text, 'lifelink')) {
+      if (hasKeyword(blockerDef, 'lifelink')) {
         next = addLife(next, blocker.controllerId, blockerPower);
         next = applyGainLifeTriggers(next, blocker.controllerId);
       }

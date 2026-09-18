@@ -157,6 +157,8 @@ export function createStateFromDeck(deck: SavedDeck, humanName: string): GameSta
     pendingSacrifice: null,
     pendingSurveil: null,
     extraTurnsQueued: [],
+    extraCombatPhasesQueued: 0,
+    combatPhaseNumberThisTurn: 0,
     pendingReturnFromGraveyard: null,
     pendingDiscard: null,
     pendingOptionalBounce: null,
@@ -168,8 +170,14 @@ export function createStateFromDeck(deck: SavedDeck, humanName: string): GameSta
     pendingReanimate: null,
     pendingReturnCreaturesFromGraveyard: null,
     pendingOptionalTransform: null,
+    pendingOptionalPayLife: null,
     pendingGraveyardExile: null,
     pendingDiscardUpToThenDraw: null,
+    pendingRevealPickup: null,
+    pendingCoinFlip: null,
+    lastCoinFlip: null,
+    pendingHideaway: null,
+    battlefieldLeaveWatchers: [],
   };
 }
 
