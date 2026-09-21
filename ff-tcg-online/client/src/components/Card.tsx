@@ -31,6 +31,14 @@ interface CardProps {
    * awaitingOptionalPayLife. Distinct from revealOutline's dimmer 'purple'
    * (that one just means "already resolved, informational"). */
   awaitingOptionalChoice?: boolean;
+  /** True when this exact card could be usefully tapped (a plain mana tap,
+   * or one of its own tap-cost abilities) or cast right now - a yellow
+   * border so a glance at the board/hand shows what's actually available
+   * this instant, distinct from transformReady's red (a specific,
+   * higher-priority "you can transform this" nudge) and card-selected's
+   * pale gold (an active choice already in progress, e.g. a legal
+   * pendingTarget). See GameBoard's cardIsActionable. */
+  actionable?: boolean;
 }
 
 export default function Card({
@@ -45,6 +53,7 @@ export default function Card({
   transformReady,
   revealOutline,
   awaitingOptionalChoice,
+  actionable,
 }: CardProps) {
   const [imageFailed, setImageFailed] = useState(false);
   const [backImageFailed, setBackImageFailed] = useState(false);
@@ -64,6 +73,7 @@ export default function Card({
     revealOutline === 'red' ? 'card-reveal-red' : '',
     revealOutline === 'purple' ? 'card-reveal-purple' : '',
     awaitingOptionalChoice ? 'card-optional-choice-purple' : '',
+    actionable ? 'card-actionable' : '',
     onClick ? 'card-clickable' : '',
     instance?.tapped ? 'card-tapped' : '',
     dimmed ? 'card-dimmed' : '',

@@ -16,6 +16,7 @@ import {
   hasEquipGrantedKeywordDuringOwnTurn,
   hasSelfGrantedKeywordDuringOwnTurn,
   loseLife,
+  damageMultiplierFor,
 } from './combat';
 import {
   resolveCardEffects,
@@ -152,6 +153,8 @@ function applyActionInner(state: GameState, action: GameAction, playerId: string
       return resolveOptionalTransform(state, playerId, action.accept);
     case 'RESOLVE_OPTIONAL_PAY_LIFE':
       return resolveOptionalPayLife(state, playerId, action.accept);
+    case 'RESOLVE_FREE_CAST_FROM_HAND':
+      return resolveFreeCastFromHand(state, playerId, action.instanceId);
     case 'RESOLVE_GRAVEYARD_EXILE':
       return resolveGraveyardExile(state, playerId, action.instanceId);
     case 'DISCARD_UP_TO_THEN_DRAW':
@@ -420,10 +423,20 @@ function castCard(
   instanceId: string,
   chosenX?: number,
   chosenModeIndices?: number[],
-  chosenTierIndex?: number
+  chosenTierIndex?: number,
+  // "Cast without paying its mana cost" (Buster Sword's granted trigger,
+  // via RESOLVE_FREE_CAST_FROM_HAND) - bypasses BOTH the mana cost/payment
+  // AND the normal "your turn, main phase only" timing gate, same as `mutual`
+  // does for cost but ALSO for timing, since this is a one-shot window
+  // granted by an ability firing mid-combat, not normal-timing casting.
+  free?: boolean
 ): ActionResult {
   const player = getPlayer(state, playerId);
   const mutual = isMutualActive(state);
+  // See engine/effects.ts: triggerNoncreatureCastAbilities - only a
+  // permanent (or equipment target) that was ALREADY on the battlefield
+  // before this cast resolved is eligible to see it as a trigger event.
+  const preCastBattlefieldIds = new Set(player.zones.battlefield.map((c) => c.instanceId));
 
   let card = player.zones.hand.find((c) => c.instanceId === instanceId);
   let sourceZone: 'hand' | 'commander' | null = card ? 'hand' : null;
@@ -442,7 +455,7 @@ function castCard(
     return { ok: false, error: `${def.name} requires choosing one tier.` };
   }
 
-  if (!mutual && def.type !== 'land' && def.type !== 'instant' && !hasKeyword(def, 'flash')) {
+  if (!mutual && !free && def.type !== 'land' && def.type !== 'instant' && !hasKeyword(def, 'flash')) {
     if (state.activePlayerId !== playerId) return { ok: false, error: `${def.name} can only be cast on your own turn (no flash).` };
     if (state.phase !== 'main1' && state.phase !== 'main2') return { ok: false, error: `${def.name} can only be cast during a main phase (no flash).` };
   }
@@ -496,12 +509,12 @@ function castCard(
   }
   const extraGeneric = (parsed.hasX ? chosenX ?? 0 : 0) + commanderTax;
 
-  if (!mutual && !canPay(player.manaPool, parsed, extraGeneric)) {
+  if (!mutual && !free && !canPay(player.manaPool, parsed, extraGeneric)) {
     return { ok: false, error: `Not enough mana to cast ${def.name}${commanderTax > 0 ? ` (includes +${commanderTax} commander tax)` : ''}.` };
   }
 
   let next = state;
-  if (!mutual) next = updatePlayer(next, playerId, (p) => ({ ...p, manaPool: payCost(p.manaPool, parsed, extraGeneric) }));
+  if (!mutual && !free) next = updatePlayer(next, playerId, (p) => ({ ...p, manaPool: payCost(p.manaPool, parsed, extraGeneric) }));
   next = updatePlayer(next, playerId, (p) => ({
     ...p,
     zones: { ...p.zones, [sourceZone as 'hand' | 'commander']: p.zones[sourceZone as 'hand' | 'commander'].filter((c) => c.instanceId !== instanceId) },
@@ -551,7 +564,7 @@ function castCard(
   }
 
   if (def.type !== 'creature') {
-    const triggered = triggerNoncreatureCastAbilities(next, playerId, manaValue(parsed) + extraGeneric);
+    const triggered = triggerNoncreatureCastAbilities(next, playerId, manaValue(parsed) + extraGeneric, preCastBattlefieldIds);
     next = triggered.state;
     effectLogLines = [...effectLogLines, ...triggered.logLines];
   }
@@ -566,6 +579,7 @@ function castCard(
 function castFromGraveyard(state: GameState, playerId: string, instanceId: string, chosenX?: number): ActionResult {
   const player = getPlayer(state, playerId);
   const mutual = isMutualActive(state);
+  const preCastBattlefieldIds = new Set(player.zones.battlefield.map((c) => c.instanceId));
 
   const card = player.zones.graveyard.find((c) => c.instanceId === instanceId);
   if (!card) return { ok: false, error: 'That card is not in your graveyard.' };
@@ -618,7 +632,7 @@ function castFromGraveyard(state: GameState, playerId: string, instanceId: strin
   }
 
   if (def.type !== 'creature') {
-    const triggered = triggerNoncreatureCastAbilities(next, playerId, manaValue(parsed) + extraGeneric);
+    const triggered = triggerNoncreatureCastAbilities(next, playerId, manaValue(parsed) + extraGeneric, preCastBattlefieldIds);
     next = triggered.state;
     effectLogLines = [...effectLogLines, ...triggered.logLines];
   }
@@ -687,8 +701,18 @@ function activateAbility(state: GameState, playerId: string, instanceId: string,
   const def = getCardDefinition(found.card.defId);
   const ability = def.abilities?.find((a) => a.id === abilityId);
   if (!ability) return { ok: false, error: `${def.name} has no such ability.` };
-  if (ability.returnFromGraveyardTransformed && found.zone !== 'graveyard') {
-    return { ok: false, error: `${ability.label} can only be activated from the graveyard.` };
+  // A permanent's activated ability - {T}-cost ones especially, but really
+  // any of them - only makes sense once the card is actually a permanent ON
+  // the battlefield, not still sitting in hand (or anywhere else) as a
+  // card. Real MTG rules: you cast/play the card first, THEN activate what
+  // it does once it's out - there's no such thing as tapping a card in your
+  // hand. returnFromGraveyardTransformed is the one deliberate exception
+  // (Garland, Knight of Cornelia's own ability explicitly lives in the
+  // graveyard instead).
+  if (ability.returnFromGraveyardTransformed) {
+    if (found.zone !== 'graveyard') return { ok: false, error: `${ability.label} can only be activated from the graveyard.` };
+  } else if (found.zone !== 'battlefield') {
+    return { ok: false, error: `${def.name} must be on the battlefield before you can activate ${ability.label} - cast or play it first.` };
   }
 
   const owner = getPlayer(state, found.ownerPlayerId);
@@ -1030,6 +1054,23 @@ function attachCard(state: GameState, playerId: string, instanceId: string, targ
 
   const mutual = isMutualActive(state);
   const isEquipment = !!def.equipCost;
+
+  // "Equip [cost]" always means "attach to target creature YOU control" -
+  // unlike an Aura (attachesTo with no equipCost), which can enchant either
+  // player's permanent per its own printed text (e.g. a curse). Checked
+  // against the EQUIPMENT's own owner (this engine has no separate
+  // control-changing concept), matching every other same-controller equip
+  // lookup (equipBuffBonus, equipmentContributions, ...).
+  if (!mutual && isEquipment && target.ownerPlayerId !== found.ownerPlayerId) {
+    return { ok: false, error: `${def.name} can only be equipped to a creature you control.` };
+  }
+  // "Hexproof" - can't be the target of anything its controller doesn't
+  // control, equip included. No existing pendingTarget path enforces this
+  // yet (a broader gap), but equip is the one the rule was explicitly
+  // requested for.
+  if (!mutual && isEquipment && hasKeyword(targetDef, 'hexproof')) {
+    return { ok: false, error: `${targetDef.name} has hexproof and can't be equipped.` };
+  }
 
   if (!mutual && !isEquipment && found.card.attachedToInstanceId) {
     return { ok: false, error: `${def.name} is already attached - Auras don't move once attached.` };
@@ -2108,11 +2149,21 @@ function resolveReturnCreatureFromGraveyard(state: GameState, playerId: string, 
 }
 
 /** "Whenever [this] deals combat damage to a player, you may exile it, then
- * return it to the battlefield transformed" (Jecht, Reluctant Guardian). */
+ * return it to the battlefield transformed" (Jecht, Reluctant Guardian) -
+ * the trigger fires the instant damage is dealt (mid-combat), but the
+ * actual choice stays open until combat has fully resolved and left the
+ * board: exiling Jecht mid-combat_end would swap out the attacker's
+ * instanceId while the attack box is still showing it, making him just
+ * vanish from his own attack instead of visibly finishing the attack first.
+ * See GameBoard.tsx's own showCombatZones-gated banner for the matching
+ * client-side wait. */
 function resolveOptionalTransform(state: GameState, playerId: string, accept: boolean): ActionResult {
   const pending = state.pendingOptionalTransform;
   if (!pending) return { ok: false, error: 'Nothing is waiting on an optional transform right now.' };
   if (pending.controllerId !== playerId) return { ok: false, error: "It's not your choice to make." };
+  if (state.phase === 'declare_attackers' || state.phase === 'declare_blockers' || state.phase === 'combat_damage' || state.phase === 'combat_end') {
+    return { ok: false, error: 'Wait until combat ends before deciding whether to transform.' };
+  }
 
   if (!accept) {
     return { ok: true, state: { ...state, pendingOptionalTransform: null } };
@@ -2139,6 +2190,35 @@ function resolveOptionalPayLife(state: GameState, playerId: string, accept: bool
   const resolved = resolveCardEffects(next, playerId, pending.effects, pending.sourceInstanceId);
   next = { ...resolved.state, pendingOptionalPayLife: null, log: [...resolved.state.log, ...resolved.logLines] };
   return { ok: true, state: next };
+}
+
+/** "You may cast a spell from your hand with mana value less than or equal
+ * to that damage without paying its mana cost." (Buster Sword's granted
+ * trigger) - instanceId: null declines. Restricted to nonland cards
+ * ("spell" excludes lands) at or under pending.maxManaValue; delegates the
+ * actual cast to castCard's `free` param (bypasses both cost and normal
+ * timing - see castCard). */
+function resolveFreeCastFromHand(state: GameState, playerId: string, instanceId: string | null): ActionResult {
+  const pending = state.pendingFreeCastFromHand;
+  if (!pending) return { ok: false, error: 'Nothing is waiting on a free cast right now.' };
+  if (pending.controllerId !== playerId) return { ok: false, error: "It's not your choice to make." };
+
+  if (!instanceId) {
+    return { ok: true, state: { ...state, pendingFreeCastFromHand: null } };
+  }
+
+  const player = getPlayer(state, playerId);
+  const card = player.zones.hand.find((c) => c.instanceId === instanceId);
+  if (!card) return { ok: false, error: 'That card is not in your hand.' };
+  const def = getCardDefinition(card.defId);
+  if (def.type === 'land') return { ok: false, error: 'A land is not a spell - it can’t be cast this way.' };
+  if (manaValue(effectiveCastCost(def, player)) > pending.maxManaValue) {
+    return { ok: false, error: `${def.name}'s mana value is too high (max ${pending.maxManaValue}).` };
+  }
+
+  const result = castCard(state, playerId, instanceId, undefined, undefined, undefined, true);
+  if (!result.ok) return result;
+  return { ok: true, state: { ...result.state, pendingFreeCastFromHand: null } };
 }
 
 /** Picking up a RevealTopThenLoseLifeByManaValueEffect's reveal (Dark
@@ -2504,6 +2584,24 @@ function applyCombatDamageToPlayerTriggers(state: GameState): GameState {
       if (!watcherDef.onAnyControlledCreatureCombatDamageToPlayer || watcherDef.onAnyControlledCreatureCombatDamageToPlayer.length === 0) continue;
       const resolved = resolveCardEffects(next, found.ownerPlayerId, watcherDef.onAnyControlledCreatureCombatDamageToPlayer, watcher.instanceId);
       next = { ...resolved.state, log: [...resolved.state.log, ...resolved.logLines] };
+    }
+    // "Whenever equipped creature deals combat damage to a player, draw a
+    // card, then you may cast a spell from your hand with mana value less
+    // than or equal to that damage without paying its mana cost." (Buster
+    // Sword) - a granted trigger from any Equipment attached to this
+    // attacker. The damage amount is computed the same way
+    // resolveCombatDamage is about to deal it (effectivePower *
+    // damageMultiplierFor) since this runs before that actually happens.
+    const equipment = getPlayer(next, found.ownerPlayerId).zones.battlefield.filter((c) => c.attachedToInstanceId === attackerId);
+    if (equipment.some((eq) => getCardDefinition(eq.defId).equipGrantsDrawThenMayCastFreeUpToCombatDamage)) {
+      const damage = effectivePower(def, found.card, next, found.ownerPlayerId) * damageMultiplierFor(next, found.ownerPlayerId, def);
+      const drawn = getPlayer(next, found.ownerPlayerId).zones.library.slice(0, 1);
+      next = updatePlayer(next, found.ownerPlayerId, (p) => ({
+        ...p,
+        zones: { ...p.zones, library: p.zones.library.slice(1), hand: [...p.zones.hand, ...drawn] },
+      }));
+      const drawNote = drawn.length > 0 ? `${getPlayer(next, found.ownerPlayerId).name} draws a card.` : `${getPlayer(next, found.ownerPlayerId).name}'s library is empty.`;
+      next = { ...next, pendingFreeCastFromHand: { sourceInstanceId: attackerId, controllerId: found.ownerPlayerId, maxManaValue: damage }, log: [...next.log, drawNote] };
     }
   }
   return next;

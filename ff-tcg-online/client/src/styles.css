@@ -605,6 +605,15 @@ button {
   box-shadow: 0 0 8px rgba(139, 111, 209, 0.7);
 }
 
+/* This exact card could usefully be tapped or cast RIGHT NOW (see
+   GameBoard's cardIsActionable) - a plain yellow border, left as the
+   ordinary default border color otherwise (no separate "can't" styling
+   needed - not-yellow already reads as "nothing to do here"). */
+.card-actionable {
+  outline: 3px solid #f4d35e;
+  box-shadow: 0 0 6px rgba(244, 211, 94, 0.6);
+}
+
 .card-art {
   width: 100%;
   height: 100%;
@@ -798,6 +807,12 @@ button {
   color: var(--text-dim);
   font-size: 13px;
   margin: 0 0 14px;
+  /* Card text is full of '\n's between separate abilities/clauses (e.g.
+     World Map's two activated abilities) - a plain <p> collapses those to a
+     single space by default, running everything into one paragraph.
+     pre-line keeps each '\n' as a real line break while still wrapping and
+     collapsing ordinary spaces normally. */
+  white-space: pre-line;
 }
 
 .card-actions-type-line {
@@ -2365,6 +2380,26 @@ button {
   filter: grayscale(60%);
 }
 
+/* Tap/Untap and Cast: yellow when the action is legal RIGHT NOW, black when
+   it isn't (not enough mana, summoning sickness, ...) - overrides both the
+   plain .card-action-button's own gold/accent background and its generic
+   :disabled fade, so "not ready" reads as a deliberate black state rather
+   than a faded one. The button itself still shows either way (see
+   CardActionsPanel's canTapForMana for when there's genuinely no tap
+   ability at all, which is the one case the row disappears instead). */
+.card-action-button.card-action-button-ready {
+  background: #f4d35e;
+  color: #14151d;
+}
+
+.card-action-button.card-action-button-notready,
+.card-action-button.card-action-button-notready:disabled {
+  background: #14151d;
+  color: var(--text-dim);
+  opacity: 1;
+  filter: none;
+}
+
 .card-action-tap-wrapper {
   flex: 1;
   display: flex;
@@ -2374,12 +2409,6 @@ button {
 
 .card-action-tap-wrapper .card-action-button {
   margin-bottom: 0;
-}
-
-.card-action-disabled-reason {
-  font-size: 11px;
-  color: var(--text-dim);
-  text-align: center;
 }
 
 .bottom-right-controls {

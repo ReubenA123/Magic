@@ -4,6 +4,26 @@ import { parseCostLabel, canPay } from '../engine/mana';
 import { EquipmentContribution } from '../engine/combat';
 import { getCardDefinition } from '../data/cards';
 
+/** The type line shown under a card's name - e.g. "Legendary Creature —
+ * Human Soldier" rather than "creature — Legendary Creature — Human
+ * Soldier". Most subtypes here already restate the card's own type as part
+ * of the printed supertype/type block before the em dash ("Legendary
+ * Creature", "Legendary Artifact - Equipment", "Legendary Enchantment
+ * Creature — Saga Demon", ...) - prepending the bare CardDefinition.type in
+ * front of that is a redundant "the player already knows it's a creature
+ * from the Legendary Creature text" repeat. Only prepends the bare type
+ * when the subtype DOESN'T already say so (e.g. a plain creature subtype
+ * like "Frog" with no leading type block at all), so that case still reads
+ * as "creature — Frog" rather than just the bare, context-free "Frog". */
+function typeLineFor(definition: CardDefinition): string {
+  const subtype = definition.subtype;
+  if (!subtype) return definition.type;
+  const dashIndex = subtype.search(/[—-]/);
+  const beforeDash = (dashIndex === -1 ? subtype : subtype.slice(0, dashIndex)).toLowerCase();
+  const alreadyStatesType = new RegExp(`\\b${definition.type}\\b`).test(beforeDash);
+  return alreadyStatesType ? subtype : `${definition.type} — ${subtype}`;
+}
+
 /** What a mana-producing permanent's plain tap ability actually adds -
  * shown as a caption under its Tap button so it isn't just a bare, ambiguous
  * "Tap" when the SAME card also has one or more named tap-cost abilities
@@ -26,11 +46,11 @@ function describeProducesMana(def: CardDefinition): string | null {
  * looking "Tap" buttons. Falls back to the ability's own `label` when its
  * cost has no tap at all (e.g. The Gold Saucer's "Sacrifice two artifacts:
  * Draw a card"). */
-function abilityButtonLabel(ability: CardAbility): string {
+function abilityButtonLabel(ability: CardAbility, def: CardDefinition): string {
   if (!ability.cost.tap) return ability.label;
   const rest: string[] = [];
   if (ability.cost.manaLabel) rest.push(ability.cost.manaLabel);
-  if (ability.cost.sacrificeSelf) rest.push('Sacrifice this');
+  if (ability.cost.sacrificeSelf) rest.push(`Sacrifice this ${def.type}`);
   if (ability.cost.sacrificeAnother) {
     const count = ability.cost.sacrificeAnotherCount ?? 1;
     const noun = ability.cost.sacrificeAnother === 'artifactOrCreature' ? 'creature(s)/artifact(s)' : `${ability.cost.sacrificeAnother}(s)`;
@@ -112,6 +132,13 @@ interface CardActionsPanelProps {
    * entered tapped", "summoning sickness"), or null/undefined if pressing it
    * is currently legal - see GameBoard.tsx: tapDisabledReason. */
   tapDisabledReason?: string | null;
+  /** Whether this card has a mana ability at all (printed or granted) - the
+   * plain Tap/Untap row only exists when this is true. Unlike
+   * tapDisabledReason (temporary: summoning sickness, spent mana, ...),
+   * this is a structural fact about the card - one with no mana ability
+   * ever gets no tap row, rather than a permanently-disabled one. See
+   * GameBoard.tsx: hasPlainTapUse. */
+  canTapForMana?: boolean;
   onToggleTap: () => void;
   onChooseTapColor: (color: ManaColor) => void;
   onCast: () => void;
@@ -160,6 +187,7 @@ export default function CardActionsPanel({
   readOnly,
   manaOptions,
   tapDisabledReason,
+  canTapForMana,
   onToggleTap,
   onChooseTapColor,
   onCast,
@@ -223,8 +251,7 @@ export default function CardActionsPanel({
 
         {(definition.subtype || (equipmentContributions && equipmentContributions.some((c) => c.subtype))) && (
           <p className="card-actions-type-line">
-            {definition.type}
-            {definition.subtype ? ` — ${definition.subtype}` : ''}
+            {typeLineFor(definition)}
             {equipmentContributions
               ?.filter((c) => c.subtype)
               .map((c) => (
@@ -335,7 +362,15 @@ export default function CardActionsPanel({
             read top to bottom the same way the text does, instead of this
             one showing up last just because it isn't part of the `abilities`
             array. */}
-        {!readOnly && isOnBattlefield && (
+        {/* A card with no mana ability at all (printed or granted) gets no
+            tap row - there's structurally nothing to ever do by tapping it.
+            One that DOES have a mana ability still shows this row even when
+            temporarily blocked (summoning sickness, already-spent mana, a
+            color choice pending elsewhere, ...) - just colored to show it
+            (see card-action-button-ready/-notready below) rather than
+            disappearing, since the ability itself is real, just not usable
+            this instant. */}
+        {!readOnly && isOnBattlefield && canTapForMana && (
           <div className="card-actions-bottom-row">
             {showManaChoice ? (
               <div className="mana-choice-inline">
@@ -351,7 +386,7 @@ export default function CardActionsPanel({
             ) : (
               <div className="card-action-tap-wrapper">
                 <button
-                  className="card-action-button card-action-button-play"
+                  className={`card-action-button card-action-button-play ${tapDisabledReason ? 'card-action-button-notready' : 'card-action-button-ready'}`}
                   onClick={handleTapClick}
                   disabled={!!tapDisabledReason}
                   title={tapDisabledReason ?? ''}
@@ -366,16 +401,28 @@ export default function CardActionsPanel({
                 {!instance.tapped && !needsManaChoice && describeProducesMana(definition) && (
                   <p className="card-ability-effect-text">{describeProducesMana(definition)}</p>
                 )}
-                {tapDisabledReason && <div className="card-action-disabled-reason">({tapDisabledReason})</div>}
               </div>
             )}
           </div>
         )}
 
-        {!readOnly && definition.abilities && definition.abilities.length > 0 && (
+        {/* A permanent's activated ability only makes sense once it's
+            actually a permanent ON the battlefield - not still a card in
+            hand (or wherever else). returnFromGraveyardTransformed is the
+            one deliberate exception (Garland, Knight of Cornelia's ability
+            explicitly lives in the graveyard instead). Filtered out
+            entirely here rather than shown disabled - there's nothing to
+            "activate later from here" about a card that has to be cast or
+            played first; see engine/actions.ts: activateAbility for the
+            matching server-side rejection. */}
+        {!readOnly &&
+          definition.abilities &&
+          definition.abilities.filter((a) => (a.returnFromGraveyardTransformed ? currentZone === 'graveyard' : isOnBattlefield)).length > 0 && (
           <div className="card-actions-section">
             <div className="card-actions-label">Abilities</div>
-            {definition.abilities.map((ability) => {
+            {definition.abilities
+              .filter((a) => (a.returnFromGraveyardTransformed ? currentZone === 'graveyard' : isOnBattlefield))
+              .map((ability) => {
               const manaCost = ability.cost.manaLabel ? parseCostLabel(ability.cost.manaLabel) : null;
               const affordable = mutualActive || !manaCost || canPay(ownerManaPool, manaCost, 0);
               const tapBlocked = !!ability.cost.tap && instance.tapped;
@@ -386,7 +433,6 @@ export default function CardActionsPanel({
               const upkeepBlocked = !!ability.onlyDuringOwnUpkeep && !mutualActive && !isMyUpkeep;
               const sorceryBlocked = !!ability.onlyDuringOwnMainPhase && !mutualActive && !isMyMainPhase;
               const meldPartnerMissing = !!ability.meldsWith && !ownerBattlefieldDefIds.includes(ability.meldsWith.partnerDefId);
-              const wrongZoneForGraveyardAbility = !!ability.returnFromGraveyardTransformed && currentZone !== 'graveyard';
               const legendaryCountMissing = !!ability.requiresControlledLegendaryCreatureCount && ownerLegendaryCreatureCount < ability.requiresControlledLegendaryCreatureCount;
               const nothingHiddenAway = !!ability.playHideawayCard && !instance.hideawayExiledCardId;
               const disabled =
@@ -399,7 +445,6 @@ export default function CardActionsPanel({
                 upkeepBlocked ||
                 sorceryBlocked ||
                 meldPartnerMissing ||
-                wrongZoneForGraveyardAbility ||
                 legendaryCountMissing ||
                 nothingHiddenAway;
               const blockedReason = endStepBlocked
@@ -416,17 +461,20 @@ export default function CardActionsPanel({
                         ? `Needs at least ${ability.requiresGraveyardSize} cards in your graveyard`
                         : graveyardBlocked
                           ? `Needs ${ability.cost.exileFromGraveyard} cards in your graveyard`
-                          : wrongZoneForGraveyardAbility
-                            ? 'Only activatable from the graveyard'
-                            : legendaryCountMissing
+                          : legendaryCountMissing
                               ? `Requires controlling at least ${ability.requiresControlledLegendaryCreatureCount} legendary creatures`
                               : nothingHiddenAway
                                 ? 'Nothing hidden away to play'
                                 : '';
               return (
                 <div key={ability.id} className="card-ability-row">
-                  <button className="card-action-button secondary" disabled={disabled} onClick={() => onActivateAbility(ability.id)} title={blockedReason || ability.effectText}>
-                    {abilityButtonLabel(ability)}
+                  <button
+                    className={`card-action-button ${disabled ? 'card-action-button-notready' : 'card-action-button-ready'}`}
+                    disabled={disabled}
+                    onClick={() => onActivateAbility(ability.id)}
+                    title={blockedReason || ability.effectText}
+                  >
+                    {abilityButtonLabel(ability, definition)}
                   </button>
                   {/* Shown for every tap-cost ability, not just when a card
                       has more than one - a lone "Tap (2)" button still reads
@@ -484,7 +532,12 @@ export default function CardActionsPanel({
             actually gates that specific card's transform - see FLIP_CARD's
             history for a card that was doing exactly that. */}
         {!readOnly && canPlayHere && (
-          <button className="card-action-button card-action-button-play" disabled={!canPlay} onClick={onCast} title={canPlay ? '' : isLand ? 'Already played a land, or not your turn' : 'Not enough mana'}>
+          <button
+            className={`card-action-button card-action-button-play ${canPlay ? 'card-action-button-ready' : 'card-action-button-notready'}`}
+            disabled={!canPlay}
+            onClick={onCast}
+            title={canPlay ? '' : isLand ? 'Already played a land, or not your turn' : 'Not enough mana'}
+          >
             {isLand
               ? `Play ${definition.name}`
               : `Cast (${definition.costLabel}${cappedCostReduction > 0 ? ` −${cappedCostReduction}` : ''}${commanderTax > 0 ? ` +${commanderTax} tax` : ''})`}

@@ -142,6 +142,68 @@ export function useLocalGame(initialState: GameState) {
     return () => clearTimeout(timer);
   }, [state, dispatch]);
 
+  // --- AI: choose a card to discard for its own pending discard ----------
+  // Without this, ANY card that makes an opponent discard (Malboro's Bad
+  // Breath, Braska's Final Aeon's Jecht Beam, ...) would leave
+  // GameState.pendingDiscard sitting there forever whenever the AI is the
+  // one being made to discard - nobody else is allowed to choose for it,
+  // same problem pendingTarget above solves. Deliberately simple: just
+  // discards whatever's first in hand. Not gated on whose turn/phase it is
+  // (same reasoning as the "mark itself ready for combat" effect above) -
+  // an opponent's spell can make the AI discard during the OPPONENT's turn.
+  useEffect(() => {
+    if (state.winnerId) return;
+    if (state.mutualAdjustment.status !== 'inactive') return;
+    const pending = state.pendingDiscard;
+    if (!pending || pending.controllerId !== AI_PLAYER_ID) return;
+
+    const timer = setTimeout(() => {
+      const ai = state.players.find((p) => p.id === AI_PLAYER_ID)!;
+      const toDiscard = ai.zones.hand[0];
+      if (!toDiscard) return; // shouldn't happen - the engine only sets this when the hand is nonempty
+      dispatch({ type: 'DISCARD_CARD', instanceId: toDiscard.instanceId }, AI_PLAYER_ID);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [state, dispatch]);
+
+  // --- AI: resolve its own pending free cast (Buster Sword) ---------------
+  // Same "nobody else can choose for it" problem as pendingDiscard above -
+  // without this, equipping the AI's own attacker with Buster Sword would
+  // leave GameState.pendingFreeCastFromHand stuck forever the first time it
+  // connects. Deliberately simple: always declines rather than picking
+  // something to cast for free.
+  useEffect(() => {
+    if (state.winnerId) return;
+    if (state.mutualAdjustment.status !== 'inactive') return;
+    const pending = state.pendingFreeCastFromHand;
+    if (!pending || pending.controllerId !== AI_PLAYER_ID) return;
+
+    const timer = setTimeout(() => {
+      dispatch({ type: 'RESOLVE_FREE_CAST_FROM_HAND', instanceId: null }, AI_PLAYER_ID);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [state, dispatch]);
+
+  // --- AI: resolve its own pending optional transform (Jecht) -------------
+  // Same "nobody else can choose for it" problem again. Deliberately simple:
+  // always accepts. Gated to the same post-combat phases the server itself
+  // requires (engine/actions.ts: resolveOptionalTransform) so this doesn't
+  // fire a doomed dispatch while combat is still being shown - it'll just
+  // fire again once combat_end is left, whenever the AI's own turn-stepping
+  // effect below (or the human ending combat) advances the phase.
+  useEffect(() => {
+    if (state.winnerId) return;
+    if (state.mutualAdjustment.status !== 'inactive') return;
+    const pending = state.pendingOptionalTransform;
+    if (!pending || pending.controllerId !== AI_PLAYER_ID) return;
+    if (state.phase === 'declare_attackers' || state.phase === 'declare_blockers' || state.phase === 'combat_damage' || state.phase === 'combat_end') return;
+
+    const timer = setTimeout(() => {
+      dispatch({ type: 'RESOLVE_OPTIONAL_TRANSFORM', accept: true }, AI_PLAYER_ID);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [state, dispatch]);
+
   // --- AI: step through its own turn -----------------------------------
   // Main phase logic: play a land if it hasn't yet, then tap untapped
   // lands one at a time (building its mana pool over several ticks) and
@@ -160,6 +222,13 @@ export function useLocalGame(initialState: GameState) {
     // also needs a target would silently clobber the first, leaving it
     // stuck forever.
     if (state.pendingTarget?.controllerId === AI_PLAYER_ID) return;
+    // Same reasoning as pendingTarget above - let the transform/free-cast/
+    // discard effects resolve their own pending choice first, rather than
+    // racing to advance the phase (or cast something else) out from under
+    // them on the same stale state.
+    if (state.pendingOptionalTransform?.controllerId === AI_PLAYER_ID) return;
+    if (state.pendingFreeCastFromHand?.controllerId === AI_PLAYER_ID) return;
+    if (state.pendingDiscard?.controllerId === AI_PLAYER_ID) return;
 
     const timer = setTimeout(() => {
       const ai = state.players.find((p) => p.id === AI_PLAYER_ID)!;

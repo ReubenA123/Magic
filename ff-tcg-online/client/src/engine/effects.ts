@@ -2,7 +2,7 @@
 // engine/effects.ts
 // ============================================================================
 
-import { CardDefinition, CardEffect, CardInstance, GameState, ReanimateTargetFromGraveyardEffect, ReturnCreaturesFromGraveyardToHandEffect } from '../types';
+import { CardDefinition, CardEffect, CardInstance, GameState, NoncreatureCastTrigger, ReanimateTargetFromGraveyardEffect, ReturnCreaturesFromGraveyardToHandEffect } from '../types';
 import { findCardAnywhere, getOpponent, getPlayer, nextInstanceId, shuffle, updatePlayer, detachEverythingFrom } from './state';
 import { getCardDefinition } from '../data/cards';
 import { effectivePower, effectiveToughness, moveCreaturesToGraveyard, applyGainLifeTriggers, addLife, loseLife, damageMultiplierFor } from './combat';
@@ -625,6 +625,30 @@ export function resolveCardEffects(
         next = updatePlayer(next, playerId, (p) => ({ ...p, zones: { ...p.zones, library: shuffle(rest), hand: [...p.zones.hand, foundCard] } }));
         logLines.push(`${player.name} searches their library for ${effect.landName}, puts it into hand, then shuffles.`);
       }
+    } else if (effect.type === 'searchLibraryForBasicLand') {
+      const player = getPlayer(next, playerId);
+      const foundIndex = player.zones.library.findIndex((c) => BASIC_LAND_IDS.has(c.defId));
+      if (foundIndex === -1) {
+        next = updatePlayer(next, playerId, (p) => ({ ...p, zones: { ...p.zones, library: shuffle(p.zones.library) } }));
+        logLines.push(`${player.name} searches for a basic land but finds none - shuffles the library.`);
+      } else {
+        const foundCard = player.zones.library[foundIndex];
+        const rest = player.zones.library.filter((_, i) => i !== foundIndex);
+        next = updatePlayer(next, playerId, (p) => ({ ...p, zones: { ...p.zones, library: shuffle(rest), hand: [...p.zones.hand, foundCard] } }));
+        logLines.push(`${player.name} searches their library for a basic land card (${getCardDefinition(foundCard.defId).name}), puts it into hand, then shuffles.`);
+      }
+    } else if (effect.type === 'searchLibraryForAnyLand') {
+      const player = getPlayer(next, playerId);
+      const foundIndex = player.zones.library.findIndex((c) => getCardDefinition(c.defId).type === 'land');
+      if (foundIndex === -1) {
+        next = updatePlayer(next, playerId, (p) => ({ ...p, zones: { ...p.zones, library: shuffle(p.zones.library) } }));
+        logLines.push(`${player.name} searches for a land card but finds none - shuffles the library.`);
+      } else {
+        const foundCard = player.zones.library[foundIndex];
+        const rest = player.zones.library.filter((_, i) => i !== foundIndex);
+        next = updatePlayer(next, playerId, (p) => ({ ...p, zones: { ...p.zones, library: shuffle(rest), hand: [...p.zones.hand, foundCard] } }));
+        logLines.push(`${player.name} searches their library for a land card (${getCardDefinition(foundCard.defId).name}), puts it into hand, then shuffles.`);
+      }
     } else if (effect.type === 'pumpTarget') {
       const hasLegalTarget = [...next.players[0].zones.battlefield, ...next.players[1].zones.battlefield].some((c) => getCardDefinition(c.defId).type === 'creature');
       const sourceName = getCardDefinition(findCardAnywhere(next, sourceInstanceId)!.card.defId).name;
@@ -801,6 +825,15 @@ export function resolveCardEffects(
         const drawn = player.zones.library.slice(0, count);
         next = updatePlayer(next, playerId, (p) => ({ ...p, zones: { ...p.zones, library: p.zones.library.slice(count), hand: [...p.zones.hand, ...drawn] } }));
         logLines.push(`${player.name} draws ${drawn.length} card(s) (${count} creature(s) died this turn).`);
+      }
+    } else if (effect.type === 'drawForTappedOpponentCreatures') {
+      const player = getPlayer(next, playerId);
+      const opponent = getOpponent(next, playerId);
+      const count = opponent.zones.battlefield.filter((c) => c.tapped && getCardDefinition(c.defId).type === 'creature').length;
+      if (count > 0) {
+        const drawn = player.zones.library.slice(0, count);
+        next = updatePlayer(next, playerId, (p) => ({ ...p, zones: { ...p.zones, library: p.zones.library.slice(count), hand: [...p.zones.hand, ...drawn] } }));
+        logLines.push(`${player.name} draws ${drawn.length} card(s) (${count} tapped creature(s) ${opponent.name} controls).`);
       }
     } else if (effect.type === 'putCounterOnSelf') {
       const { counterLabel, counterAmount } = effect;
@@ -1354,14 +1387,16 @@ export function triggerLandfall(state: GameState, playerId: string): { state: Ga
  * and applies it. Call this once, right after playerId casts a spell that
  * isn't a creature or a land (see engine/actions.ts: castCard/castFromGraveyard).
  */
-export function triggerNoncreatureCastAbilities(state: GameState, playerId: string, manaSpent: number): { state: GameState; logLines: string[] } {
+export function triggerNoncreatureCastAbilities(
+  state: GameState,
+  playerId: string,
+  manaSpent: number,
+  eligibleInstanceIds?: Set<string>
+): { state: GameState; logLines: string[] } {
   let next = state;
   const logLines: string[] = [];
 
-  for (const card of getPlayer(next, playerId).zones.battlefield) {
-    const def = getCardDefinition(card.defId);
-    const trigger = def.noncreatureCastTrigger;
-    if (!trigger) continue;
+  function applyTrigger(card: CardInstance, def: CardDefinition, trigger: NoncreatureCastTrigger) {
     if (trigger.damageEachOpponent) {
       const opponent = getOpponent(next, playerId);
       const amount = trigger.damageEachOpponent * damageMultiplierFor(next, playerId, def);
@@ -1416,6 +1451,30 @@ export function triggerNoncreatureCastAbilities(state: GameState, playerId: stri
       const resolved = resolveCardEffects(next, playerId, [{ type: 'tapAndStun', targetController: 'opponent', targetType: 'creature' }], card.instanceId);
       next = resolved.state;
       logLines.push(...resolved.logLines);
+    }
+  }
+
+  for (const card of getPlayer(next, playerId).zones.battlefield) {
+    // A permanent (or, via an attached Equipment, whatever it just got
+    // attached to - e.g. Black Mage's Rod's Job Select token) that entered
+    // the battlefield as PART OF resolving THIS SAME cast can't have seen
+    // this cast as a trigger event - it didn't exist yet at the moment the
+    // spell was cast, only once the spell finished resolving. Without this,
+    // casting Black Mage's Rod would immediately trigger its own
+    // just-created, just-attached token's granted "whenever you cast a
+    // noncreature spell" ability off its own casting.
+    if (eligibleInstanceIds && !eligibleInstanceIds.has(card.instanceId)) continue;
+    const def = getCardDefinition(card.defId);
+    if (def.noncreatureCastTrigger) applyTrigger(card, def, def.noncreatureCastTrigger);
+    // "Whenever you cast a noncreature spell, this creature deals 1 damage
+    // to each opponent" (Black Mage's Rod) - a granted trigger from any
+    // Equipment currently attached to this permanent, applied against the
+    // EQUIPPED CREATURE (not the equipment) as source/target, same
+    // reasoning as CardDefinition.equipGrantsOnAttack.
+    const equipment = getPlayer(next, playerId).zones.battlefield.filter((c) => c.attachedToInstanceId === card.instanceId);
+    for (const eq of equipment) {
+      const eqDef = getCardDefinition(eq.defId);
+      if (eqDef.equipGrantsNoncreatureCastTrigger) applyTrigger(card, def, eqDef.equipGrantsNoncreatureCastTrigger);
     }
   }
 

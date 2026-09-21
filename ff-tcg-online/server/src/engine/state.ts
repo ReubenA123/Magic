@@ -82,6 +82,7 @@ export function createInitialState(player1Name: string, player2Name: string, pla
     pendingReturnCreaturesFromGraveyard: null,
     pendingOptionalTransform: null,
     pendingOptionalPayLife: null,
+    pendingFreeCastFromHand: null,
     pendingGraveyardExile: null,
     pendingDiscardUpToThenDraw: null,
     pendingRevealPickup: null,

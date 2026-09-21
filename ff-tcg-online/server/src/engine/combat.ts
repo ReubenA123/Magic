@@ -3,7 +3,7 @@
 // ============================================================================
 
 import { CardDefinition, CardInstance, GameState } from '../types';
-import { getCardDefinition } from '../data/cards';
+import { getCardDefinition, frontFaceDefId } from '../data/cards';
 import { getOpponent, getPlayer, updatePlayer, detachEverythingFrom, nextInstanceId } from './state';
 import { hasKeyword, hasKeywordEffective } from './keywords';
 
@@ -588,8 +588,12 @@ export function moveCreaturesToGraveyard(state: GameState, deadIds: string[], ve
     // by 2 right away, on the return trip rather than the next cast - so a
     // freshly-cast commander that's never died shows no tax at all, and each
     // death after that raises what it'll cost to bring back out again.
-    const toCommandZone = dead.filter((d) => !toExileWithTokens.includes(d) && player.commanderDefId && d.defId === player.commanderDefId);
-    const toGraveyard = dead.filter((d) => !toExileWithTokens.includes(d) && !(player.commanderDefId && d.defId === player.commanderDefId));
+    // Checked against frontFaceDefId(d.defId) rather than d.defId directly -
+    // a commander that had transformed (e.g. Jecht into Braska's Final
+    // Aeon) is still THAT commander underneath, even though the instance
+    // currently sitting on the battlefield carries the back face's defId.
+    const toCommandZone = dead.filter((d) => !toExileWithTokens.includes(d) && player.commanderDefId && frontFaceDefId(d.defId) === player.commanderDefId);
+    const toGraveyard = dead.filter((d) => !toExileWithTokens.includes(d) && !(player.commanderDefId && frontFaceDefId(d.defId) === player.commanderDefId));
 
     // "Died this turn" (Deadly Embrace) only counts an actual death - a
     // creature redirected to exile by a replacement effect (toExileWithTokens,
@@ -621,7 +625,19 @@ export function moveCreaturesToGraveyard(state: GameState, deadIds: string[], ve
       zones: {
         ...p.zones,
         battlefield: [...survivors, ...newTokens],
-        graveyard: [...p.zones.graveyard, ...toGraveyard.map((d) => ({ ...d, damageMarked: 0, tookDeathtouchDamage: false }))],
+        // frontFaceDefId: a transformed back face only exists ON the
+        // battlefield - the same physical card leaving it (to the graveyard
+        // or, for a commander, the command zone) reverts to its front face,
+        // same as a real double-faced permanent. Applied here at the final
+        // zone-write step only, AFTER onDeath eligibility above already ran
+        // against the back face's own definition (the one that actually
+        // died) - known gap: if a BACK face ever gets its own onDeath in the
+        // future, resolveOnDeathTriggers (which runs after this returns)
+        // would incorrectly see the front face's onDeath instead, since it
+        // re-reads the definition from whatever's already sitting in the
+        // graveyard/commander zone by then. No current card has an onDeath
+        // on a back face, so this doesn't bite yet.
+        graveyard: [...p.zones.graveyard, ...toGraveyard.map((d) => ({ ...d, defId: frontFaceDefId(d.defId), damageMarked: 0, tookDeathtouchDamage: false }))],
         exile: [...p.zones.exile, ...toExileWithTokens.map((d) => ({ ...d, damageMarked: 0, tookDeathtouchDamage: false }))],
         commander: [
           ...p.zones.commander,
@@ -629,6 +645,7 @@ export function moveCreaturesToGraveyard(state: GameState, deadIds: string[], ve
             const existingTax = d.counters.find((c) => c.label === 'Commander Tax')?.amount ?? 0;
             return {
               ...d,
+              defId: frontFaceDefId(d.defId),
               damageMarked: 0,
               tookDeathtouchDamage: false,
               tapped: false,

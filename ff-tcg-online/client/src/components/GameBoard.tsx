@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { CardDefinition, CardInstance, GameAction, GameState, ManaColor, PlayerState, ZoneName } from '../types';
 import { getCardDefinition } from '../data/cards';
-import { parseCostLabel, canPay, effectiveCastCost, dynamicCostReduction } from '../engine/mana';
+import { parseCostLabel, canPay, effectiveCastCost, dynamicCostReduction, manaValue } from '../engine/mana';
 import { hasKeyword, hasKeywordEffective } from '../engine/keywords';
 import { effectivePower, effectiveToughness, equipmentContributions, isLegalPendingTarget as isLegalPendingTargetShared } from '../engine/combat';
 import Card from './Card';
@@ -14,6 +14,7 @@ import RevealDivideModal from './RevealDivideModal';
 import SurveilModal from './SurveilModal';
 import ReturnFromGraveyardModal from './ReturnFromGraveyardModal';
 import DiscardModal from './DiscardModal';
+import FreeCastModal from './FreeCastModal';
 import OptionalBounceModal from './OptionalBounceModal';
 import CoinFlipModal from './CoinFlipModal';
 import RevealFilteredModal from './RevealFilteredModal';
@@ -463,6 +464,15 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   // to look at, without changing who actually controls/can attack with the
   // creature underneath.
   const [stackCycleOffset, setStackCycleOffset] = useState<Record<string, number>>({});
+  // Set while the Equip/Attach button's target pick is outstanding - the
+  // ATTACH_CARD action needs a targetInstanceId, but CardActionsPanel's
+  // "Equip" button (onStartAttach) has no board access to pick one itself,
+  // so it just requests this pending state and the click-to-choose-a-target
+  // flow lives here instead (same shape as pendingTarget, just locally
+  // owned rather than server state, since "which creature am I about to
+  // equip this to" is a pure UI selection with no other visible effect
+  // until ATTACH_CARD actually fires).
+  const [pendingAttach, setPendingAttach] = useState<{ instanceId: string; ownerId: string } | null>(null);
   const [openZone, setOpenZone] = useState<{ playerId: string; zone: 'graveyard' | 'exile' } | null>(null);
   const [selectedAttackers, setSelectedAttackers] = useState<Set<string>>(new Set());
   const [blockerAssignments, setBlockerAssignments] = useState<Record<string, string[]>>({});
@@ -908,6 +918,22 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     return isLegalPendingTargetShared(state, pendingTargetForYou, card, ownerId);
   }
 
+  /** Is this permanent a legal target for the Equip/Attach button's pending
+   * pick (see pendingAttach)? Mirrors engine/actions.ts: attachCard's own
+   * legality checks (same-controller-only for Equipment, no hexproof, can't
+   * target itself) so nothing gets offered here that the server would then
+   * reject. */
+  function isLegalAttachTarget(card: CardInstance, ownerId: string): boolean {
+    if (!pendingAttach) return false;
+    if (card.instanceId === pendingAttach.instanceId) return false;
+    const def = getCardDefinition(card.defId);
+    if (def.type !== 'creature') return false;
+    const equipDef = getCardDefinition(findCard(state, pendingAttach.instanceId)!.card.defId);
+    if (!!equipDef.equipCost && ownerId !== pendingAttach.ownerId) return false;
+    if (!!equipDef.equipCost && hasKeyword(def, 'hexproof')) return false;
+    return true;
+  }
+
   /** Is this permanent a legal choice for a pendingSacrifice waiting on
    * ownerId (e.g. Cornered by Black Mages, Gaius van Baelsar) - unlike
    * isLegalPendingTarget, ownerId must be the player who has to sacrifice,
@@ -1035,6 +1061,18 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     // untap step.
     if (!producesMana) return 'Tapping this has no effect - it has no mana ability';
     return null;
+  }
+
+  /** Whether CardActionsPanel's plain Tap/Untap row should exist AT ALL for
+   * this card - a structural check (does it have a mana ability, printed or
+   * granted, in the first place), unlike tapDisabledReason's reasons (mana
+   * already spent, summoning sickness, ...), which are all TEMPORARY - the
+   * ability is real, just not usable this instant. A card with no mana
+   * ability ever shows no tap row at all; one that has it but is
+   * temporarily blocked still shows the row (see CardActionsPanel's
+   * card-action-button-ready/-notready), just disabled for now. */
+  function hasPlainTapUse(def: CardDefinition, instance: CardInstance): boolean {
+    return !!(def.producesMana ?? grantedManaAbility(instance));
   }
 
   function handleToggleTap(card: CardInstance) {
@@ -1556,11 +1594,13 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     const acceptsAttackerRemoval = isDeclaringAttackers && isAttackingSide && canControl;
     const acceptsBlockerRemoval = isDeclaringBlockers && !isAttackingSide && canControl;
     const isLegalTarget = isLegalPendingTarget(c, ownerId);
+    const isAttachTarget = isLegalAttachTarget(c, ownerId);
     const isSacrificeChoice = isLegalSacrifice(c, ownerId);
     const isSacrificeCostChoice = isLegalSacrificeCostChoice(c, ownerId);
     const isCrewChoice = isLegalCrewChoice(c, ownerId);
     const isCrewSelected = !!pendingCrew?.selected.includes(c.instanceId);
-    const selected = pendingBlocker === c.instanceId || multiSelected.has(c.instanceId) || isLegalTarget || isSacrificeChoice || isSacrificeCostChoice || isCrewSelected;
+    const selected =
+      pendingBlocker === c.instanceId || multiSelected.has(c.instanceId) || isLegalTarget || isAttachTarget || isSacrificeChoice || isSacrificeCostChoice || isCrewSelected;
 
     // Attached Equipment/Auras stack literally UNDERNEATH the creature they're
     // attached to - the exact same diagonal peek-offset technique as several
@@ -1629,6 +1669,9 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                 );
               } else if (isLegalTarget) {
                 onAction({ type: 'CHOOSE_TARGET', targetInstanceId: c.instanceId });
+              } else if (isAttachTarget) {
+                onAction({ type: 'ATTACH_CARD', instanceId: pendingAttach!.instanceId, targetInstanceId: c.instanceId }, pendingAttach!.ownerId);
+                setPendingAttach(null);
               } else if (canAttackThis) toggleAttacker(c.instanceId);
               else if (canBeBlocker) handleBlockerCandidateClick(c.instanceId);
               else setOpenPanelId(c.instanceId);
@@ -2307,6 +2350,24 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
         </div>
       )}
 
+      {pendingAttach &&
+        (() => {
+          const equipCard = findCard(state, pendingAttach.instanceId);
+          const equipDef = equipCard ? getCardDefinition(equipCard.card.defId) : null;
+          const equipName = equipDef?.name ?? 'This card';
+          const isEquipment = !!equipDef?.equipCost;
+          return (
+            <div className="pending-target-banner">
+              <span>
+                Choose a{isEquipment ? ' creature you control' : 'n eligible permanent'} to attach {equipName} to.
+              </span>
+              <button className="opponent-view-exit-button" onClick={() => setPendingAttach(null)}>
+                Cancel
+              </button>
+            </div>
+          );
+        })()}
+
       {pendingTargetForYou &&
         (() => {
           const effect = pendingTargetForYou.effect;
@@ -2455,6 +2516,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
         )}
 
       {state.pendingOptionalTransform &&
+        !showCombatZones &&
         (state.pendingOptionalTransform.controllerId === yourPlayerId || soloControl) &&
         (() => {
           const pending = state.pendingOptionalTransform;
@@ -2783,6 +2845,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           }
           manaOptions={manaTapOptions(getCardDefinition(openCard.card.defId), openCard.card) ?? undefined}
           tapDisabledReason={tapDisabledReason(getCardDefinition(openCard.card.defId), openCard.card, openCard.player)}
+          canTapForMana={hasPlainTapUse(getCardDefinition(openCard.card.defId), openCard.card)}
           onToggleTap={() => {
             onAction({ type: 'TOGGLE_TAP', instanceId: openCard.card.instanceId });
             setOpenPanelId(null);
@@ -2813,7 +2876,10 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
             setOpenPanelId(null);
           }}
           onAdjustCounter={(label, delta) => onAction({ type: 'ADJUST_COUNTER', instanceId: openCard.card.instanceId, label, delta })}
-          onStartAttach={() => setOpenPanelId(null)}
+          onStartAttach={() => {
+            setPendingAttach({ instanceId: openCard.card.instanceId, ownerId: openCard.player.id });
+            setOpenPanelId(null);
+          }}
           onDetach={() => {
             onAction({ type: 'DETACH_CARD', instanceId: openCard.card.instanceId });
             setOpenPanelId(null);
@@ -3016,6 +3082,28 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
               count={pending.count}
               cards={controller.zones.hand.map((c) => ({ definition: getCardDefinition(c.defId), instance: c }))}
               onChoose={(instanceId) => onAction({ type: 'DISCARD_CARD', instanceId }, pending.controllerId)}
+            />
+          );
+        })()}
+
+      {state.pendingFreeCastFromHand &&
+        (state.pendingFreeCastFromHand.controllerId === yourPlayerId || soloControl) &&
+        (() => {
+          const pending = state.pendingFreeCastFromHand;
+          const sourceFound = findCard(state, pending.sourceInstanceId);
+          const sourceName = sourceFound ? getCardDefinition(sourceFound.card.defId).name : 'This ability';
+          const controller = state.players.find((p) => p.id === pending.controllerId)!;
+          const eligible = controller.zones.hand.filter((c) => {
+            const d = getCardDefinition(c.defId);
+            return d.type !== 'land' && manaValue(effectiveCastCost(d, controller)) <= pending.maxManaValue;
+          });
+          return (
+            <FreeCastModal
+              sourceName={sourceName}
+              maxManaValue={pending.maxManaValue}
+              cards={eligible.map((c) => ({ definition: getCardDefinition(c.defId), instance: c }))}
+              onChoose={(instanceId) => onAction({ type: 'RESOLVE_FREE_CAST_FROM_HAND', instanceId }, pending.controllerId)}
+              onSkip={() => onAction({ type: 'RESOLVE_FREE_CAST_FROM_HAND', instanceId: null }, pending.controllerId)}
             />
           );
         })()}

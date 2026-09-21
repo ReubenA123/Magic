@@ -528,6 +528,24 @@ export interface SearchLibraryForLandEffect {
   landName: string;
 }
 
+/** "Search your library for a basic land card, reveal it, put it into your
+ * hand, then shuffle" (World Map) - unlike SearchLibraryForLandEffect (one
+ * exact printed name), this matches ANY of the 5 basic lands - whichever
+ * one comes first in library order (see engine/effects.ts:
+ * BASIC_LAND_IDS), same "no browse-and-pick UI, just the first match"
+ * simplification every other library search in this engine already makes. */
+export interface SearchLibraryForBasicLandEffect {
+  type: 'searchLibraryForBasicLand';
+}
+
+/** "Search your library for a land card, reveal it, put it into your hand,
+ * then shuffle" (World Map) - the ANY-land counterpart to
+ * SearchLibraryForBasicLandEffect above, matching every CardDefinition.type
+ * === 'land', basic or not. */
+export interface SearchLibraryForAnyLandEffect {
+  type: 'searchLibraryForAnyLand';
+}
+
 /** "Target creature gets +X/+Y (and gains [grantKeyword]) until end of turn"
  * (Blitzball Shot) - a SINGLE chosen target, unlike PumpAttackersEffect
  * (every currently-declared attacker). No controller restriction is stated
@@ -910,6 +928,13 @@ export interface DrawForCreaturesDiedThisTurnEffect {
   type: 'drawForCreaturesDiedThisTurn';
 }
 
+/** "Draw a card for each tapped creature your opponents control" (Summon:
+ * Shiva's Diamond Dust chapter) - a live battlefield count at resolution
+ * time, unlike DrawForCreaturesDiedThisTurnEffect's turn-long running tally. */
+export interface DrawForTappedOpponentCreaturesEffect {
+  type: 'drawForTappedOpponentCreatures';
+}
+
 /** "Put N counters of [counterLabel] on this creature" (Demon Wall's "5B:
  * Put two +1/+1 counters on this creature.") - unlike PutCounterOnTargetEffect,
  * this needs no target at all; it always applies to the source itself. */
@@ -1207,6 +1232,8 @@ export type CardEffect =
   | HideawayEffect
   | DamageEqualToEquippedCreaturesEffect
   | SearchLibraryForLandEffect
+  | SearchLibraryForBasicLandEffect
+  | SearchLibraryForAnyLandEffect
   | PumpTargetEffect
   | GrantKeywordToOtherAttackersEffect
   | LoseLifeEffect
@@ -1238,6 +1265,7 @@ export type CardEffect =
   | QueueExtraCombatPhaseIfFirstCombatPhaseOfTurnEffect
   | DestroyOpponentCreatureEffect
   | DrawForCreaturesDiedThisTurnEffect
+  | DrawForTappedOpponentCreaturesEffect
   | PutCounterOnSelfEffect
   | BuffOtherCreaturesYouControlEffect
   | EachPlayerSacrificesEffect
@@ -1799,6 +1827,26 @@ export interface CardDefinition {
    * UntapSelfIfFirstCombatPhaseOfTurnEffect targets the creature, not the
    * equipment). */
   equipGrantsOnAttack?: CardEffect[];
+  /** "Equipped creature has 'Whenever you cast a noncreature spell, ...'"
+   * (Black Mage's Rod, Red Mage's Rapier) - the equip-granted counterpart to
+   * CardDefinition.noncreatureCastTrigger (a permanent's own printed
+   * version). Checked in engine/effects.ts: triggerNoncreatureCastAbilities
+   * for every Equipment attached to each of the caster's permanents,
+   * applied against the EQUIPPED CREATURE as source/target. */
+  equipGrantsNoncreatureCastTrigger?: NoncreatureCastTrigger;
+  /** "Whenever equipped creature deals combat damage to a player, draw a
+   * card, then you may cast a spell from your hand with mana value less
+   * than or equal to that damage without paying its mana cost." (Buster
+   * Sword) - checked in engine/actions.ts: applyCombatDamageToPlayerTriggers
+   * for every Equipment attached to an unblocked attacker (same "approximates
+   * as unblocked" caveat as CardDefinition.onCombatDamageToPlayer). The draw
+   * happens immediately; the "may cast" half pauses on
+   * GameState.pendingFreeCastFromHand (RESOLVE_FREE_CAST_FROM_HAND) since it
+   * needs the player's own choice of which card, if any. A plain boolean
+   * rather than a CardEffect/NoncreatureCastTrigger-shaped field because the
+   * mana-value cap is a dynamic per-trigger number (the damage dealt), not
+   * something a static effect definition can carry. */
+  equipGrantsDrawThenMayCastFreeUpToCombatDamage?: boolean;
   /** "Whenever an artifact you control enters, ..." (Golbez, Crystal
    * Collector) - fires once per artifact entering the battlefield, for as
    * long as this permanent stays out. Checked at the main "a permanent
@@ -2157,6 +2205,12 @@ export interface GameState {
    * GameBoard.tsx for the purple "awaiting this choice" outline on the
    * source permanent while set. */
   pendingOptionalPayLife: { sourceInstanceId: string; controllerId: string; lifeCost: number; effects: CardEffect[] } | null;
+  /** Set while CardDefinition.equipGrantsDrawThenMayCastFreeUpToCombatDamage's
+   * "may cast" half is outstanding (Buster Sword) - cleared by
+   * RESOLVE_FREE_CAST_FROM_HAND. Declining (instanceId: null) or casting
+   * something both just clear this; there's no "keep going" loop since the
+   * card only grants one free cast per hit. */
+  pendingFreeCastFromHand: { sourceInstanceId: string; controllerId: string; maxManaValue: number } | null;
   /** Set while an ExileTargetGraveyardCardEffect is waiting for its pick of a
    * card in ANY graveyard (Ignis Scientia) - cleared by
    * RESOLVE_GRAVEYARD_EXILE. `createFoodTokenIfCreature` mirrors the source
@@ -2250,6 +2304,7 @@ export type GameAction =
   | { type: 'RESOLVE_RETURN_CREATURE_FROM_GRAVEYARD'; instanceId: string | null }
   | { type: 'RESOLVE_OPTIONAL_TRANSFORM'; accept: boolean }
   | { type: 'RESOLVE_OPTIONAL_PAY_LIFE'; accept: boolean }
+  | { type: 'RESOLVE_FREE_CAST_FROM_HAND'; instanceId: string | null }
   | { type: 'RESOLVE_GRAVEYARD_EXILE'; instanceId: string | null }
   | { type: 'DISCARD_UP_TO_THEN_DRAW'; instanceId: string | null }
   | { type: 'RESOLVE_REVEAL_PICKUP' }

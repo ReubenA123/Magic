@@ -390,14 +390,13 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: '1B',
     text: 'Job select (When this Equipment enters, create a 1/1 colorless Hero creature token, ' +
       'then attach this to it.) Equipped creature gets +1/+0, has “Whenever you cast a noncreature spell, ' +
-      'this creature deals 1 damage to each opponent,” and is a Wizard in addition to its other types.Equip 3',
+      'this creature deals 1 damage to each opponent,” and is a Wizard in addition to its other types.\nEquip 3',
     onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
-    // The granted "whenever you cast a noncreature spell, deals 1 damage"
-    // trigger and "is a Wizard" subtype grant are deferred - no mechanism
-    // grants a triggered ability or subtype via equip.
     attachesTo: 'creature',
     equipCost: '3',
     equipBuff: { power: 1, toughness: 0 },
+    equipGrantsSubtype: 'Wizard',
+    equipGrantsNoncreatureCastTrigger: { damageEachOpponent: 1 },
     imagePath: '/assets/cards/black-mages-rod.webp',
   },
   {
@@ -460,12 +459,10 @@ export const CARD_POOL: CardDefinition[] = [
       "Whenever equipped creature deals combat damage to a player, draw a card, " +
       "then you may cast a spell from your hand with mana value less than or equal to that damage without paying its mana cost. Equip 2",
     imagePath: '/assets/cards/buster-sword.webp',
-    // Was missing its equipBuff entirely, so the "+3/+2" never applied. The
-    // granted "draw, then may cast free from hand" combat-damage trigger is
-    // deferred - no mechanism grants a triggered ability via equip.
     attachesTo: 'creature',
     equipCost: '2',
     equipBuff: { power: 3, toughness: 2 },
+    equipGrantsDrawThenMayCastFreeUpToCombatDamage: true,
   },
   {
     id: 'cactuar',
@@ -1313,6 +1310,8 @@ export const CARD_POOL: CardDefinition[] = [
     type: 'creature',
     subtype: "Legendary Creature \u2014 Human Soldier",
     costLabel: '2BB',
+    power: 3,
+    toughness: 2,
     text: "When Gaius van Baelsar enters, choose one — " +
       "\n• Each player sacrifices a creature token of their choice. " +
       "\n• Each player sacrifices a nontoken creature of their choice. " +
@@ -3612,10 +3611,19 @@ export const CARD_POOL: CardDefinition[] = [
   'I — Chain — Exile the top card of your library. During any turn you put a lore counter on this Saga, you may play that card. \n' +
   'II, III — Gestalt Mode — When you next cast a creature spell this turn, it gains haste until end of turn.',
   imagePath:'/assets/cards/summon-brynhildr.webp',
-  // Both chapters deferred - chapter I needs a persistent-condition impulse
-  // play window ("during any turn you put a lore counter on this"), and
-  // chapters II/III need a delayed "next spell cast this turn gets X"
-  // trigger - both established gaps.
+  // Both chapters' own effects are deferred - chapter I needs a persistent-
+  // condition impulse play window ("during any turn you put a lore counter
+  // on this"), and chapters II/III need a delayed "next spell cast this
+  // turn gets X" trigger - both established gaps. The saga field itself
+  // (chapter numbers + sacrifice-after-III) is still wired up so the lore
+  // counter progresses and this doesn't sit on the battlefield forever.
+  saga: {
+    chapters: [
+      { numbers: [1], effects: [] },
+      { numbers: [2, 3], effects: [] },
+    ],
+    sacrificeAfterFinalChapter: true,
+  },
   },
   {
   id: 'summon-choco-mog',
@@ -3708,7 +3716,19 @@ export const CARD_POOL: CardDefinition[] = [
   text: 'I — Crescent Fang — Search your library for a basic land card, put it onto the battlefield tapped, then shuffle. \n' +
   'II — Heavenward Howl — When you next cast a creature spell this turn, that creature enters with an additional +1/+1 counter on it. \n' +
   'III — Ecliptic Growl — Draw a card if you control the creature with the greatest power or tied for the greatest power.',
-  imagePath:'/assets/cards/summon-fenrir.webp'
+  imagePath:'/assets/cards/summon-fenrir.webp',
+  // All three chapters' own effects are deferred: chapter I needs "search
+  // for any basic land" (only exact-name and by-subtype search variants
+  // exist), chapter II needs a delayed "next creature spell enters with an
+  // extra counter" trigger, and chapter III needs a "do you have the
+  // greatest power on the battlefield" comparison - none of these
+  // mechanisms exist yet. Still wired up for lore-counter progression and
+  // sacrifice after III (missing from the printed text here, but every
+  // other 3-chapter Saga in this set ends the same way).
+  saga: {
+    chapters: [{ numbers: [1], effects: [] }, { numbers: [2], effects: [] }, { numbers: [3], effects: [] }],
+    sacrificeAfterFinalChapter: true,
+  },
   },
   {
   id: 'summon-g-f-cerberus',
@@ -3747,7 +3767,20 @@ export const CARD_POOL: CardDefinition[] = [
   text: '(As this Saga enters and after your draw step, add a lore counter. Sacrifice after IV.) \n' +
   'I, II — You may discard a card. If you do, draw a card. \n' +
   'III, IV — Add R.',
-  imagePath:'/assets/cards/summon-g-f-ifrit.webp'
+  imagePath:'/assets/cards/summon-g-f-ifrit.webp',
+  // Chapters I/II's own effect is deferred - "you may discard a card, if
+  // you do draw a card" needs an optional discard-of-your-choice mechanism
+  // (the existing pendingDiscard is always mandatory once triggered, and
+  // MayPayLifeThenEffect's "may" gate only ever costs a fixed life amount,
+  // not a card the player picks) - a new gap. III/IV's "Add R" is simple
+  // and implemented below.
+  saga: {
+    chapters: [
+      { numbers: [1, 2], effects: [] },
+      { numbers: [3, 4], effects: [{ type: 'addMana', colors: { R: 1 } }] },
+    ],
+    sacrificeAfterFinalChapter: true,
+  },
   },
   {
   id: 'summon-knights-of-round',
@@ -3761,7 +3794,20 @@ export const CARD_POOL: CardDefinition[] = [
   'I, II, III, IV — Create three 2/2 white Knight creature tokens. \n' +
   'V — Ultimate End — Other creatures you control get +2/+2 until end of turn. Put an indestructible counter on each of them.\n' +
   'Indestructible',
-  imagePath:'/assets/cards/summon-knights-of-round.webp'
+  imagePath:'/assets/cards/summon-knights-of-round.webp',
+  // Chapter V's "indestructible counter" is granted as an actual (temporary)
+  // indestructible keyword instead of a cosmetic counter - a counter labeled
+  // 'indestructible' wouldn't be consulted by anything that actually checks
+  // destruction (engine/combat.ts: hasKeywordEffective is), so a literal
+  // counter would be decoration only. grantTemporaryKeyword IS checked
+  // there, so this is the version that actually protects them.
+  saga: {
+    chapters: [
+      { numbers: [1, 2, 3, 4], effects: [{ type: 'createToken', tokenId: 'token-knight', count: 3 }] },
+      { numbers: [5], effects: [{ type: 'buffOtherCreaturesYouControl', power: 2, toughness: 2, grantKeyword: 'indestructible' }] },
+    ],
+    sacrificeAfterFinalChapter: true,
+  },
   },
   {
   id: 'summon-leviathan',
@@ -3775,7 +3821,18 @@ export const CARD_POOL: CardDefinition[] = [
   'I — Return each creature that isn’t a Kraken, Leviathan, Merfolk, Octopus, or Serpent to its owner\u2019s hand. \n' +
   'II, III — Until end of turn, whenever a Kraken, Leviathan, Merfolk, Octopus, or Serpent attacks, draw a card. \n' +
   'Ward 2',
-  imagePath:'/assets/cards/summon-leviathan.webp'
+  imagePath:'/assets/cards/summon-leviathan.webp',
+  // Both chapters' own effects are deferred: chapter I needs a conditional
+  // "return every creature EXCEPT [subtype list]" mass bounce, and
+  // chapters II/III need a delayed "until end of turn, whenever a
+  // [subtype list] attacks, draw" granted trigger - neither mechanism
+  // exists yet. Ward isn't implemented anywhere in this engine either
+  // (no targeting-cost concept). Still wired up for lore-counter
+  // progression and sacrifice after III.
+  saga: {
+    chapters: [{ numbers: [1], effects: [] }, { numbers: [2, 3], effects: [] }],
+    sacrificeAfterFinalChapter: true,
+  },
   },
   {
   id: 'summon-primal-garuda',
@@ -3789,7 +3846,19 @@ export const CARD_POOL: CardDefinition[] = [
   'I — Aerial Blast — This creature deals 4 damage to target tapped creature an opponent controls. \n' +
   'II, III — Slipstream — Another target creature you control gets +1/+0 and gains flying until end of turn. \n' +
   'Flying',
-  imagePath:'/assets/cards/summon-primal-garuda.webp'
+  imagePath:'/assets/cards/summon-primal-garuda.webp',
+  // Chapter I's own effect is deferred - the only existing damage-a-target
+  // effect (damageTargetCreature) allows ANY creature either player
+  // controls, with no way to restrict to "an opponent's TAPPED creature",
+  // and using it as-is would let this hit a legal target the real card
+  // couldn't. Chapters II/III match pumpAnotherControlledCreature exactly.
+  saga: {
+    chapters: [
+      { numbers: [1], effects: [] },
+      { numbers: [2, 3], effects: [{ type: 'pumpAnotherControlledCreature', power: 1, toughness: 0, grantKeyword: 'flying' }] },
+    ],
+    sacrificeAfterFinalChapter: true,
+  },
   },
   {
   id: 'summon-primal-odin',
@@ -3825,7 +3894,14 @@ export const CARD_POOL: CardDefinition[] = [
   'I, II — Heavenly Strike — Tap target creature an opponent controls. Put a stun counter on it. ' +
   '(If a permanent with a stun counter would become untapped, remove one from it instead.) \n' +
   'III — Diamond Dust — Draw a card for each tapped creature your opponents control.',
-  imagePath:'/assets/cards/summon-shiva.webp'
+  imagePath:'/assets/cards/summon-shiva.webp',
+  saga: {
+    chapters: [
+      { numbers: [1, 2], effects: [{ type: 'tapAndStun', targetController: 'opponent', targetType: 'creature' }] },
+      { numbers: [3], effects: [{ type: 'drawForTappedOpponentCreatures' }] },
+    ],
+    sacrificeAfterFinalChapter: true,
+  },
   },
   {
   id: 'summon-titan',
@@ -3840,7 +3916,20 @@ export const CARD_POOL: CardDefinition[] = [
   'II — Return all land cards from your graveyard to the battlefield tapped. \n' +
   'III — Until end of turn, another target creature you control gains trample and gets +X/+X, where X is the number of lands you control.\n' +
   'Reach, trample',
-  imagePath:'/assets/cards/summon-titan.webp'
+  imagePath:'/assets/cards/summon-titan.webp',
+  // Chapter II's own effect is deferred - no mass graveyard-to-battlefield
+  // reanimation mechanism exists (only single-target reanimate). Chapter
+  // III is deferred too - PumpAnotherControlledCreatureEffect only takes a
+  // fixed power/toughness, not a dynamic X based on lands controlled.
+  // Chapter I matches millSelf exactly.
+  saga: {
+    chapters: [
+      { numbers: [1], effects: [{ type: 'millSelf', count: 5 }] },
+      { numbers: [2], effects: [] },
+      { numbers: [3], effects: [] },
+    ],
+    sacrificeAfterFinalChapter: true,
+  },
   },
   {
   id: 'suplex',
@@ -3930,7 +4019,23 @@ export const CARD_POOL: CardDefinition[] = [
   'If it\u2019s a Saga, put up to three lore counters on it. Sacrifice it at the beginning of your next end step.\n' +
   'IV — Add {W}{W}, {U}{U}, {B}{B}, {R}{R}, and {G}{G}. Exile Esper Terra, then return it to the battlefield (front face up).\n' +
   'Flying',
-  imagePath: '/assets/cards/esper-terra.webp'
+  imagePath: '/assets/cards/esper-terra.webp',
+  // Chapters I-III are deferred entirely - "create a token copy of target
+  // nonlegendary enchantment, conditionally seed it with lore counters, then
+  // sacrifice it at a delayed end step" is well beyond any existing
+  // mechanism. Chapter IV's mana is implemented; the "exile, then return"
+  // half isn't - unlike Ifrit/Bahamut's matching chapter (which has a real
+  // transformsInto back face), Terra returns as ITSELF ("front face up"),
+  // and exileAndReturnTransformedSelfIfLoreAtLeast is transform-only, so
+  // this Saga is left uncapped rather than sacrificed - it just keeps
+  // accruing lore counters (chapters I-IV won't re-trigger once reached)
+  // once it hits Chapter IV.
+  saga: {
+    chapters: [
+      { numbers: [1, 2, 3], effects: [] },
+      { numbers: [4], effects: [{ type: 'addMana', colors: { W: 2, U: 2, B: 2, R: 2, G: 2 } }] },
+    ],
+  },
   },
    {
   id: 'the-crystal-s-chosen',
@@ -4726,6 +4831,22 @@ export const CARD_POOL: CardDefinition[] = [
   type: 'artifact',
   text: '{1}, {T}, Sacrifice this artifact: Search your library for a basic land card, reveal it, put it into your hand, then shuffle. \n' +
   '{3}, {T}, Sacrifice this artifact: Search your library for a land card, reveal it, put it into your hand, then shuffle.',
+  abilities: [
+    {
+      id: 'world-map-basic',
+      label: 'Search for a basic land',
+      cost: { manaLabel: '1', tap: true, sacrificeSelf: true },
+      effects: [{ type: 'searchLibraryForBasicLand' }],
+      effectText: 'Search your library for a basic land card, reveal it, put it into your hand, then shuffle.',
+    },
+    {
+      id: 'world-map-any',
+      label: 'Search for any land',
+      cost: { manaLabel: '3', tap: true, sacrificeSelf: true },
+      effects: [{ type: 'searchLibraryForAnyLand' }],
+      effectText: 'Search your library for a land card, reveal it, put it into your hand, then shuffle.',
+    },
+  ],
   imagePath: '/assets/cards/world-map.webp'
   },
   {
@@ -5033,6 +5154,23 @@ export function getCardDefinition(defId: string): CardDefinition {
   const def = CARD_POOL.find((c) => c.id === defId) ?? TOKEN_POOL.find((c) => c.id === defId);
   if (!def) throw new Error(`Unknown card id: ${defId}`);
   return def;
+}
+
+/** A transformed back face (Braska's Final Aeon, Clive, Ifrit's Warden of
+ * Inferno's back side, ...) only ever exists ON THE BATTLEFIELD - the front
+ * face and back face are the same physical card, so the moment it leaves
+ * the battlefield (dies, is bounced, milled, ...) it reverts to its front
+ * face, the same way a real double-faced permanent does. Returns `defId`
+ * itself for anything that ISN'T a back face (the front face of a
+ * transforming card, or any card that doesn't transform at all) - reverse
+ * lookup is safe here since exactly one printed card ever names a given id
+ * as its transformsInto. See engine/combat.ts: moveCreaturesToGraveyard,
+ * the one place this is currently applied (a permanent leaving the
+ * battlefield via death/sacrifice) - other zone-change paths (bounce, mill,
+ * exile) don't yet call this. */
+export function frontFaceDefId(defId: string): string {
+  const frontFace = CARD_POOL.find((c) => c.transformsInto === defId);
+  return frontFace ? frontFace.id : defId;
 }
 
 /**
