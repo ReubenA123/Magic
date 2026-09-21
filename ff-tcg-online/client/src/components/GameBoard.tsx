@@ -4,6 +4,7 @@ import { getCardDefinition } from '../data/cards';
 import { parseCostLabel, canPay, effectiveCastCost, dynamicCostReduction, manaValue } from '../engine/mana';
 import { hasKeyword, hasKeywordEffective } from '../engine/keywords';
 import { effectivePower, effectiveToughness, equipmentContributions, isLegalPendingTarget as isLegalPendingTargetShared } from '../engine/combat';
+import { matchesLibrarySearchFilter } from '../engine/effects';
 import Card from './Card';
 import PhaseBar from './PhaseBar';
 import CardActionsPanel from './CardActionsPanel';
@@ -17,6 +18,8 @@ import DiscardModal from './DiscardModal';
 import FreeCastModal from './FreeCastModal';
 import OptionalBounceModal from './OptionalBounceModal';
 import CoinFlipModal from './CoinFlipModal';
+import LibrarySearchModal from './LibrarySearchModal';
+import RevealNotificationModal from './RevealNotificationModal';
 import RevealFilteredModal from './RevealFilteredModal';
 import HideawayModal from './HideawayModal';
 import CastConfirmModal from './CastConfirmModal';
@@ -522,6 +525,20 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
       setShowingCoinFlipResult(true);
     }
   }, [state.lastCoinFlip]);
+  // Same "already happened server-side, just show a passing notification"
+  // shape as lastCoinFlip above, for GameState.lastReveal (a
+  // pendingLibrarySearch pick, currently the only source of a reveal).
+  // instanceId doubles as the dedup key here - lastCoinFlip has its own
+  // dedicated `id` field, but a fresh reveal is always a fresh instanceId
+  // in practice (the found card was just pulled out of the library).
+  const [showingRevealResult, setShowingRevealResult] = useState(false);
+  const lastRevealIdShown = useRef<string | null>(null);
+  useEffect(() => {
+    if (state.lastReveal && state.lastReveal.instanceId !== lastRevealIdShown.current) {
+      lastRevealIdShown.current = state.lastReveal.instanceId;
+      setShowingRevealResult(true);
+    }
+  }, [state.lastReveal]);
   // Set while crewing a Vehicle (see types.ts: CardDefinition.crew) is in
   // progress - the player toggles any number of their own untapped creatures
   // on/off, then presses Confirm to dispatch a single CREW_VEHICLE action.
@@ -1797,7 +1814,25 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
    */
   function renderHandRow(player: PlayerState, isOpponentSide: boolean, curveUp: boolean) {
     if (isOpponentSide) {
-      return <div className="opponent-hand-count">Opponent hand: {player.zones.hand.length}</div>;
+      // Revealed cards (CardInstance.revealedToOpponentWhileInHand - e.g. a
+      // library search that "reveals it, puts it into your hand") show
+      // face-up and clickable right alongside the plain hand count, for as
+      // long as they're genuinely still sitting in this hand - see
+      // engine/actions.ts: applyAction's stripStaleRevealMarkers, which
+      // drops the flag the instant a card leaves hand for any reason.
+      const revealed = player.zones.hand.filter((c) => c.revealedToOpponentWhileInHand);
+      return (
+        <div className="opponent-hand-row">
+          <div className="opponent-hand-count">Opponent hand: {player.zones.hand.length}</div>
+          {revealed.length > 0 && (
+            <div className="opponent-hand-revealed">
+              {revealed.map((c) => (
+                <Card key={c.instanceId} definition={getCardDefinition(c.defId)} instance={c} revealedInHand onClick={() => setOpenPanelId(c.instanceId)} />
+              ))}
+            </div>
+          )}
+        </div>
+      );
     }
 
     const isControllersTurn = state.activePlayerId === player.id;
@@ -3130,6 +3165,51 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
               result={state.pendingCoinFlip ? null : state.lastCoinFlip}
               onChoose={(side) => onAction({ type: 'CHOOSE_COIN_SIDE', side }, controllerId)}
               onDismiss={() => setShowingCoinFlipResult(false)}
+            />
+          );
+        })()}
+
+      {state.pendingLibrarySearch &&
+        (state.pendingLibrarySearch.controllerId === yourPlayerId || soloControl) &&
+        (() => {
+          const pending = state.pendingLibrarySearch;
+          const sourceFound = findCard(state, pending.sourceInstanceId);
+          const sourceName = sourceFound ? getCardDefinition(sourceFound.card.defId).name : 'This ability';
+          const controller = state.players.find((p) => p.id === pending.controllerId)!;
+          const eligible = controller.zones.library.filter((c) => matchesLibrarySearchFilter(getCardDefinition(c.defId), pending.filter));
+          return (
+            <LibrarySearchModal
+              sourceName={sourceName}
+              filter={pending.filter}
+              cards={eligible.map((c) => ({ definition: getCardDefinition(c.defId), instance: c }))}
+              onChoose={(instanceId) => onAction({ type: 'RESOLVE_LIBRARY_SEARCH', instanceId }, pending.controllerId)}
+              onFindNothing={() => onAction({ type: 'RESOLVE_LIBRARY_SEARCH', instanceId: null }, pending.controllerId)}
+            />
+          );
+        })()}
+
+      {/* "Appears on the opponent's screen" - the searching player already
+          saw what they found (they just picked it from their own library),
+          so this passing notification is specifically for whoever DIDN'T do
+          the finding. soloControl sees it regardless (same person is
+          playing both sides there anyway). */}
+      {showingRevealResult &&
+        state.lastReveal &&
+        (state.lastReveal.ownerId !== yourPlayerId || soloControl) &&
+        (() => {
+          const reveal = state.lastReveal;
+          const owner = state.players.find((p) => p.id === reveal.ownerId)!;
+          const found = findCard(state, reveal.instanceId);
+          const sourceFound = findCard(state, reveal.sourceInstanceId);
+          const sourceName = sourceFound ? getCardDefinition(sourceFound.card.defId).name : 'an ability';
+          if (!found) return null;
+          return (
+            <RevealNotificationModal
+              ownerName={owner.name}
+              sourceName={sourceName}
+              definition={getCardDefinition(found.card.defId)}
+              instance={found.card}
+              onDismiss={() => setShowingRevealResult(false)}
             />
           );
         })()}

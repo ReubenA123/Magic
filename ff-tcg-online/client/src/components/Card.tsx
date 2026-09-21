@@ -39,6 +39,13 @@ interface CardProps {
    * pale gold (an active choice already in progress, e.g. a legal
    * pendingTarget). See GameBoard's cardIsActionable. */
   actionable?: boolean;
+  /** CardInstance.revealedToOpponentWhileInHand - a bold purple outline for
+   * a card sitting face-up in its controller's hand because something
+   * revealed it (e.g. a pendingLibrarySearch pick). Distinct from
+   * revealOutline's Dark-Confidant-specific purple/red pair - this one is
+   * about the REVEALED CARD itself, in hand, not a source permanent's own
+   * running history. */
+  revealedInHand?: boolean;
 }
 
 export default function Card({
@@ -54,6 +61,7 @@ export default function Card({
   revealOutline,
   awaitingOptionalChoice,
   actionable,
+  revealedInHand,
 }: CardProps) {
   const [imageFailed, setImageFailed] = useState(false);
   const [backImageFailed, setBackImageFailed] = useState(false);
@@ -74,6 +82,7 @@ export default function Card({
     revealOutline === 'purple' ? 'card-reveal-purple' : '',
     awaitingOptionalChoice ? 'card-optional-choice-purple' : '',
     actionable ? 'card-actionable' : '',
+    revealedInHand ? 'card-revealed-in-hand' : '',
     onClick ? 'card-clickable' : '',
     instance?.tapped ? 'card-tapped' : '',
     dimmed ? 'card-dimmed' : '',

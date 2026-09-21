@@ -614,6 +614,27 @@ button {
   box-shadow: 0 0 6px rgba(244, 211, 94, 0.6);
 }
 
+/* CardInstance.revealedToOpponentWhileInHand - a card sitting face-up in
+   its controller's hand because something revealed it. Bold purple, same
+   family as card-optional-choice-purple, but this one persists for as long
+   as the card stays in hand (not a one-shot pending decision). */
+.card-revealed-in-hand {
+  outline: 3px solid var(--shadow);
+  box-shadow: 0 0 8px rgba(139, 111, 209, 0.7);
+}
+
+.library-search-query {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--panel-raised);
+  color: var(--text);
+  font-size: 13px;
+}
+
 .card-art {
   width: 100%;
   height: 100%;
@@ -2730,11 +2751,28 @@ button {
    just as clearly as a row of face-down cards while costing none of the
    170px .hand-fan reserves, which matters now that My View/Opponent View
    only ever show one board and need to fit it without scrolling. */
+.opponent-hand-row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
 .opponent-hand-count {
   text-align: center;
   padding: 6px 0;
   font-size: 13px;
   color: var(--text-dim);
+}
+
+/* Revealed opponent hand cards (CardInstance.revealedToOpponentWhileInHand)
+   - shown face-up right alongside the plain hand count, small enough not to
+   dominate the row. */
+.opponent-hand-revealed {
+  display: flex;
+  gap: 6px;
+  transform: scale(0.7);
+  transform-origin: top center;
 }
 
 .hand-fan .hand-fan-card {

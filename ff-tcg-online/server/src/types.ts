@@ -114,8 +114,11 @@ export interface CreateTokenEffect {
   type: 'createToken';
   /** id of a CardDefinition in TOKEN_POOL (data/cards.ts). */
   tokenId: string;
-  /** Defaults to 1. */
-  count?: number | 'perCreatureYouControl';
+  /** Defaults to 1. 'perCreatureCardInYourGraveyard' (The Final Days' own
+   * flashback-only count) reads the number of graveyard cards whose
+   * CardDefinition.type is 'creature' at resolution time - not "how many
+   * you started with" or anything cached, just a live count. */
+  count?: number | 'perCreatureYouControl' | 'perCreatureCardInYourGraveyard';
   tapped?: boolean;
   /** Job select style: attach the permanent generating this effect to the
    * (single) token it just created. Only meaningful when count resolves to 1. */
@@ -522,7 +525,9 @@ export interface DamageEqualToEquippedCreaturesEffect {
 /** "Search your library for a [landName] card, reveal it, put it into your
  * hand, then shuffle" (Call the Mountain Chocobo) - the same search-by-name
  * logic as CyclingAbility.searchLandName, resolved as an onCast effect
- * instead of a hand-discard cost. */
+ * instead of a hand-discard cost. Resolved via GameState.pendingLibrarySearch
+ * (see engine/effects.ts: matchesLibrarySearchFilter), same as every other
+ * SearchLibraryFor*Effect below. */
 export interface SearchLibraryForLandEffect {
   type: 'searchLibraryForLand';
   landName: string;
@@ -530,10 +535,9 @@ export interface SearchLibraryForLandEffect {
 
 /** "Search your library for a basic land card, reveal it, put it into your
  * hand, then shuffle" (World Map) - unlike SearchLibraryForLandEffect (one
- * exact printed name), this matches ANY of the 5 basic lands - whichever
- * one comes first in library order (see engine/effects.ts:
- * BASIC_LAND_IDS), same "no browse-and-pick UI, just the first match"
- * simplification every other library search in this engine already makes. */
+ * exact printed name), this matches ANY of the 5 basic lands - the
+ * controller's own pick (see GameState.pendingLibrarySearch), not just
+ * whichever comes first in library order. */
 export interface SearchLibraryForBasicLandEffect {
   type: 'searchLibraryForBasicLand';
 }
@@ -545,6 +549,18 @@ export interface SearchLibraryForBasicLandEffect {
 export interface SearchLibraryForAnyLandEffect {
   type: 'searchLibraryForAnyLand';
 }
+
+/** What GameState.pendingLibrarySearch is currently restricted to - the
+ * controller only ever sees (and can only ever pick from) cards in their
+ * library actually matching this, same way a real search says "for a
+ * [type/subtype/name] card" and nothing else is a legal find. See
+ * engine/effects.ts: matchesLibrarySearchFilter. */
+export type LibrarySearchFilter =
+  | { kind: 'basicLand' }
+  | { kind: 'anyLand' }
+  | { kind: 'landByName'; name: string }
+  | { kind: 'subtype'; subtype: string }
+  | { kind: 'exactName'; name: string };
 
 /** "Target creature gets +X/+Y (and gains [grantKeyword]) until end of turn"
  * (Blitzball Shot) - a SINGLE chosen target, unlike PumpAttackersEffect
@@ -1357,6 +1373,13 @@ export interface LandCountBuff {
 /** Cast this from the graveyard once, for this cost, then exile it instead of it going to the graveyard again. */
 export interface FlashbackAbility {
   cost: string;
+  /** Overrides CardDefinition.onCast/onEnter specifically for THIS
+   * (flashback) cast, when the card's own effect genuinely differs
+   * depending on where it was cast from (The Final Days: "create two
+   * tokens" from hand, but "create X tokens" via flashback) - see
+   * engine/actions.ts: castFromGraveyard. Omit to just reuse onCast/onEnter
+   * unchanged, which is what every other flashback card here still does. */
+  effects?: CardEffect[];
 }
 
 /**
@@ -1978,6 +2001,20 @@ export interface CardInstance {
    * (played, discarded, ...) rather than removing it - see
    * components/CardActionsPanel.tsx. */
   revealedCardIds?: string[];
+  /** True while THIS exact instance sits revealed, face-up, in its
+   * controller's hand - e.g. a library search that "reveals it, puts it
+   * into your hand" (World Map, ...). Both players can inspect it (see
+   * components/CardActionsPanel.tsx) and it's drawn with a purple outline
+   * for the opponent, but only for as long as it's genuinely still sitting
+   * in that hand - engine/actions.ts: applyAction strips this from any card
+   * no longer found in a hand zone after every action, so leaving hand for
+   * ANY reason (cast, discarded, exiled, tucked into library, ...) drops it
+   * immediately, and it never reappears if the same physical card is later
+   * drawn again. Distinct from CardInstance.revealedCardIds (Dark
+   * Confidant's own running reveal history, which is source-permanent-scoped
+   * and never cleared) - this one is about the REVEALED CARD's own
+   * hand-tenure, not any particular source's history. */
+  revealedToOpponentWhileInHand?: boolean;
   /** instanceId of the card THIS permanent hid away via a HideawayEffect
    * (Clive's Hideaway) - set once, by RESOLVE_HIDEAWAY, and read by its own
    * playHideawayCard ability to know which exiled card is "the exiled card".
@@ -2211,6 +2248,26 @@ export interface GameState {
    * something both just clear this; there's no "keep going" loop since the
    * card only grants one free cast per hit. */
   pendingFreeCastFromHand: { sourceInstanceId: string; controllerId: string; maxManaValue: number } | null;
+  /** Set while a SearchLibraryFor*Effect (or CyclingAbility.searchLandName's
+   * land-search half) is waiting on the controller to browse their library
+   * and pick a match, or decline and find nothing - cleared by
+   * RESOLVE_LIBRARY_SEARCH. `filter` restricts which of the controller's own
+   * library cards the client is even allowed to show/pick (see
+   * engine/effects.ts: matchesLibrarySearchFilter) - there's no way to see
+   * or choose anything outside it, same as a real "search for a [type]
+   * card" only ever finding that type. `reveal` is true for every current
+   * caller (all of them say "reveal it" in their printed text) - the found
+   * card is shown to the opponent too and marked with
+   * CardInstance.revealedToOpponentWhileInHand, rather than silently
+   * appearing in hand. */
+  pendingLibrarySearch: { sourceInstanceId: string; controllerId: string; filter: LibrarySearchFilter; reveal: boolean } | null;
+  /** Set once, right when a card is revealed to the opponent (currently only
+   * via a pendingLibrarySearch pick) - purely a "show a passing notification
+   * of what just got revealed" signal for the client (same shape as
+   * lastCoinFlip), not a running log. `sourceInstanceId` is whatever caused
+   * the reveal (e.g. World Map), so the notification can caption "revealed
+   * from [source]". */
+  lastReveal: { instanceId: string; ownerId: string; sourceInstanceId: string } | null;
   /** Set while an ExileTargetGraveyardCardEffect is waiting for its pick of a
    * card in ANY graveyard (Ignis Scientia) - cleared by
    * RESOLVE_GRAVEYARD_EXILE. `createFoodTokenIfCreature` mirrors the source
@@ -2305,6 +2362,7 @@ export type GameAction =
   | { type: 'RESOLVE_OPTIONAL_TRANSFORM'; accept: boolean }
   | { type: 'RESOLVE_OPTIONAL_PAY_LIFE'; accept: boolean }
   | { type: 'RESOLVE_FREE_CAST_FROM_HAND'; instanceId: string | null }
+  | { type: 'RESOLVE_LIBRARY_SEARCH'; instanceId: string | null }
   | { type: 'RESOLVE_GRAVEYARD_EXILE'; instanceId: string | null }
   | { type: 'DISCARD_UP_TO_THEN_DRAW'; instanceId: string | null }
   | { type: 'RESOLVE_REVEAL_PICKUP' }

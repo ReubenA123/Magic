@@ -4099,7 +4099,12 @@ export const CARD_POOL: CardDefinition[] = [
   type: 'sorcery',
   text: 'Create two tapped 2/2 black Horror creature tokens. If this spell was cast from a graveyard, instead create X of those tokens, ' +
   'where X is the number of creature cards in your graveyard. \nFlashback {4}{B}{B}',
-  imagePath: '/assets/cards/the-final-days.webp'
+  imagePath: '/assets/cards/the-final-days.webp',
+  onCast: [{ type: 'createToken', tokenId: 'token-horror', count: 2, tapped: true }],
+  flashback: {
+    cost: '4BB',
+    effects: [{ type: 'createToken', tokenId: 'token-horror', count: 'perCreatureCardInYourGraveyard', tapped: true }],
+  },
   },
    {
   id: 'the-fire-crystal',
@@ -5147,6 +5152,17 @@ export const TOKEN_POOL: CardDefinition[] = [
     toughness: 3,
     text: '',
     imagePath: '/assets/cards/token-robot-warrior.webp',
+  },
+  {
+    id: 'token-horror',
+    name: 'Horror',
+    type: 'creature',
+    subtype: 'Horror Token',
+    costLabel: '-',
+    power: 2,
+    toughness: 2,
+    text: '',
+    imagePath: '/assets/cards/horror.webp',
   },
 ];
 

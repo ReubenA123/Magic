@@ -9,6 +9,7 @@ import { getCardDefinition } from '../data/cards';
 import { canPay, parseCostLabel } from '../engine/mana';
 import { hasKeyword } from '../engine/keywords';
 import { effectivePower, effectiveToughness, isLegalPendingTarget } from '../engine/combat';
+import { matchesLibrarySearchFilter } from '../engine/effects';
 
 const MAX_HISTORY = 25;
 const AI_PLAYER_ID = 'ai';
@@ -184,6 +185,26 @@ export function useLocalGame(initialState: GameState) {
     return () => clearTimeout(timer);
   }, [state, dispatch]);
 
+  // --- AI: resolve its own pending library search (World Map, ...) --------
+  // Same "nobody else can choose for it" problem again. Deliberately simple:
+  // takes whatever's first in library order among the eligible matches -
+  // pendingLibrarySearch is only ever set when at least one exists (see
+  // engine/effects.ts: beginLibrarySearch), so there's always something to
+  // pick here.
+  useEffect(() => {
+    if (state.winnerId) return;
+    if (state.mutualAdjustment.status !== 'inactive') return;
+    const pending = state.pendingLibrarySearch;
+    if (!pending || pending.controllerId !== AI_PLAYER_ID) return;
+
+    const timer = setTimeout(() => {
+      const ai = state.players.find((p) => p.id === AI_PLAYER_ID)!;
+      const found = ai.zones.library.find((c) => matchesLibrarySearchFilter(getCardDefinition(c.defId), pending.filter));
+      dispatch({ type: 'RESOLVE_LIBRARY_SEARCH', instanceId: found?.instanceId ?? null }, AI_PLAYER_ID);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [state, dispatch]);
+
   // --- AI: resolve its own pending optional transform (Jecht) -------------
   // Same "nobody else can choose for it" problem again. Deliberately simple:
   // always accepts. Gated to the same post-combat phases the server itself
@@ -229,6 +250,7 @@ export function useLocalGame(initialState: GameState) {
     if (state.pendingOptionalTransform?.controllerId === AI_PLAYER_ID) return;
     if (state.pendingFreeCastFromHand?.controllerId === AI_PLAYER_ID) return;
     if (state.pendingDiscard?.controllerId === AI_PLAYER_ID) return;
+    if (state.pendingLibrarySearch?.controllerId === AI_PLAYER_ID) return;
 
     const timer = setTimeout(() => {
       const ai = state.players.find((p) => p.id === AI_PLAYER_ID)!;

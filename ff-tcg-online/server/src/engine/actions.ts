@@ -37,6 +37,8 @@ import {
   matchesReturnFromGraveyardFilter,
   stripSagaProgress,
   beginRevealPickup,
+  beginLibrarySearch,
+  matchesLibrarySearchFilter,
   isNonbasicLand,
 } from './effects';
 
@@ -58,8 +60,9 @@ export function applyAction(state: GameState, action: GameAction, playerId: stri
   const result = applyActionInner(state, action, playerId);
   if (!result.ok) return result;
   const watched = checkBattlefieldLeaveWatchers(state, result.state);
-  if (watched.logLines.length === 0) return result;
-  return { ok: true, state: { ...watched.state, log: [...watched.state.log, ...watched.logLines] } };
+  const cleaned = stripStaleRevealMarkers(watched.state);
+  if (watched.logLines.length === 0) return { ok: true, state: cleaned };
+  return { ok: true, state: { ...cleaned, log: [...cleaned.log, ...watched.logLines] } };
 }
 
 function checkBattlefieldLeaveWatchers(prevState: GameState, nextState: GameState): { state: GameState; logLines: string[] } {
@@ -83,6 +86,32 @@ function checkBattlefieldLeaveWatchers(prevState: GameState, nextState: GameStat
     logLines.push(...resolved.logLines);
   }
   return { state: next, logLines };
+}
+
+/** CardInstance.revealedToOpponentWhileInHand should only ever be true for a
+ * card that's ACTUALLY still sitting in its owner's hand right now - run
+ * after every single action (regardless of what it was) so leaving hand for
+ * ANY reason (cast, discarded, milled, exiled, tucked into a library,
+ * sacrificed, ...) drops the marker immediately, without having to
+ * instrument each of those many zone-change code paths individually and
+ * risk missing one - same "diff after the fact" reasoning as
+ * checkBattlefieldLeaveWatchers above. A plain no-op scan (returns the same
+ * state reference) on the overwhelming majority of actions, which never
+ * touch a revealed card at all. */
+function stripStaleRevealMarkers(state: GameState): GameState {
+  let next = state;
+  for (const player of state.players) {
+    const zones = player.zones;
+    const zoneNames: (keyof typeof zones)[] = ['library', 'battlefield', 'graveyard', 'exile', 'commander'];
+    let changedZones: Partial<typeof zones> | null = null;
+    for (const zoneName of zoneNames) {
+      const cards = zones[zoneName];
+      if (!cards.some((c) => c.revealedToOpponentWhileInHand)) continue;
+      changedZones = { ...(changedZones ?? {}), [zoneName]: cards.map((c) => (c.revealedToOpponentWhileInHand ? { ...c, revealedToOpponentWhileInHand: undefined } : c)) };
+    }
+    if (changedZones) next = updatePlayer(next, player.id, (p) => ({ ...p, zones: { ...p.zones, ...changedZones } }));
+  }
+  return next;
 }
 
 function applyActionInner(state: GameState, action: GameAction, playerId: string): ActionResult {
@@ -155,6 +184,8 @@ function applyActionInner(state: GameState, action: GameAction, playerId: string
       return resolveOptionalPayLife(state, playerId, action.accept);
     case 'RESOLVE_FREE_CAST_FROM_HAND':
       return resolveFreeCastFromHand(state, playerId, action.instanceId);
+    case 'RESOLVE_LIBRARY_SEARCH':
+      return resolveLibrarySearch(state, playerId, action.instanceId);
     case 'RESOLVE_GRAVEYARD_EXILE':
       return resolveGraveyardExile(state, playerId, action.instanceId);
     case 'DISCARD_UP_TO_THEN_DRAW':
@@ -612,7 +643,12 @@ function castFromGraveyard(state: GameState, playerId: string, instanceId: strin
   next = checkLegendRule(next, playerId);
 
   let effectLogLines: string[] = [];
-  const autoEffects = isPermanent ? def.onEnter : def.onCast;
+  // See types.ts: FlashbackAbility.effects - only set when this specific
+  // card's flashback behaves genuinely differently from casting it plainly
+  // (The Final Days' "create X tokens instead" via flashback). Every other
+  // flashback card here has no override, so this just falls through to the
+  // same onEnter/onCast a normal cast would use.
+  const autoEffects = def.flashback.effects ?? (isPermanent ? def.onEnter : def.onCast);
   if (autoEffects && autoEffects.length > 0) {
     const resolved = resolveCardEffects(next, playerId, autoEffects, movedCard.instanceId);
     next = resolved.state;
@@ -2221,6 +2257,50 @@ function resolveFreeCastFromHand(state: GameState, playerId: string, instanceId:
   return { ok: true, state: { ...result.state, pendingFreeCastFromHand: null } };
 }
 
+/** Resolving a GameState.pendingLibrarySearch - instanceId: null means the
+ * controller chose to find nothing (always allowed, same as a real "search
+ * for a [type] card" never being forced to actually find one). A chosen
+ * card must still be in the library and still match the filter (defense
+ * against a stale/replayed action - the client only ever offers matches in
+ * the first place). Reveal (when pending.reveal) marks the found card with
+ * CardInstance.revealedToOpponentWhileInHand and posts GameState.lastReveal
+ * for the client's own "X reveals Y" notification. */
+function resolveLibrarySearch(state: GameState, playerId: string, instanceId: string | null): ActionResult {
+  const pending = state.pendingLibrarySearch;
+  if (!pending) return { ok: false, error: 'Nothing is waiting on a library search right now.' };
+  if (pending.controllerId !== playerId) return { ok: false, error: "It's not your search to make." };
+
+  const player = getPlayer(state, playerId);
+
+  if (!instanceId) {
+    const next = updatePlayer(state, playerId, (p) => ({ ...p, zones: { ...p.zones, library: shuffle(p.zones.library) } }));
+    return { ok: true, state: { ...next, pendingLibrarySearch: null, log: [...next.log, `${player.name} finds nothing.`] } };
+  }
+
+  const foundIndex = player.zones.library.findIndex((c) => c.instanceId === instanceId);
+  if (foundIndex === -1) return { ok: false, error: 'That card is not in your library.' };
+  const foundCard = player.zones.library[foundIndex];
+  if (!matchesLibrarySearchFilter(getCardDefinition(foundCard.defId), pending.filter)) {
+    return { ok: false, error: "That card doesn't match what this search is looking for." };
+  }
+
+  const rest = player.zones.library.filter((_, i) => i !== foundIndex);
+  const movedCard: CardInstance = pending.reveal ? { ...foundCard, revealedToOpponentWhileInHand: true } : foundCard;
+  let next = updatePlayer(state, playerId, (p) => ({ ...p, zones: { ...p.zones, library: shuffle(rest), hand: [...p.zones.hand, movedCard] } }));
+  next = { ...next, pendingLibrarySearch: null };
+
+  const foundName = getCardDefinition(foundCard.defId).name;
+  const logLines = [`${player.name} finds ${foundName}.`];
+  if (pending.reveal) {
+    next = { ...next, lastReveal: { instanceId, ownerId: playerId, sourceInstanceId: pending.sourceInstanceId } };
+    const sourceFound = findCardAnywhere(next, pending.sourceInstanceId);
+    const sourceName = sourceFound ? getCardDefinition(sourceFound.card.defId).name : 'an ability';
+    logLines.push(`${player.name} reveals ${foundName} (found via ${sourceName}).`);
+  }
+
+  return { ok: true, state: { ...next, log: [...next.log, ...logLines] } };
+}
+
 /** Picking up a RevealTopThenLoseLifeByManaValueEffect's reveal (Dark
  * Confidant) - moves it into hand, applies the life loss, and records it on
  * the source permanent's revealedCardIds history (if it's still on the
@@ -2538,17 +2618,9 @@ function cycleCard(state: GameState, playerId: string, instanceId: string): Acti
     return { ok: true, state: { ...next, log: [...next.log, `${player.name} cycles ${def.name}, drawing a card.`] } };
   }
 
-  const library = getPlayer(next, playerId).zones.library;
-  const foundIndex = library.findIndex((c) => getCardDefinition(c.defId).name === searchName);
-  if (foundIndex === -1) {
-    next = updatePlayer(next, playerId, (p) => ({ ...p, zones: { ...p.zones, library: shuffleArr(p.zones.library) } }));
-    return { ok: true, state: { ...next, log: [...next.log, `${player.name} cycles ${def.name} - no ${searchName} found, shuffles the library.`] } };
-  }
-
-  const found = library[foundIndex];
-  const rest = library.filter((_, i) => i !== foundIndex);
-  next = updatePlayer(next, playerId, (p) => ({ ...p, zones: { ...p.zones, library: shuffleArr(rest), hand: [...p.zones.hand, found] } }));
-  return { ok: true, state: { ...next, log: [...next.log, `${player.name} cycles ${def.name}, searching up a ${searchName}.`] } };
+  const result = beginLibrarySearch(next, playerId, instanceId, { kind: 'landByName', name: searchName }, true);
+  next = result.state;
+  return { ok: true, state: { ...next, log: [...next.log, `${player.name} cycles ${def.name}.`, ...result.logLines] } };
 }
 
 /** "Whenever [this] deals combat damage to a player, ..." (Squall, SeeD

@@ -2,7 +2,16 @@
 // engine/effects.ts
 // ============================================================================
 
-import { CardDefinition, CardEffect, CardInstance, GameState, NoncreatureCastTrigger, ReanimateTargetFromGraveyardEffect, ReturnCreaturesFromGraveyardToHandEffect } from '../types';
+import {
+  CardDefinition,
+  CardEffect,
+  CardInstance,
+  GameState,
+  LibrarySearchFilter,
+  NoncreatureCastTrigger,
+  ReanimateTargetFromGraveyardEffect,
+  ReturnCreaturesFromGraveyardToHandEffect,
+} from '../types';
 import { findCardAnywhere, getOpponent, getPlayer, nextInstanceId, shuffle, updatePlayer, detachEverythingFrom } from './state';
 import { getCardDefinition } from '../data/cards';
 import { effectivePower, effectiveToughness, moveCreaturesToGraveyard, applyGainLifeTriggers, addLife, loseLife, damageMultiplierFor } from './combat';
@@ -25,6 +34,19 @@ export function matchesSacrificeFilter(def: CardDefinition, instance: CardInstan
  * same list) - anything else with type 'land' counts as "nonbasic" for
  * TapStunAndGainLifeForNonbasicLandsEffect (Omega, Heartless Evolution). */
 const BASIC_LAND_IDS = new Set(['plains', 'island', 'swamp', 'mountain', 'forest']);
+
+/** Whether `def` is a legal find for a GameState.pendingLibrarySearch's
+ * `filter` - shared by every SearchLibraryFor*Effect/CyclingAbility's own
+ * land search (engine/actions.ts: resolveLibrarySearch, cycleCard) AND the
+ * client (which uses the exact same shape to decide what's even shown as
+ * pickable - see components/LibrarySearchModal.tsx). */
+export function matchesLibrarySearchFilter(def: CardDefinition, filter: LibrarySearchFilter): boolean {
+  if (filter.kind === 'basicLand') return BASIC_LAND_IDS.has(def.id);
+  if (filter.kind === 'anyLand') return def.type === 'land';
+  if (filter.kind === 'landByName') return def.type === 'land' && def.name === filter.name;
+  if (filter.kind === 'subtype') return !!def.subtype?.toLowerCase().includes(filter.subtype.toLowerCase());
+  return def.name === filter.name;
+}
 
 /** Whether a permanent is a nonbasic land - see BASIC_LAND_IDS above. */
 export function isNonbasicLand(def: CardDefinition): boolean {
@@ -160,6 +182,31 @@ export function beginRevealPickup(state: GameState, controllerId: string, source
   }
 }
 
+/** Every "Search your library for a [X] card, ..." effect starts here -
+ * shared by every SearchLibraryFor*Effect and CyclingAbility's own land
+ * search (engine/actions.ts: cycleCard). If the controller's library has
+ * nothing matching `filter` at all, this is a no-op search (shuffle,
+ * "finds none") exactly like before - no point opening a picker over an
+ * empty result. Otherwise it pauses on GameState.pendingLibrarySearch
+ * (RESOLVE_LIBRARY_SEARCH) for the controller's own pick, or their choice
+ * to find nothing anyway. */
+export function beginLibrarySearch(
+  state: GameState,
+  playerId: string,
+  sourceInstanceId: string,
+  filter: LibrarySearchFilter,
+  reveal: boolean
+): { state: GameState; logLines: string[] } {
+  const player = getPlayer(state, playerId);
+  const hasMatch = player.zones.library.some((c) => matchesLibrarySearchFilter(getCardDefinition(c.defId), filter));
+  if (!hasMatch) {
+    const next = updatePlayer(state, playerId, (p) => ({ ...p, zones: { ...p.zones, library: shuffle(p.zones.library) } }));
+    return { state: next, logLines: [`${player.name} searches their library but finds nothing - shuffles.`] };
+  }
+  const next = { ...state, pendingLibrarySearch: { sourceInstanceId, controllerId: playerId, filter, reveal } };
+  return { state: next, logLines: [`${player.name} searches their library.`] };
+}
+
 /** Resolves CardDefinition.onDeath for any of `candidateInstanceIds` that
  * actually reached a graveyard or command zone (i.e. really died, as
  * opposed to being redirected to exile by a replacement effect like
@@ -242,7 +289,9 @@ export function resolveCardEffects(
       const count =
         effect.count === 'perCreatureYouControl'
           ? getPlayer(next, playerId).zones.battlefield.filter((c) => getCardDefinition(c.defId).type === 'creature').length
-          : effect.count ?? 1;
+          : effect.count === 'perCreatureCardInYourGraveyard'
+            ? getPlayer(next, playerId).zones.graveyard.filter((c) => getCardDefinition(c.defId).type === 'creature').length
+            : effect.count ?? 1;
 
       const tokens: CardInstance[] = Array.from({ length: count }, () => ({
         instanceId: nextInstanceId(),
@@ -614,41 +663,17 @@ export function resolveCardEffects(
         logLines.push(`${getCardDefinition(findCardAnywhere(next, sourceInstanceId)!.card.defId).name} deals ${equippedCount} damage to ${opponent.name} (equipped creatures).`);
       }
     } else if (effect.type === 'searchLibraryForLand') {
-      const player = getPlayer(next, playerId);
-      const foundIndex = player.zones.library.findIndex((c) => getCardDefinition(c.defId).name === effect.landName);
-      if (foundIndex === -1) {
-        next = updatePlayer(next, playerId, (p) => ({ ...p, zones: { ...p.zones, library: shuffle(p.zones.library) } }));
-        logLines.push(`${player.name} searches for a ${effect.landName} but finds none - shuffles the library.`);
-      } else {
-        const foundCard = player.zones.library[foundIndex];
-        const rest = player.zones.library.filter((_, i) => i !== foundIndex);
-        next = updatePlayer(next, playerId, (p) => ({ ...p, zones: { ...p.zones, library: shuffle(rest), hand: [...p.zones.hand, foundCard] } }));
-        logLines.push(`${player.name} searches their library for ${effect.landName}, puts it into hand, then shuffles.`);
-      }
+      const result = beginLibrarySearch(next, playerId, sourceInstanceId, { kind: 'landByName', name: effect.landName }, true);
+      next = result.state;
+      logLines.push(...result.logLines);
     } else if (effect.type === 'searchLibraryForBasicLand') {
-      const player = getPlayer(next, playerId);
-      const foundIndex = player.zones.library.findIndex((c) => BASIC_LAND_IDS.has(c.defId));
-      if (foundIndex === -1) {
-        next = updatePlayer(next, playerId, (p) => ({ ...p, zones: { ...p.zones, library: shuffle(p.zones.library) } }));
-        logLines.push(`${player.name} searches for a basic land but finds none - shuffles the library.`);
-      } else {
-        const foundCard = player.zones.library[foundIndex];
-        const rest = player.zones.library.filter((_, i) => i !== foundIndex);
-        next = updatePlayer(next, playerId, (p) => ({ ...p, zones: { ...p.zones, library: shuffle(rest), hand: [...p.zones.hand, foundCard] } }));
-        logLines.push(`${player.name} searches their library for a basic land card (${getCardDefinition(foundCard.defId).name}), puts it into hand, then shuffles.`);
-      }
+      const result = beginLibrarySearch(next, playerId, sourceInstanceId, { kind: 'basicLand' }, true);
+      next = result.state;
+      logLines.push(...result.logLines);
     } else if (effect.type === 'searchLibraryForAnyLand') {
-      const player = getPlayer(next, playerId);
-      const foundIndex = player.zones.library.findIndex((c) => getCardDefinition(c.defId).type === 'land');
-      if (foundIndex === -1) {
-        next = updatePlayer(next, playerId, (p) => ({ ...p, zones: { ...p.zones, library: shuffle(p.zones.library) } }));
-        logLines.push(`${player.name} searches for a land card but finds none - shuffles the library.`);
-      } else {
-        const foundCard = player.zones.library[foundIndex];
-        const rest = player.zones.library.filter((_, i) => i !== foundIndex);
-        next = updatePlayer(next, playerId, (p) => ({ ...p, zones: { ...p.zones, library: shuffle(rest), hand: [...p.zones.hand, foundCard] } }));
-        logLines.push(`${player.name} searches their library for a land card (${getCardDefinition(foundCard.defId).name}), puts it into hand, then shuffles.`);
-      }
+      const result = beginLibrarySearch(next, playerId, sourceInstanceId, { kind: 'anyLand' }, true);
+      next = result.state;
+      logLines.push(...result.logLines);
     } else if (effect.type === 'pumpTarget') {
       const hasLegalTarget = [...next.players[0].zones.battlefield, ...next.players[1].zones.battlefield].some((c) => getCardDefinition(c.defId).type === 'creature');
       const sourceName = getCardDefinition(findCardAnywhere(next, sourceInstanceId)!.card.defId).name;
@@ -1132,17 +1157,9 @@ export function resolveCardEffects(
         logLines.push(`${player.name} searches their library for ${effect.cardName}, puts it onto the battlefield tapped, then shuffles.`);
       }
     } else if (effect.type === 'searchLibraryForSubtype') {
-      const player = getPlayer(next, playerId);
-      const foundIndex = player.zones.library.findIndex((c) => getCardDefinition(c.defId).subtype?.toLowerCase().includes(effect.subtype.toLowerCase()));
-      if (foundIndex === -1) {
-        next = updatePlayer(next, playerId, (p) => ({ ...p, zones: { ...p.zones, library: shuffle(p.zones.library) } }));
-        logLines.push(`${player.name} searches for a ${effect.subtype} card but finds none - shuffles the library.`);
-      } else {
-        const foundCard = player.zones.library[foundIndex];
-        const rest = player.zones.library.filter((_, i) => i !== foundIndex);
-        next = updatePlayer(next, playerId, (p) => ({ ...p, zones: { ...p.zones, library: shuffle(rest), hand: [...p.zones.hand, foundCard] } }));
-        logLines.push(`${player.name} searches their library for a ${effect.subtype} card, puts it into hand, then shuffles.`);
-      }
+      const result = beginLibrarySearch(next, playerId, sourceInstanceId, { kind: 'subtype', subtype: effect.subtype }, true);
+      next = result.state;
+      logLines.push(...result.logLines);
     } else if (effect.type === 'exileTopOfEachOpponentLibrary') {
       for (const p of next.players) {
         if (p.id === playerId) continue;
