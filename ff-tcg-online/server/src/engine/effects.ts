@@ -14,7 +14,7 @@ import {
 } from '../types';
 import { findCardAnywhere, getOpponent, getPlayer, nextInstanceId, shuffle, updatePlayer, detachEverythingFrom } from './state';
 import { getCardDefinition } from '../data/cards';
-import { effectivePower, effectiveToughness, moveCreaturesToGraveyard, applyGainLifeTriggers, addLife, loseLife, damageMultiplierFor } from './combat';
+import { effectivePower, effectiveToughness, moveCreaturesToGraveyard, applyGainLifeTriggers, addLife, loseLife, damageMultiplierFor, hasGrantedSubtype } from './combat';
 import { hasKeyword, hasKeywordEffective } from './keywords';
 import { parseCostLabel, manaValue } from './mana';
 
@@ -195,7 +195,8 @@ export function beginLibrarySearch(
   playerId: string,
   sourceInstanceId: string,
   filter: LibrarySearchFilter,
-  reveal: boolean
+  reveal: boolean,
+  toBattlefieldTapped?: boolean
 ): { state: GameState; logLines: string[] } {
   const player = getPlayer(state, playerId);
   const hasMatch = player.zones.library.some((c) => matchesLibrarySearchFilter(getCardDefinition(c.defId), filter));
@@ -203,7 +204,7 @@ export function beginLibrarySearch(
     const next = updatePlayer(state, playerId, (p) => ({ ...p, zones: { ...p.zones, library: shuffle(p.zones.library) } }));
     return { state: next, logLines: [`${player.name} searches their library but finds nothing - shuffles.`] };
   }
-  const next = { ...state, pendingLibrarySearch: { sourceInstanceId, controllerId: playerId, filter, reveal } };
+  const next = { ...state, pendingLibrarySearch: { sourceInstanceId, controllerId: playerId, filter, reveal, toBattlefieldTapped } };
   return { state: next, logLines: [`${player.name} searches their library.`] };
 }
 
@@ -329,6 +330,14 @@ export function resolveCardEffects(
       });
       const sourceName = getCardDefinition(findCardAnywhere(next, sourceInstanceId)!.card.defId).name;
       if (validTargets.length === 0) {
+        logLines.push(`${sourceName}'s ability has no legal target.`);
+      } else {
+        next = { ...next, pendingTarget: { sourceInstanceId, controllerId: playerId, effect } };
+      }
+    } else if (effect.type === 'untapTargetAttacker') {
+      const hasLegalTarget = next.declaredAttackers.some((id) => findCardAnywhere(next, id)?.zone === 'battlefield');
+      const sourceName = getCardDefinition(findCardAnywhere(next, sourceInstanceId)!.card.defId).name;
+      if (!hasLegalTarget) {
         logLines.push(`${sourceName}'s ability has no legal target.`);
       } else {
         next = { ...next, pendingTarget: { sourceInstanceId, controllerId: playerId, effect } };
@@ -612,7 +621,9 @@ export function resolveCardEffects(
         next = { ...next, pendingTarget: { sourceInstanceId, controllerId: playerId, effect } };
       }
     } else if (effect.type === 'bounceTarget') {
-      const hasLegalTarget = [...next.players[0].zones.battlefield, ...next.players[1].zones.battlefield].some((c) => getCardDefinition(c.defId).type !== 'land');
+      const hasLegalTarget = [...next.players[0].zones.battlefield, ...next.players[1].zones.battlefield].some((c) =>
+        effect.targetFilter === 'creature' ? getCardDefinition(c.defId).type === 'creature' : getCardDefinition(c.defId).type !== 'land'
+      );
       const sourceName = getCardDefinition(findCardAnywhere(next, sourceInstanceId)!.card.defId).name;
       if (!hasLegalTarget) {
         logLines.push(`${sourceName}'s ability has no legal target.`);
@@ -667,7 +678,7 @@ export function resolveCardEffects(
       next = result.state;
       logLines.push(...result.logLines);
     } else if (effect.type === 'searchLibraryForBasicLand') {
-      const result = beginLibrarySearch(next, playerId, sourceInstanceId, { kind: 'basicLand' }, true);
+      const result = beginLibrarySearch(next, playerId, sourceInstanceId, { kind: 'basicLand' }, true, effect.toBattlefieldTapped);
       next = result.state;
       logLines.push(...result.logLines);
     } else if (effect.type === 'searchLibraryForAnyLand') {
@@ -675,13 +686,63 @@ export function resolveCardEffects(
       next = result.state;
       logLines.push(...result.logLines);
     } else if (effect.type === 'pumpTarget') {
-      const hasLegalTarget = [...next.players[0].zones.battlefield, ...next.players[1].zones.battlefield].some((c) => getCardDefinition(c.defId).type === 'creature');
+      const pumpCandidates = effect.restrictToOwnCreature ? getPlayer(next, playerId).zones.battlefield : [...next.players[0].zones.battlefield, ...next.players[1].zones.battlefield];
+      const hasLegalTarget = pumpCandidates.some((c) => getCardDefinition(c.defId).type === 'creature');
       const sourceName = getCardDefinition(findCardAnywhere(next, sourceInstanceId)!.card.defId).name;
       if (!hasLegalTarget) {
         logLines.push(`${sourceName}'s ability has no legal target.`);
       } else {
         next = { ...next, pendingTarget: { sourceInstanceId, controllerId: playerId, effect } };
       }
+    } else if (effect.type === 'grantKeywordsToTargetPermanent') {
+      const hasLegalTarget = [...next.players[0].zones.battlefield, ...next.players[1].zones.battlefield].length > 0;
+      const sourceName = getCardDefinition(findCardAnywhere(next, sourceInstanceId)!.card.defId).name;
+      if (!hasLegalTarget) {
+        logLines.push(`${sourceName}'s ability has no legal target.`);
+      } else {
+        next = { ...next, pendingTarget: { sourceInstanceId, controllerId: playerId, effect } };
+      }
+    } else if (effect.type === 'grantKeywordsToControlledPermanents') {
+      const player = getPlayer(next, playerId);
+      for (const c of player.zones.battlefield) {
+        for (const keyword of effect.keywords) {
+          next = grantTemporaryKeyword(next, c.instanceId, keyword);
+        }
+      }
+      if (player.zones.battlefield.length > 0) {
+        logLines.push(`Permanents ${player.name} controls gain ${effect.keywords.join(' and ')} until end of turn.`);
+      }
+    } else if (effect.type === 'gainControlOfTargetCreature') {
+      const candidates = effect.opponentControlledOnly ? getOpponent(next, playerId).zones.battlefield : [...next.players[0].zones.battlefield, ...next.players[1].zones.battlefield];
+      const hasLegalTarget = candidates.some((c) => getCardDefinition(c.defId).type === 'creature');
+      const sourceName = getCardDefinition(findCardAnywhere(next, sourceInstanceId)!.card.defId).name;
+      if (!hasLegalTarget) {
+        logLines.push(`${sourceName}'s ability has no legal target.`);
+      } else {
+        next = { ...next, pendingTarget: { sourceInstanceId, controllerId: playerId, effect } };
+      }
+    } else if (effect.type === 'giveControlOfAnotherOwnPermanentToOpponent') {
+      const player = getPlayer(next, playerId);
+      const hasLegalTarget = player.zones.battlefield.some((c) => c.instanceId !== sourceInstanceId);
+      if (!hasLegalTarget) {
+        const sourceName = getCardDefinition(findCardAnywhere(next, sourceInstanceId)!.card.defId).name;
+        logLines.push(`${sourceName} has no other permanent to give away.`);
+      } else {
+        next = { ...next, pendingTarget: { sourceInstanceId, controllerId: playerId, effect } };
+      }
+    } else if (effect.type === 'gainControlOfTargetEquipmentAndAttach') {
+      const player = getPlayer(next, playerId);
+      const hasOwnCreature = player.zones.battlefield.some((c) => getCardDefinition(c.defId).type === 'creature');
+      const hasEquipment = [...next.players[0].zones.battlefield, ...next.players[1].zones.battlefield].some((c) => getCardDefinition(c.defId).subtype?.toLowerCase().includes('equipment'));
+      const sourceName = getCardDefinition(findCardAnywhere(next, sourceInstanceId)!.card.defId).name;
+      if (!hasOwnCreature || !hasEquipment) {
+        logLines.push(`${sourceName}'s ability has no legal target.`);
+      } else {
+        next = { ...next, pendingTarget: { sourceInstanceId, controllerId: playerId, effect } };
+      }
+    } else if (effect.type === 'setPendingNextCreatureSpellBonus') {
+      next = { ...next, pendingNextCreatureSpellBonus: { controllerId: playerId, counterLabel: effect.counterLabel, counterAmount: effect.counterAmount, grantsHaste: effect.grantsHaste } };
+      logLines.push(`${getPlayer(next, playerId).name}'s next creature spell this turn gets a bonus.`);
     } else if (effect.type === 'grantKeywordToOtherAttackers') {
       for (const id of next.declaredAttackers) {
         if (id === sourceInstanceId) continue;
@@ -696,11 +757,15 @@ export function resolveCardEffects(
         next = updatePlayer(next, p.id, (pl) => ({ ...pl, life: pl.life - effect.amount }));
       }
       logLines.push(`Each player loses ${effect.amount} life.`);
+    } else if (effect.type === 'eachOpponentLosesLife') {
+      const opponent = getOpponent(next, playerId);
+      next = updatePlayer(next, opponent.id, (p) => ({ ...p, life: p.life - effect.amount }));
+      logLines.push(`${opponent.name} loses ${effect.amount} life.`);
     } else if (effect.type === 'pumpControlledSubtype') {
       const player = getPlayer(next, playerId);
       const matching = player.zones.battlefield.filter((c) => {
         const d = getCardDefinition(c.defId);
-        return d.type === 'creature' && !!d.subtype?.toLowerCase().includes(effect.subtype.toLowerCase());
+        return d.type === 'creature' && (!!d.subtype?.toLowerCase().includes(effect.subtype.toLowerCase()) || hasGrantedSubtype(next, playerId, c.instanceId, effect.subtype));
       });
       for (const c of matching) {
         next = applyTemporaryBuff(next, c.instanceId, effect.power, effect.toughness);
@@ -1054,6 +1119,27 @@ export function resolveCardEffects(
         logLines.push(...destroyResult.logLines);
       }
       logLines.push('All artifacts and creatures are destroyed.');
+    } else if (effect.type === 'damageEachCreature') {
+      const dead: string[] = [];
+      for (const p of next.players) {
+        for (const c of p.zones.battlefield) {
+          const cDef = getCardDefinition(c.defId);
+          if (cDef.type !== 'creature') continue;
+          const isIndestructible = hasKeywordEffective(cDef, c, 'indestructible');
+          next = updatePlayer(next, p.id, (pl) => ({
+            ...pl,
+            zones: { ...pl.zones, battlefield: pl.zones.battlefield.map((bc) => (bc.instanceId === c.instanceId ? { ...bc, damageMarked: bc.damageMarked + effect.amount } : bc)) },
+          }));
+          const updated = getPlayer(next, p.id).zones.battlefield.find((bc) => bc.instanceId === c.instanceId)!;
+          if (!isIndestructible && updated.damageMarked >= effectiveToughness(cDef, updated, next, p.id)) dead.push(c.instanceId);
+        }
+      }
+      logLines.push(`Each creature takes ${effect.amount} damage.`);
+      if (dead.length > 0) {
+        const sweepResult = moveCreaturesToGraveyardAndTrigger(next, dead, 'dies');
+        next = sweepResult.state;
+        logLines.push(...sweepResult.logLines);
+      }
     } else if (effect.type === 'createTokenIfControlledSubtypeCountAtLeast') {
       const player = getPlayer(next, playerId);
       const count = player.zones.battlefield.filter((c) => getCardDefinition(c.defId).subtype?.toLowerCase().includes(effect.subtype.toLowerCase())).length;
@@ -1324,6 +1410,33 @@ export function triggerArtifactEnterWatchers(state: GameState, playerId: string)
   return { state: next, logLines };
 }
 
+/** "Whenever [this] or another [Subtype] you control enters, and whenever
+ * a[n] [OtherSubtype] you control enters, ..." (Giott, King of the
+ * Dwarves) - see types.ts: CardDefinition.onAnyControlledSubtypeEnterTrigger.
+ * Called once right after ANY permanent enters the battlefield (see
+ * engine/actions.ts: castCard/castFromGraveyard), passing that permanent's
+ * OWN subtype text - checked against every controlled permanent's watcher
+ * (including the just-entered one itself, if its own subtype also
+ * matches its own watcher, exactly like Giott watching for his own
+ * Dwarf-ness). */
+export function triggerSubtypeEnterWatchers(state: GameState, playerId: string, enteredSubtype: string | undefined): { state: GameState; logLines: string[] } {
+  let next = state;
+  const logLines: string[] = [];
+  if (!enteredSubtype) return { state: next, logLines };
+
+  for (const card of getPlayer(next, playerId).zones.battlefield) {
+    const def = getCardDefinition(card.defId);
+    const watch = def.onAnyControlledSubtypeEnterTrigger;
+    if (!watch) continue;
+    if (!watch.subtypes.some((s) => enteredSubtype.toLowerCase().includes(s.toLowerCase()))) continue;
+    const resolved = resolveCardEffects(next, playerId, watch.effects, card.instanceId);
+    next = resolved.state;
+    logLines.push(...resolved.logLines);
+  }
+
+  return { state: next, logLines };
+}
+
 export function triggerLandfall(state: GameState, playerId: string): { state: GameState; logLines: string[] } {
   let next = state;
   const logLines: string[] = [];
@@ -1375,6 +1488,12 @@ export function triggerLandfall(state: GameState, playerId: string): { state: Ga
       const currentPower = effectivePower(def, card, next, playerId);
       next = applyTemporaryBuff(next, card.instanceId, currentPower, 0);
       logLines.push(`Landfall: ${def.name}'s power is doubled until end of turn.`);
+      continue;
+    }
+    if (def.landfall.discardUpToOneThenDraw) {
+      const resolved = resolveCardEffects(next, playerId, [{ type: 'discardUpToThenDrawThatMany', maxCount: 1 }], card.instanceId);
+      next = resolved.state;
+      logLines.push(`Landfall: ${def.name} triggers.`, ...resolved.logLines);
       continue;
     }
     const { counterLabel, counterAmount } = def.landfall;
@@ -1662,6 +1781,55 @@ export function returnFromGraveyardTransformed(state: GameState, playerId: strin
   }
   if (backDef.grantsExtraTurnOnTransform) {
     next = { ...next, extraTurnsQueued: [...next.extraTurnsQueued, playerId] };
+  }
+
+  return { state: next, logLines };
+}
+
+/** "Return this card from your graveyard to the battlefield [tapped], with
+ * a [counterLabel] counter on it" (Relentless X-ATM092) - like
+ * returnFromGraveyardTransformed, but comes back AS ITSELF rather than a
+ * different back face (no CardDefinition.transformsInto needed). See
+ * types.ts: CardAbility.returnSelfFromGraveyard. */
+export function returnSelfFromGraveyard(
+  state: GameState,
+  playerId: string,
+  instanceId: string,
+  opts: { tapped?: boolean; counterLabel?: string; counterAmount?: number }
+): { state: GameState; logLines: string[] } {
+  const player = getPlayer(state, playerId);
+  const card = player.zones.graveyard.find((c) => c.instanceId === instanceId);
+  if (!card) return { state, logLines: [] };
+  const def = getCardDefinition(card.defId);
+
+  const newInstanceId = nextInstanceId();
+  const hasHaste = hasKeyword(def, 'haste');
+  const counters = opts.counterLabel ? [{ label: opts.counterLabel, amount: opts.counterAmount ?? 1 }] : [];
+  const newCard: CardInstance = {
+    instanceId: newInstanceId,
+    defId: def.id,
+    ownerId: playerId,
+    tapped: !!opts.tapped || !!def.entersTapped,
+    counters,
+    damageMarked: 0,
+    summoningSick: !hasHaste,
+  };
+  let next = updatePlayer(state, playerId, (p) => ({
+    ...p,
+    zones: { ...p.zones, graveyard: p.zones.graveyard.filter((c) => c.instanceId !== instanceId), battlefield: [...p.zones.battlefield, newCard] },
+  }));
+
+  const counterNote = opts.counterLabel ? ` with a ${opts.counterLabel} counter on it` : '';
+  const logLines = [`${def.name} returns from the graveyard to the battlefield${opts.tapped ? ' tapped' : ''}${counterNote}.`];
+  if (def.onEnter && def.onEnter.length > 0) {
+    const resolved = resolveCardEffects(next, playerId, def.onEnter, newInstanceId);
+    next = resolved.state;
+    logLines.push(...resolved.logLines);
+  }
+  if (def.saga) {
+    const sagaResult = triggerSagaLoreCounter(next, playerId, newInstanceId);
+    next = sagaResult.state;
+    logLines.push(...sagaResult.logLines);
   }
 
   return { state: next, logLines };

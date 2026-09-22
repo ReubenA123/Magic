@@ -162,6 +162,12 @@ export const CARD_POOL: CardDefinition[] = [
     text: "Vigilance, ward 3. Damage isn't removed from this creature during cleanup steps. All damage that would be dealt to you and other permanents you control is dealt to this creature instead. When this creature dies, exile it and create ten tapped Treasure tokens.",
     imagePath: '/assets/cards/ancient-adamantoise.webp',
     onDeathExileAndCreateTokens: { tokenId: 'token-treasure', count: 10 },
+    wardCost: { mana: '3' },
+    // "Damage isn't removed during cleanup" and "all damage to you/your
+    // other permanents is dealt to this creature instead" are still
+    // deferred - the former needs a per-creature damage-persistence flag
+    // (this engine always clears damageMarked at cleanup) and the latter
+    // needs a damage-redirection replacement effect; neither exists yet.
   },
   {
     id: 'ardyn-the-usurper',
@@ -177,14 +183,17 @@ export const CARD_POOL: CardDefinition[] = [
     // lifelink, and haste" would falsely self-apply via the plain substring
     // keyword check (see engine/keywords.ts).
     excludeSelfKeywords: ['menace', 'lifelink', 'haste'],
-    // Both deferred - the static keyword anthem to Demons would need a
-    // static "grants keyword to every controlled permanent of a subtype"
-    // check threaded through every place a combat keyword is checked
-    // (menace, lifelink, haste each have their own call sites), which is
-    // too invasive for the two cards that currently want it; Starscourge
-    // needs a graveyard-targeted exile-then-copy-with-a-stat/type override,
-    // which no existing copy effect supports (createTokenCopyOfTarget only
-    // copies a battlefield permanent, unchanged).
+    staticAnthemForControlledSubtype: { subtype: 'Demon', power: 0, toughness: 0, grantKeywords: ['menace', 'lifelink', 'haste'] },
+    // The haste half of the anthem has no actual effect - see
+    // engine/combat.ts: hasBoardGrantedKeyword's doc comment (summoning
+    // sickness is only ever checked once, at entry, from the card's own
+    // printed haste - nothing rechecks it dynamically against board grants
+    // the way menace/lifelink are). Still included in the data since it's
+    // accurate to the printed text and harmless. Starscourge is still
+    // deferred entirely - needs a graveyard-targeted exile-then-copy-with-
+    // a-stat/type override, which no existing copy effect supports
+    // (createTokenCopyOfTarget only copies a battlefield permanent,
+    // unchanged).
   },
   {
     id: 'ashe-princess-of-dalmasca',
@@ -205,12 +214,17 @@ export const CARD_POOL: CardDefinition[] = [
     subtype: 'Equipment',
     costLabel: '1W',
     // Was missing its Equipment subtype entirely (on top of attachesTo/
-    // equipCost), so it could never actually be equipped to anything. The
-    // granted counter-trigger and "is a Wizard" subtype grant are deferred.
+    // equipCost), so it could never actually be equipped to anything.
+    // The "whenever you draw your third card each turn" half of the
+    // granted counter-trigger is deferred - no per-turn draw-count
+    // tracking exists in this engine (only the noncreature-spell half is
+    // wired, via equipGrantsNoncreatureCastTrigger).
     text: "Job select (When this Equipment enters, create a 1/1 colorless Hero creature token, then attach this to it.) Equipped creature is a Wizard in addition to its other types and has “Whenever you cast a noncreature spell and whenever you draw your third card each turn, put a +1/+1 counter on this creature. Diana — Equip {2}",
     onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
     attachesTo: 'creature',
     equipCost: '2',
+    equipGrantsSubtype: 'Wizard',
+    equipGrantsNoncreatureCastTrigger: { counterIfExpensive: { minManaValue: 0, counterLabel: '+1/+1', counterAmount: 1 } },
     imagePath: '/assets/cards/astrologian-s-planisphere.webp',
   },
   {
@@ -281,7 +295,7 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 3,
     text: "Reach. Vehicles you control get +1/+1 and have vigilance and reach. Whenever a Vehicle crewed by Balthier and Fran this turn attacks, if it\u2019s the first combat phase of the turn, you may pay 1RG. If you do, after this phase, there is an additional combat phase.",
     imagePath: '/assets/cards/balthier-and-fran.webp',
-    staticAnthemForControlledSubtype: { subtype: 'Vehicle', power: 1, toughness: 1 },
+    staticAnthemForControlledSubtype: { subtype: 'Vehicle', power: 1, toughness: 1, grantKeywords: ['vigilance', 'reach'] },
     // Balthier truly has Reach (the first sentence), but NOT vigilance -
     // vigilance is only granted to Vehicles. Without this, the "have
     // vigilance and reach" anthem clause would falsely self-apply vigilance
@@ -301,12 +315,11 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: '2G',
     text: "Job select (When this Equipment enters, create a 1/1 colorless Hero creature token, then attach this to it.) Equipped creature gets +2/+2, has reach, and is a Bard in addition to its other types. Perseus’s Bow — Equip 6( 6: Attach to target creature you control. Equip only as a sorcery.)",
     onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
-    // "is a Bard in addition to its other types" is deferred - no subtype
-    // granting mechanism exists.
     attachesTo: 'creature',
     equipCost: '6',
     equipBuff: { power: 2, toughness: 2 },
     equipGrantsKeyword: 'reach',
+    equipGrantsSubtype: 'Bard',
     imagePath: '/assets/cards/bards-bow.webp',
   },
   {
@@ -699,6 +712,8 @@ export const CARD_POOL: CardDefinition[] = [
     name: 'Cloudbound Moogle',
     type: 'creature',
     costLabel: '3WW',
+    power: 2,
+    toughness: 3,
     text: "Flying \n When this creature enters, put a +1/+1 counter on target creature. \n" +
       "Plainscycling 2 (2, Discard this card: Search your library for a Plains card, reveal it, put it into your hand, then shuffle.)",
     onEnter: [{ type: 'putCounterOnTarget', counterLabel: '+1/+1', counterAmount: 1 }],
@@ -1008,6 +1023,7 @@ export const CARD_POOL: CardDefinition[] = [
     equipCost: '4',
     equipBuff: { power: 1, toughness: 0 },
     equipGrantsKeywordDuringOwnTurn: 'flying',
+    equipGrantsSubtype: 'Knight',
     imagePath: '/assets/cards/dragoon-s-lance.webp'
   },
   {
@@ -1140,6 +1156,13 @@ export const CARD_POOL: CardDefinition[] = [
     onCast: [{ type: 'surveil', count: 2 }, { type: 'gainLife', amount: 2 }],
     flashback: { cost: '3G' },
     imagePath: '/assets/cards/esper-origins.webp'
+    // The "if cast from a graveyard, exile it, then put it onto the
+    // battlefield transformed with a finality counter" clause is deferred -
+    // no mechanism here turns a flashbacked SORCERY into a permanent
+    // (flashback.effects only overrides onCast/onEnter, it doesn't change
+    // the underlying spell type). Finality counters themselves now work
+    // (see engine/combat.ts: moveCreaturesToGraveyard's toExileFromFinality)
+    // once something can actually apply one to this card.
   },
   {
     id: 'ether',
@@ -1242,9 +1265,12 @@ export const CARD_POOL: CardDefinition[] = [
       "• Fire — {0} — Fire Magic deals 1 damage to each creature. \n" +
       "• Fira — {2} — Fire Magic deals 2 damage to each creature. \n" +
       "• Firaga — {5} — Fire Magic deals 3 damage to each creature.",
-    // Tiered (an additional-cost pick that also selects the effect) is
-    // deferred - same new cost/effect-selection mechanism as Ice Magic.
-    imagePath: '/assets/cards/fire-magic.webp'
+    imagePath: '/assets/cards/fire-magic.webp',
+    tieredModes: [
+      { label: 'Fire — {0} — 1 damage to each creature', additionalCost: '0', effects: [{ type: 'damageEachCreature', amount: 1 }] },
+      { label: 'Fira — {2} — 2 damage to each creature', additionalCost: '2', effects: [{ type: 'damageEachCreature', amount: 2 }] },
+      { label: 'Firaga — {5} — 3 damage to each creature', additionalCost: '5', effects: [{ type: 'damageEachCreature', amount: 3 }] },
+    ],
   },
   {
     id: 'firion-wild-rose-warrior',
@@ -1281,6 +1307,8 @@ export const CARD_POOL: CardDefinition[] = [
     type: "creature",
     subtype: 'Legendary Creature \u2014 Rat Knight',
     costLabel: "R",
+    power: 1,
+    toughness: 1,
     text: "Jump — During your turn, Freya Crescent has flying.\nT: Add R. Spend this mana only to cast an Equipment spell or activate an equip ability",
     grantsSelfKeywordDuringOwnTurn: 'flying',
     imagePath: '/assets/cards/freya-crescent.webp'
@@ -1301,6 +1329,8 @@ export const CARD_POOL: CardDefinition[] = [
     name: 'Gaelicat',
     type: 'creature',
     costLabel: '2W',
+    power: 1,
+    toughness: 3,
     text: "Flying, vigilance \nAs long as you control two or more artifacts, this creature gets +2/+0.",
     controlledTypeCountBuff: { type: 'artifact', minCount: 2, power: 2, toughness: 0 },
     imagePath: '/assets/cards/gaelicat.webp'
@@ -1436,12 +1466,10 @@ export const CARD_POOL: CardDefinition[] = [
     subtype: 'Legendary Creature \u2014 Dwarf Noble',
     power: 1,
     toughness: 1,
-    // Double strike works automatically (keyword text). The ETB loot clause
-    // is deferred - there's no subtype-scoped enter-watcher (only a general
-    // onAnyArtifactEnterTrigger exists, and reusing it here would fire the
-    // trigger on non-Equipment artifacts too, misrepresenting the card).
+    // Double strike works automatically (keyword text).
     text: "Double strike \n " +
       "Whenever Giott or another Dwarf you control enters and whenever an Equipment you control enters, you may discard a card. If you do, draw a card.",
+    onAnyControlledSubtypeEnterTrigger: { subtypes: ['Dwarf', 'Equipment'], effects: [{ type: 'discardUpToThenDrawThatMany', maxCount: 1 }] },
     imagePath: '/assets/cards/giott-king-of-the-dwarves.webp'
   }, {
     id: 'gladiolus-amicitia',
@@ -1642,7 +1670,13 @@ export const CARD_POOL: CardDefinition[] = [
       '• Blizzard — {0} — Return target creature to its owner\u2019s hand. \n' +
       '• Blizzara — {2} — Target creature\u2019s owner puts it on their choice of the top or bottom of their library. \n' +
       '• Blizzaga — {5}{U} — Target creature\u2019s owner shuffles it into their library.',
-    imagePath: '/assets/cards/ice-magic.webp'
+    imagePath: '/assets/cards/ice-magic.webp',
+    tieredModes: [{ label: 'Blizzard — {0} — Return target creature to its owner’s hand', additionalCost: '0', effects: [{ type: 'bounceTarget', targetFilter: 'creature' }] }],
+    // Blizzara ("owner puts it on their choice of top or bottom of
+    // library") and Blizzaga ("owner shuffles it into their library") are
+    // still deferred - both need a target creature's OWNER (not the
+    // caster) to make a choice about it, which no effect here supports;
+    // Blizzard alone is wired via the existing bounceTarget effect.
   },
   {
     id: 'ignis-scientia',
@@ -1802,12 +1836,8 @@ export const CARD_POOL: CardDefinition[] = [
     text: "At the beginning of combat on your turn, put a number of +1/+1 counters equal to Jenova\u2019s power on up to one other target creature. " +
       "That creature becomes a Mutant in addition to its other types. Whenever a Mutant you control dies during your turn, you draw cards equal to its power.",
     imagePath: '/assets/cards/jenova-ancient-calamity.webp',
-    // The "becomes a Mutant in addition to its other types" clause and its
-    // dependent "Whenever a Mutant you control dies..." death-draw trigger
-    // are deferred - there's no mechanism anywhere in this engine for
-    // granting a subtype to an instance (CardInstance has no field for it),
-    // so a downstream trigger keyed on that granted subtype can't be wired.
-    onOwnCombatBegin: [{ type: 'putCounterOnUpToOneOtherCreatureEqualToOwnPower', counterLabel: '+1/+1' }],
+    onOwnCombatBegin: [{ type: 'putCounterOnUpToOneOtherCreatureEqualToOwnPower', counterLabel: '+1/+1', alsoGrantsSubtype: 'Mutant' }],
+    onAnyDeathDrawEqualToPowerIfSubtype: { subtype: 'Mutant', duringOwnTurnOnly: true },
   }, {
     id: 'jidoor-aristocratic-capital',
     name: 'Jidoor, Aristocratic Capital',
@@ -1949,14 +1979,12 @@ export const CARD_POOL: CardDefinition[] = [
     subtype: 'Legendary Creature \u2014 Human Knight',
     power: 2,
     toughness: 4,
-    text: 'Jump — During your turn, Kain has flying. \n' +
+    text: 'Jump — During your turn, Kain has flying.\n' +
       "Whenever Kain deals combat damage to a player, that player gains control of Kain. If they do, you draw that many cards, " +
       "create that many tapped Treasure tokens, then lose that much life.",
     imagePath: '/assets/cards/kain-traitorous-dragoon.webp',
-    // The control-change clause ("that player gains control of Kain...") is
-    // deferred - CardInstance has no separate controller concept anywhere in
-    // this engine (only ownerId), so there's nothing for it to change.
     grantsSelfKeywordDuringOwnTurn: 'flying',
+    combatDamageToPlayerGrantsControlToThem: true,
   },
   {
     id: 'kefka-court-mage',
@@ -2165,10 +2193,10 @@ export const CARD_POOL: CardDefinition[] = [
       "Equipped creature gets +2/+2 for each artifact you control and is an Artificer in addition to its other types." +
       "Machina — Equip 4 (4: Attach to target creature you control. Equip only as a sorcery.)",
     onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
-    // The "+2/+2 for each artifact you control" scaling buff (no flat
-    // equipBuff fits) and "is an Artificer" subtype grant are deferred.
     attachesTo: 'creature',
     equipCost: '4',
+    equipBuffPerControlledType: { type: 'artifact', power: 2, toughness: 2 },
+    equipGrantsSubtype: 'Artificer',
     imagePath: '/assets/cards/machinist-s-arsenal.webp'
   },
   {
@@ -2177,6 +2205,7 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: 'U',
     type: 'instant',
     text: 'Target creature you control gets +1/+1 and gains hexproof until end of turn. Untap it.',
+    onCast: [{ type: 'pumpTarget', power: 1, toughness: 1, grantKeyword: 'hexproof', restrictToOwnCreature: true, alsoUntap: true }],
     imagePath: '/assets/cards/magic-damper.webp'
   },
   {
@@ -2323,10 +2352,10 @@ export const CARD_POOL: CardDefinition[] = [
       "Equipped creature gets +1/+0 and is a Monk in addition to its other types.\n" +
       "Equip 2 (2: Attach to target creature you control. Equip only as a sorcery.)",
     onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
-    // "is a Monk in addition to its other types" is deferred (subtype grant).
     attachesTo: 'creature',
     equipCost: '2',
     equipBuff: { power: 1, toughness: 0 },
+    equipGrantsSubtype: 'Monk',
     imagePath: '/assets/cards/monk-s-fist.webp'
   },
   {
@@ -2396,13 +2425,16 @@ export const CARD_POOL: CardDefinition[] = [
     text: "Job select \n Equipped creature gets +1/+1, is a Ninja in addition to its other types, and has " +
       "“Whenever this creature deals combat damage to a player, draw a card, then discard a card. That player loses life equal to the discarded card\u2019s mana value.”\n" +
       "Mutsunokami — Equip 2",
-    // "Job select" needs the same token-creation onEnter every other job
-    // select Equipment has (was missing entirely). The granted combat-damage
-    // trigger and "is a Ninja" subtype grant are deferred.
+    // The granted "draw a card, then discard a card; that player loses life
+    // equal to the discarded card's mana value" combat-damage trigger is
+    // deferred - the life-loss amount depends on WHICH card the player
+    // chooses to discard, and no mechanism here can hang a follow-up effect
+    // off an in-progress discard choice yet (see GameState.pendingDiscard).
     onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
     attachesTo: 'creature',
     equipCost: '2',
     equipBuff: { power: 1, toughness: 1 },
+    equipGrantsSubtype: 'Ninja',
     imagePath: '/assets/cards/ninja-s-blades.webp'
   },
   {
@@ -2415,7 +2447,13 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 3,
     text: "Lifelink\n You may cast artifact spells from your graveyard by paying 3 life in addition to paying their other costs. " +
       "If you cast a spell this way, that artifact enters with a finality counter on it.",
-    imagePath: '/assets/cards/noctis-prince-of-lucis.webp'
+    imagePath: '/assets/cards/noctis-prince-of-lucis.webp',
+    // Deferred entirely - "cast ANY artifact card from your graveyard for
+    // an alternate life cost" needs a general cast-from-graveyard-for-
+    // alternate-cost mechanism (this engine's only graveyard-casting path
+    // is the specific, per-card Flashback field). Finality counters
+    // themselves now work (see engine/combat.ts: moveCreaturesToGraveyard's
+    // toExileFromFinality) once something can actually apply one here.
   },
   {
     id: 'omega-heartless-evolution',
@@ -2466,12 +2504,11 @@ export const CARD_POOL: CardDefinition[] = [
       "Equipped creature gets +2/+1, has ward {1}, and is a Knight in addition to its other types. \n" +
       "Lightbringer and Hero\u2019s Shield — Equip 4 (4: Attach to target creature you control. Equip only as a sorcery.)",
     onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
-    // Ward and "is a Knight" are deferred - ward isn't a mechanic this
-    // engine implements at all (no targeting-cost concept), and there's no
-    // subtype-granting mechanism.
     attachesTo: 'creature',
     equipCost: '4',
     equipBuff: { power: 2, toughness: 1 },
+    equipGrantsWard: { mana: '1' },
+    equipGrantsSubtype: 'Knight',
     imagePath: '/assets/cards/paladin-s-arms.webp'
   },
   {
@@ -2593,10 +2630,6 @@ export const CARD_POOL: CardDefinition[] = [
     text: "1, Tap: Draw a card, then discard a card. \n" +
       "7, Tap, Sacrifice this creature: Draw three cards. This ability costs 1 less to activate for each Town you control.",
     imagePath: '/assets/cards/qiqirn-merchant.webp',
-    // Both abilities are implemented at their flat printed cost - the "costs
-    // 1 less per Town you control" discount on the second ability is
-    // deferred (no per-ability dynamic cost reduction mechanism exists, only
-    // per-spell-cast reductions).
     abilities: [
       {
         id: 'qiqirn-merchant-loot',
@@ -2608,9 +2641,9 @@ export const CARD_POOL: CardDefinition[] = [
       {
         id: 'qiqirn-merchant-draw-three',
         label: 'Draw Three',
-        cost: { manaLabel: '7', tap: true, sacrificeSelf: true },
+        cost: { manaLabel: '7', tap: true, sacrificeSelf: true, reducePerControlledSubtype: { subtype: 'Town', amountPerUnit: 1 } },
         effects: [{ type: 'loot', drawCount: 3, discardCount: 0 }],
-        effectText: 'Draw three cards.',
+        effectText: 'Draw three cards. This ability costs 1 less to activate for each Town you control.',
       },
     ],
   },
@@ -2724,9 +2757,9 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 2,
     text: 'Ward—Pay life equal to Raubahn\u2019s power.\n Whenever Raubahn attacks, attach up to one target Equipment you control to target attacking creature.',
     imagePath: '/assets/cards/raubahn-bull-of-ala-mhigo.webp',
-    // Deferred - Ward isn't a mechanic this engine implements at all (no
-    // targeting-cost concept), and the attack-trigger "attach up to one
-    // target Equipment to target attacking creature" needs a two-target
+    wardCost: { lifeEqualToOwnPower: true },
+    // The attack-trigger "attach up to one target Equipment to target
+    // attacking creature" is still deferred - needs a two-target
     // (Equipment + creature) attach effect that doesn't exist (the existing
     // attach effects are all single-target, source-attaches-to-target).
   },
@@ -2748,10 +2781,10 @@ export const CARD_POOL: CardDefinition[] = [
       "Equipped creature has “Whenever you cast a noncreature spell, this creature gets +2/+0 until end of turn” and is a Wizard in addition to its other types.\n" +
       "Equip 3",
     onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
-    // The granted noncreature-cast pump trigger and "is a Wizard" subtype
-    // grant are deferred.
     attachesTo: 'creature',
     equipCost: '3',
+    equipGrantsSubtype: 'Wizard',
+    equipGrantsNoncreatureCastTrigger: { pumpSelf: { power: 2, toughness: 0 } },
     imagePath: '/assets/cards/red-mage-s-rapier.webp'
   },
   {
@@ -2766,10 +2799,18 @@ export const CARD_POOL: CardDefinition[] = [
       "8: Return this card from your graveyard to the battlefield tapped with a finality counter on it. " +
       "(If a creature with a finality counter on it would die, exile it instead.)",
     imagePath: '/assets/cards/relentless-x-atm092.webp',
-    // Deferred - "can't be blocked except by three or more creatures" needs
-    // a numeric block-threshold beyond menace's fixed two, and the
-    // graveyard-activated ability needs abilities activatable from the
-    // graveyard zone, neither of which this engine supports.
+    abilities: [
+      {
+        id: 'relentless-x-atm092-return',
+        label: 'Return',
+        cost: { manaLabel: '8' },
+        effectText: 'Return this card from your graveyard to the battlefield tapped with a finality counter on it.',
+        returnSelfFromGraveyard: { tapped: true, counterLabel: 'Finality', counterAmount: 1 },
+      },
+    ],
+    // "Can't be blocked except by three or more creatures" is still
+    // deferred - needs a numeric block-threshold beyond menace's fixed two,
+    // which this engine doesn't support yet.
   },
   {
     id: 'relm-s-sketching',
@@ -2816,8 +2857,19 @@ export const CARD_POOL: CardDefinition[] = [
       "• Cura — 1 — Target permanent gains hexproof and indestructible until end of turn. You gain 3 life.\n" +
       "• Curaga — 3W — Permanents you control gain hexproof and indestructible until end of turn. You gain 6 life.",
     imagePath: '/assets/cards/restoration-magic.webp',
-    // Deferred - Tiered (choose one additional cost) is an established gap
-    // (no tiered/kicker cost mechanism exists).
+    tieredModes: [
+      { label: 'Cure — {0} — Target permanent gains hexproof and indestructible', additionalCost: '0', effects: [{ type: 'grantKeywordsToTargetPermanent', keywords: ['hexproof', 'indestructible'] }] },
+      {
+        label: 'Cura — {1} — Target permanent gains hexproof and indestructible, gain 3 life',
+        additionalCost: '1',
+        effects: [{ type: 'grantKeywordsToTargetPermanent', keywords: ['hexproof', 'indestructible'] }, { type: 'gainLife', amount: 3 }],
+      },
+      {
+        label: 'Curaga — {3}{W} — Permanents you control gain hexproof and indestructible, gain 6 life',
+        additionalCost: '3W',
+        effects: [{ type: 'grantKeywordsToControlledPermanents', keywords: ['hexproof', 'indestructible'] }, { type: 'gainLife', amount: 6 }],
+      },
+    ],
   },
   {
     id: 'retrieve-the-esper',
@@ -2949,11 +3001,11 @@ export const CARD_POOL: CardDefinition[] = [
       'Summon — {X}, {T}: Return target Saga card with mana value X from your graveyard to the battlefield with ' +
       'a finality counter on it. It gains haste until end of turn. Activate only as a sorcery.',
     imagePath: '/assets/cards/rydia-summoner-of-mist.webp',
-    // Both deferred - the landfall is an optional cost-conditioned rummage
-    // (same "may X, if you do Y" gap as Rook Turret), and the Summon
-    // ability needs an {X} cost on an ACTIVATED ability (only CAST_CARD/
-    // CAST_FROM_GRAVEYARD support chosenX) plus a "mana value exactly X,
-    // and must be a Saga" reanimate filter, neither of which exist.
+    landfall: { discardUpToOneThenDraw: true },
+    // The Summon ability is still deferred - needs an {X} cost on an
+    // ACTIVATED ability (only CAST_CARD/CAST_FROM_GRAVEYARD support
+    // chosenX) plus a "mana value exactly X, and must be a Saga" reanimate
+    // filter, neither of which exist.
   },
   {
     id: 'sabotender',
@@ -2976,11 +3028,11 @@ export const CARD_POOL: CardDefinition[] = [
       'Equipped creature gets +1/+0, has “Whenever this creature attacks, untap target attacking creature,” and is a Cleric in addition to its other types.\n' +
       'Hagneia — Equip 3',
     onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
-    // The granted "untap target attacking creature" trigger and "is a
-    // Cleric" subtype grant are deferred.
     attachesTo: 'creature',
     equipCost: '3',
     equipBuff: { power: 1, toughness: 0 },
+    equipGrantsSubtype: 'Cleric',
+    equipGrantsOnAttack: [{ type: 'untapTargetAttacker' }],
     imagePath: '/assets/cards/sage-s-nouliths.webp'
   },
   {
@@ -3004,11 +3056,11 @@ export const CARD_POOL: CardDefinition[] = [
       'Equipped creature gets +2/+2, has trample and haste, and is a Samurai in addition to its other types. \n' +
       'Murasame — Equip 5',
     onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
-    // "is a Samurai in addition to its other types" is deferred.
     attachesTo: 'creature',
     equipCost: '5',
     equipBuff: { power: 2, toughness: 2 },
     equipGrantsKeyword: ['trample', 'haste'],
+    equipGrantsSubtype: 'Samurai',
     imagePath: '/assets/cards/samurai-s-katana.webp'
   },
   {
@@ -3171,12 +3223,12 @@ export const CARD_POOL: CardDefinition[] = [
       'At the beginning of combat on your turn, if you control two or more other legendary creatures, you may transform Serah Farron.',
     imagePath: '/assets/cards/serah-farron.webp',
     transformsInto: 'crystallized-serah',
-    // Both deferred - "first legendary creature spell each turn costs 2
-    // less" is an established cost-reduction gap (only
-    // costReductionPerGraveyardPermanent-style scaling exists, no
-    // once-per-turn/first-spell tracking), and the transform condition
-    // ("control two or more other legendary creatures") would need its own
-    // onOwnCombatBegin check even if the cost reduction were implemented.
+    reducesCastCostForFirstLegendaryCreatureSpellEachTurn: 2,
+    // The transform condition ("at the beginning of combat, if you control
+    // two or more other legendary creatures, you may transform") is still
+    // deferred - needs its own onOwnCombatBegin check with a controlled-
+    // legendary-creature-count condition and an optional (may) transform,
+    // neither of which exists as a combined shape yet.
   },
   {
     id: 'crystallized-serah',
@@ -3187,11 +3239,8 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'The first legendary creature spell you cast each turn costs 2 less to cast. \n' +
       'Legendary creatures you control get +2/+2.',
     imagePath: '/assets/cards/crystallized-serah.webp',
-    // Both deferred - the cost reduction (see above) and the static
-    // per-subtype anthem ("Legendary creatures you control get +2/+2") are
-    // both established gaps (no anthem-style effect exists, only
-    // controlledTypeCountBuff, which buffs the SOURCE only, not every
-    // controlled creature of a subtype).
+    reducesCastCostForFirstLegendaryCreatureSpellEachTurn: 2,
+    staticAnthemForControlledSubtype: { subtype: 'legendary', power: 2, toughness: 2 },
   },
   {
     id: 'seymour-flux',
@@ -3330,6 +3379,8 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: '-',
     type: 'creature',
     subtype: 'Legendary Creature Dragon',
+    power: 5,
+    toughness: 6,
     text: '1B, Sacrifice another creature or artifact: Yiazmat gains indestructible until end of turn. Tap it.',
     imagePath: '/assets/cards/yiazmat-ultimate-mark.webp',
     // Implemented fully even though the front face's transform trigger that
@@ -3453,10 +3504,10 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: '2W',
     type: 'creature',
     subtype: 'Legendary Creature Human Rebel Monk',
+    toughness: 3,
     text: 'Vigilance \nSnow Villiers\u2019s power is equal to the number of creatures you control.',
     imagePath: '/assets/cards/snow-villiers.webp',
-    // Deferred - dynamic "base power = count of creatures you control" is an
-    // established gap (no such base-stat-override mechanism exists).
+    basePowerEqualsControlledCreatureCount: true,
   },
   {
     id: 'sorceress-s-schemes',
@@ -3478,6 +3529,8 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel: '2WB',
     type: 'creature',
     subtype: 'Legendary Creature Human Knight Mercenary',
+    power: 3,
+    toughness: 4,
     text: 'Rough Divide — Whenever a creature you control attacks alone, it gains double strike until end of turn. \n' +
       'Whenever Squall deals combat damage to a player, return target permanent card with mana value 3 or less from your graveyard to the battlefield.',
     imagePath: '/assets/cards/squall-seed-mercenary.webp',
@@ -3518,8 +3571,15 @@ export const CARD_POOL: CardDefinition[] = [
   text: 'Lifelink \n' +
   '2, Tap: Target opponent gains control of another target permanent you control. If they do, you draw a card.',
   imagePath:'/assets/cards/stiltzkin-moogle-merchant.webp',
-  // The tap ability is deferred - true control-change is an established gap
-  // (this engine only tracks ownerId, no separate controller concept).
+  abilities: [
+    {
+      id: 'stiltzkin-moogle-merchant-giveaway',
+      label: 'Give Away',
+      cost: { manaLabel: '2', tap: true },
+      effectText: 'Target opponent gains control of another target permanent you control. If they do, you draw a card.',
+      effects: [{ type: 'giveControlOfAnotherOwnPermanentToOpponent', drawCard: true }],
+    },
+  ],
   },
   {
   id: 'stolen-uniform',
@@ -3529,8 +3589,12 @@ export const CARD_POOL: CardDefinition[] = [
   text: 'Choose target creature you control and target Equipment. Gain control of that Equipment until end of turn. ' +
   'Attach it to the chosen creature. When you lose control of that Equipment this turn, if it\u2019s attached to a creature you control, unattach it.',
   imagePath: '/assets/cards/stolen-uniform.webp',
-  // Deferred - true control-change is an established gap (this engine only
-  // tracks ownerId, no separate controller concept).
+  onCast: [{ type: 'gainControlOfTargetEquipmentAndAttach' }],
+  // The delayed "when you lose control of that Equipment this turn, if
+  // it's attached to a creature you control, unattach it" clause is still
+  // deferred - the core control-change/attach is wired, but nothing
+  // detaches it again once temporaryControlUntilEndOfTurn reverts at
+  // cleanup, so it may remain attached to the borrower's creature.
   },
   {
   id: 'stuck-in-summoner-s-sanctum',
@@ -3565,7 +3629,7 @@ export const CARD_POOL: CardDefinition[] = [
   saga: {
     chapters: [
       { numbers: [1, 2, 3], effects: [{ type: 'drawCards', amount: 1 }, { type: 'loseLife', amount: 1 }] },
-      { numbers: [4], effects: [{ type: 'sacrificeCreature', target: 'opponent' }, { type: 'dealDamageToEachOpponent', amount: 3 }] },
+      { numbers: [4], effects: [{ type: 'sacrificeCreature', target: 'opponent' }, { type: 'eachOpponentLosesLife', amount: 3 }] },
     ],
     sacrificeAfterFinalChapter: true,
   },
@@ -3611,16 +3675,14 @@ export const CARD_POOL: CardDefinition[] = [
   'I — Chain — Exile the top card of your library. During any turn you put a lore counter on this Saga, you may play that card. \n' +
   'II, III — Gestalt Mode — When you next cast a creature spell this turn, it gains haste until end of turn.',
   imagePath:'/assets/cards/summon-brynhildr.webp',
-  // Both chapters' own effects are deferred - chapter I needs a persistent-
-  // condition impulse play window ("during any turn you put a lore counter
-  // on this"), and chapters II/III need a delayed "next spell cast this
-  // turn gets X" trigger - both established gaps. The saga field itself
-  // (chapter numbers + sacrifice-after-III) is still wired up so the lore
-  // counter progresses and this doesn't sit on the battlefield forever.
+  // Chapter I is still deferred - "exile the top card, then during any
+  // turn you put a lore counter on this you may play it" needs a
+  // persistent-condition impulse play window tied to a specific
+  // permanent's ongoing lore-counter triggers, which doesn't exist yet.
   saga: {
     chapters: [
       { numbers: [1], effects: [] },
-      { numbers: [2, 3], effects: [] },
+      { numbers: [2, 3], effects: [{ type: 'setPendingNextCreatureSpellBonus', grantsHaste: true }] },
     ],
     sacrificeAfterFinalChapter: true,
   },
@@ -3651,10 +3713,12 @@ export const CARD_POOL: CardDefinition[] = [
   'Equipped creature is a Shaman in addition to its other types and has “Whenever this creature attacks, ' +
   'you may put a creature card from your hand onto the battlefield. If that card is an enchantment card, it enters tapped and attacking.”' +
   'Abraxas — Equip 3',
-  // "Job select" was missing its token-creation onEnter entirely. The
-  // granted attack-trigger battlefield-cheat and "is a Shaman" subtype
-  // grant are deferred.
+  // The granted attack-trigger battlefield-cheat ("put a creature card
+  // from your hand onto the battlefield, entering tapped and attacking if
+  // it's an enchantment") is still deferred - "enters already attacking,
+  // joining an in-progress combat" has no supporting mechanism here.
   onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
+  equipGrantsSubtype: 'Shaman',
   attachesTo: 'creature',
   equipCost: '3',
   imagePath:'/assets/cards/summoner-s-grimoire.webp'
@@ -3717,16 +3781,18 @@ export const CARD_POOL: CardDefinition[] = [
   'II — Heavenward Howl — When you next cast a creature spell this turn, that creature enters with an additional +1/+1 counter on it. \n' +
   'III — Ecliptic Growl — Draw a card if you control the creature with the greatest power or tied for the greatest power.',
   imagePath:'/assets/cards/summon-fenrir.webp',
-  // All three chapters' own effects are deferred: chapter I needs "search
-  // for any basic land" (only exact-name and by-subtype search variants
-  // exist), chapter II needs a delayed "next creature spell enters with an
-  // extra counter" trigger, and chapter III needs a "do you have the
-  // greatest power on the battlefield" comparison - none of these
-  // mechanisms exist yet. Still wired up for lore-counter progression and
+  // Chapter III is still deferred - "draw a card if you control the
+  // creature with the greatest power (or tied for it)" needs a "compare my
+  // power against every creature on the battlefield" mechanism that
+  // doesn't exist yet. Still wired up for lore-counter progression and
   // sacrifice after III (missing from the printed text here, but every
   // other 3-chapter Saga in this set ends the same way).
   saga: {
-    chapters: [{ numbers: [1], effects: [] }, { numbers: [2], effects: [] }, { numbers: [3], effects: [] }],
+    chapters: [
+      { numbers: [1], effects: [{ type: 'searchLibraryForBasicLand', toBattlefieldTapped: true }] },
+      { numbers: [2], effects: [{ type: 'setPendingNextCreatureSpellBonus', counterLabel: '+1/+1', counterAmount: 1 }] },
+      { numbers: [3], effects: [] },
+    ],
     sacrificeAfterFinalChapter: true,
   },
   },
@@ -3768,15 +3834,9 @@ export const CARD_POOL: CardDefinition[] = [
   'I, II — You may discard a card. If you do, draw a card. \n' +
   'III, IV — Add R.',
   imagePath:'/assets/cards/summon-g-f-ifrit.webp',
-  // Chapters I/II's own effect is deferred - "you may discard a card, if
-  // you do draw a card" needs an optional discard-of-your-choice mechanism
-  // (the existing pendingDiscard is always mandatory once triggered, and
-  // MayPayLifeThenEffect's "may" gate only ever costs a fixed life amount,
-  // not a card the player picks) - a new gap. III/IV's "Add R" is simple
-  // and implemented below.
   saga: {
     chapters: [
-      { numbers: [1, 2], effects: [] },
+      { numbers: [1, 2], effects: [{ type: 'discardUpToThenDrawThatMany', maxCount: 1 }] },
       { numbers: [3, 4], effects: [{ type: 'addMana', colors: { R: 1 } }] },
     ],
     sacrificeAfterFinalChapter: true,
@@ -3822,13 +3882,13 @@ export const CARD_POOL: CardDefinition[] = [
   'II, III — Until end of turn, whenever a Kraken, Leviathan, Merfolk, Octopus, or Serpent attacks, draw a card. \n' +
   'Ward 2',
   imagePath:'/assets/cards/summon-leviathan.webp',
-  // Both chapters' own effects are deferred: chapter I needs a conditional
-  // "return every creature EXCEPT [subtype list]" mass bounce, and
-  // chapters II/III need a delayed "until end of turn, whenever a
+  wardCost: { mana: '2' },
+  // Both chapters' own effects are still deferred: chapter I needs a
+  // conditional "return every creature EXCEPT [subtype list]" mass bounce,
+  // and chapters II/III need a delayed "until end of turn, whenever a
   // [subtype list] attacks, draw" granted trigger - neither mechanism
-  // exists yet. Ward isn't implemented anywhere in this engine either
-  // (no targeting-cost concept). Still wired up for lore-counter
-  // progression and sacrifice after III.
+  // exists yet. Still wired up for lore-counter progression and sacrifice
+  // after III.
   saga: {
     chapters: [{ numbers: [1], effects: [] }, { numbers: [2, 3], effects: [] }],
     sacrificeAfterFinalChapter: true,
@@ -4014,6 +4074,8 @@ export const CARD_POOL: CardDefinition[] = [
   costLabel: '-',
   type: 'creature',
   subtype: 'Legendary Enchantment Creature Saga Wizard',
+  power: 6,
+  toughness: 6,
   text: '(As this Saga enters and after your draw step, add a lore counter.) \n' +
   'I, II, III — Create a token that’s a copy of target nonlegendary enchantment you control. It gains haste. ' +
   'If it\u2019s a Saga, put up to three lore counters on it. Sacrifice it at the beginning of your next end step.\n' +
@@ -4243,9 +4305,12 @@ export const CARD_POOL: CardDefinition[] = [
   'If an opponent would mill one or more cards, they mill that many cards plus four instead. \n' +
   '{4}{U}{U}, {T}: Each opponent mills cards equal to the number of cards in your hand.',
   imagePath: '/assets/cards/the-water-crystal.webp',
-  // The blue-spell cost reduction and the opponent-mill replacement effect
-  // are both deferred (established gaps: no per-color cost reduction, no
-  // general damage/mill/life-gain replacement effects).
+  reducesCastCostForColor: { color: 'U', amount: 1 },
+  // The opponent-mill replacement effect ("if an opponent would mill one or
+  // more cards, they mill that many plus four instead") is still deferred -
+  // no general damage/mill/life-gain replacement-effect mechanism exists
+  // yet (only the specific finality-counter and onDeathExileAndCreateTokens
+  // replacement effects, neither of which generalizes to this).
   abilities: [
     {
       id: 'the-water-crystal-mill',
@@ -4266,9 +4331,10 @@ export const CARD_POOL: CardDefinition[] = [
   'If you would gain life, you gain twice that much life instead. \n' +
   '{4}{W}{W}, {T}: Creatures you control gain flying and lifelink until end of turn.',
   imagePath: '/assets/cards/the-wind-crystal.webp',
-  // The white-spell cost reduction and life-gain doubling are both deferred
-  // (established gaps: no per-color cost reduction, no general life-gain
-  // replacement effect).
+  reducesCastCostForColor: { color: 'W', amount: 1 },
+  // "If you would gain life, you gain twice that much life instead" is
+  // still deferred - no general life-gain replacement-effect mechanism
+  // exists yet (gainLife/addLife always apply the exact requested amount).
   abilities: [
     {
       id: 'the-wind-crystal-empower',
@@ -4292,11 +4358,11 @@ export const CARD_POOL: CardDefinition[] = [
   'Equipped creature gets +1/+1, has “Whenever this creature deals combat damage to a player, draw a card,” and is a Rogue in addition to its other types.\n' +
   'Equip {4}',
   onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
-  // The granted "draw a card on combat damage" trigger and "is a Rogue"
-  // subtype grant are deferred.
   attachesTo: 'creature',
   equipCost: '4',
   equipBuff: { power: 1, toughness: 1 },
+  equipGrantsSubtype: 'Rogue',
+  equipGrantsOnCombatDamageToPlayer: [{ type: 'drawCards', amount: 1 }],
   imagePath: '/assets/cards/thief-s-knife.webp'
   },
   {
@@ -4309,7 +4375,11 @@ export const CARD_POOL: CardDefinition[] = [
   '• Thundara — {3} — Thunder Magic deals 4 damage to target creature. \n' +
   '• Thundaga — {5}{R} — Thunder Magic deals 8 damage to target creature.',
   imagePath: '/assets/cards/thunder-magic.webp',
-  // Deferred - Tiered (choose one additional cost) is an established gap.
+  tieredModes: [
+    { label: 'Thunder — {0} — 2 damage to target creature', additionalCost: '0', effects: [{ type: 'damageTargetCreature', amount: 2 }] },
+    { label: 'Thundara — {3} — 4 damage to target creature', additionalCost: '3', effects: [{ type: 'damageTargetCreature', amount: 4 }] },
+    { label: 'Thundaga — {5}{R} — 8 damage to target creature', additionalCost: '5R', effects: [{ type: 'damageTargetCreature', amount: 8 }] },
+  ],
   },
   {
   id: 'tidus-blitzball-star',
@@ -4317,6 +4387,8 @@ export const CARD_POOL: CardDefinition[] = [
   costLabel: '1WU',
   type: 'creature',
   subtype: 'Legendary Creature Human Warrior',
+  power: 2,
+  toughness: 1,
   text: 'Whenever an artifact you control enters, put a +1/+1 counter on Tidus. \n' +
   'Whenever Tidus attacks, tap target creature an opponent controls.',
   imagePath: '/assets/cards/tidus-blitzball-star.webp',
@@ -4346,7 +4418,12 @@ export const CARD_POOL: CardDefinition[] = [
   '• Meteor Strikes — {2} — Double target creature’s power and toughness until end of turn. \n' +
   '• Final Heaven — {6}{G} — Triple target creature’s power and toughness until end of turn.',
   imagePath: '/assets/cards/tifa-s-limit-break.webp',
-  // Deferred - Tiered (choose one additional cost) is an established gap.
+  tieredModes: [{ label: 'Somersault — {0} — Target creature gets +2/+2 until end of turn', additionalCost: '0', effects: [{ type: 'pumpTarget', power: 2, toughness: 2 }] }],
+  // Meteor Strikes and Final Heaven ("double"/"triple target creature's
+  // power and toughness") are still deferred - no effect here can scale a
+  // TARGET's stats by a multiplier (only doubleSelfPowerUntilEndOfTurn
+  // exists, which is self-only and power-only); Somersault alone is wired
+  // via the existing pumpTarget effect.
   },
   {
   id: 'tonberry',
@@ -4553,9 +4630,8 @@ export const CARD_POOL: CardDefinition[] = [
   costLabel: '1U',
   type: 'creature',
   subtype: 'Legendary Creature Octopus',
-  // NOTE: this card has no power/toughness in the data at all (pre-existing,
-  // not something this pass introduced) - please fill in the real printed
-  // values from the card image/source; left blank rather than guessed.
+  power: 2,
+  toughness: 1,
   text: 'Whenever you cast a noncreature spell, if at least four mana was spent to cast it, tap target creature an opponent controls ' +
   'and put a stun counter on it. (If a permanent with a stun counter would become untapped, remove one from it instead.)\n' +
   'Whenever you cast a noncreature spell, if at least eight mana was spent to cast it, put eight +1/+1 counters on Ultros.',
@@ -4585,8 +4661,12 @@ export const CARD_POOL: CardDefinition[] = [
   text: 'Gain control of target creature until end of turn. Untap that creature. It gains haste until end of turn. ' +
   'You may attach an Equipment you control to that creature. If you do, unattach it at the beginning of the next end step.',
   imagePath: '/assets/cards/unexpected-request.webp',
-  // Deferred - true control-change is an established gap (this engine only
-  // tracks ownerId, no separate controller concept).
+  onCast: [{ type: 'gainControlOfTargetCreature', untap: true, grantKeywords: ['haste'] }],
+  // The optional "you may attach an Equipment you control to that
+  // creature, unattaching it at the next end step" clause is still
+  // deferred - needs an optional second targeting step plus a delayed
+  // "at the beginning of the next end step" unattach trigger, neither of
+  // which exists yet; the core control-change/untap/haste is wired.
   },
   {
   id: 'vaan-street-thief',
@@ -4757,10 +4837,10 @@ export const CARD_POOL: CardDefinition[] = [
   'Equipped creature gets +3/+2 and is a Warrior in addition to its other types. \n' +
   'Equip {5} ({5}: Attach to target creature you control. Equip only as a sorcery.)',
   onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
-  // "is a Warrior in addition to its other types" is deferred.
   attachesTo: 'creature',
   equipCost: '5',
   equipBuff: { power: 3, toughness: 2 },
+  equipGrantsSubtype: 'Warrior',
   imagePath: '/assets/cards/warrior-s-sword.webp'
   },
   {
@@ -4811,11 +4891,11 @@ export const CARD_POOL: CardDefinition[] = [
   'Equipped creature gets +1/+1, has “Whenever this creature attacks, you gain 1 life,” and is a Cleric in addition to its other types.\n' +
   'Equip {3} ({3}: Attach to target creature you control. Equip only as a sorcery.)',
   onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
-  // The granted "gain 1 life on attack" trigger and "is a Cleric" subtype
-  // grant are deferred.
   attachesTo: 'creature',
   equipCost: '3',
   equipBuff: { power: 1, toughness: 1 },
+  equipGrantsSubtype: 'Cleric',
+  equipGrantsOnAttack: [{ type: 'gainLife', amount: 1 }],
   imagePath: '/assets/cards/white-mage-s-staff.webp'
   },
   {
@@ -4880,6 +4960,8 @@ export const CARD_POOL: CardDefinition[] = [
   costLabel: '4UU',
   type: 'creature',
   subtype: 'Legendary Creature Cat Druid',
+  power: 3,
+  toughness: 5,
   text: 'At the beginning of your end step, exile target creature you control, then return it to the battlefield under ' +
   'its owner\u2019s control. Then if it\u2019s the first end step of the turn, there is an additional end step after this step.',
   imagePath: '/assets/cards/y-shtola-rhul.webp'
@@ -4894,7 +4976,15 @@ export const CARD_POOL: CardDefinition[] = [
   toughness: 5,
   text: 'During your turn, Yuna and enchantment creatures you control have trample, lifelink, and ward {2}.\n' +
   'At the beginning of your end step, return up to one target enchantment card from your graveyard to the battlefield with a finality counter on it.',
-  imagePath: '/assets/cards/yuna-hope-of-spira.webp'
+  imagePath: '/assets/cards/yuna-hope-of-spira.webp',
+  grantsControlledGroupKeywordsDuringOwnTurn: { subtypeMatch: 'enchantment', includeSelf: true, keywords: ['trample', 'lifelink'], ward: { mana: '2' } },
+  // The end-step "return target enchantment card from your graveyard to
+  // the battlefield with a finality counter" is deferred - the existing
+  // reanimateTargetFromGraveyard effect defaults to a creature-card filter
+  // (or, via nonlegendaryPermanentInsteadOfCreature, any nonlegendary
+  // permanent), neither of which matches "an enchantment card" specifically,
+  // and finality counters aren't mechanically implemented anywhere in this
+  // engine yet either (currently just flavor text on several cards).
   },
   {
   id: 'zack-fair',
@@ -4950,6 +5040,8 @@ export const CARD_POOL: CardDefinition[] = [
   costLabel: '2R',
   type: 'creature',
   subtype: 'Legendary Creature Human Monk',
+  power: 0,
+  toughness: 3,
   text: 'You may play an additional land on each of your turns. \n' +
   'Zell Dincht gets +1/+0 for each land you control. \n' +
   'At the beginning of your end step, return a land you control to its owner\u2019s hand.',
@@ -4961,6 +5053,8 @@ export const CARD_POOL: CardDefinition[] = [
   costLabel: '3BB',
   type: 'creature',
   subtype: 'Legendary Creature Human Noble Soldier Warrior',
+  power: 4,
+  toughness: 4,
   text: 'My First Friend — When Zenos yae Galvus enters, choose a creature an opponent controls. Until end of turn, '+
   'creatures other than Zenos yae Galvus and the chosen creature get -2/-2. \n' +
   'When the chosen creature leaves the battlefield, transform Zenos yae Galvus.',
@@ -4974,6 +5068,8 @@ export const CARD_POOL: CardDefinition[] = [
   costLabel: '-',
   type: 'creature',
   subtype:'Legendary Creature Dragon',
+  power: 8,
+  toughness: 8,
   text: 'Flying \n' +
   'As this creature transforms into Shinryu, choose an opponent. \n' +
   'Burning Chains — When the chosen player loses the game, you win the game.',
@@ -4992,9 +5088,8 @@ export const CARD_POOL: CardDefinition[] = [
   text: 'When Zidane enters, gain control of target creature an opponent controls until end of turn. Untap it. It gains lifelink and haste until end of turn. \n' +
   'Whenever an opponent gains control of a permanent from you, you create a Treasure token.',
   imagePath: '/assets/cards/zidane-tantalus-thief.webp',
-  // Both deferred - true control-change is an established gap (this engine
-  // only tracks ownerId, no separate controller concept), and the second
-  // ability's trigger condition depends on that same missing concept.
+  onEnter: [{ type: 'gainControlOfTargetCreature', opponentControlledOnly: true, untap: true, grantKeywords: ['lifelink', 'haste'] }],
+  onOpponentGainsControlFromYouTrigger: [{ type: 'createToken', tokenId: 'token-treasure' }],
   },
  {
   id: 'zodiark-umbral-god',

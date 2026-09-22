@@ -17,17 +17,21 @@ import {
   hasSelfGrantedKeywordDuringOwnTurn,
   loseLife,
   damageMultiplierFor,
+  effectiveWardCost,
+  hasBoardGrantedKeyword,
 } from './combat';
 import {
   resolveCardEffects,
   triggerLandfall,
   triggerNoncreatureCastAbilities,
   triggerArtifactEnterWatchers,
+  triggerSubtypeEnterWatchers,
   triggerSagaLoreCounter,
   applyTemporaryBuff,
   grantTemporaryKeyword,
   exileAndReturnTransformed,
   returnFromGraveyardTransformed,
+  returnSelfFromGraveyard,
   resolveSacrificeQueue,
   matchesSacrificeFilter,
   sacrificeFilterLabel,
@@ -182,6 +186,8 @@ function applyActionInner(state: GameState, action: GameAction, playerId: string
       return resolveOptionalTransform(state, playerId, action.accept);
     case 'RESOLVE_OPTIONAL_PAY_LIFE':
       return resolveOptionalPayLife(state, playerId, action.accept);
+    case 'RESOLVE_WARD_PAYMENT':
+      return resolveWardPayment(state, playerId, action.pay);
     case 'RESOLVE_FREE_CAST_FROM_HAND':
       return resolveFreeCastFromHand(state, playerId, action.instanceId);
     case 'RESOLVE_LIBRARY_SEARCH':
@@ -546,6 +552,20 @@ function castCard(
 
   let next = state;
   if (!mutual && !free) next = updatePlayer(next, playerId, (p) => ({ ...p, manaPool: payCost(p.manaPool, parsed, extraGeneric) }));
+  // "The first legendary creature spell you cast each turn costs [N] less"
+  // (Serah Farron, Crystallized Serah) - the discount itself is already
+  // folded into `parsed` above (see engine/mana.ts: dynamicCostReduction),
+  // this just marks it used so a SECOND legendary creature spell this turn
+  // doesn't also get discounted.
+  if (
+    !mutual &&
+    def.type === 'creature' &&
+    def.subtype?.toLowerCase().includes('legendary') &&
+    !player.usedFirstLegendaryCreatureSpellDiscountThisTurn &&
+    player.zones.battlefield.some((c) => getCardDefinition(c.defId).reducesCastCostForFirstLegendaryCreatureSpellEachTurn)
+  ) {
+    next = updatePlayer(next, playerId, (p) => ({ ...p, usedFirstLegendaryCreatureSpellDiscountThisTurn: true }));
+  }
   next = updatePlayer(next, playerId, (p) => ({
     ...p,
     zones: { ...p.zones, [sourceZone as 'hand' | 'commander']: p.zones[sourceZone as 'hand' | 'commander'].filter((c) => c.instanceId !== instanceId) },
@@ -561,7 +581,19 @@ function castCard(
   // 'lore' counter (e.g. from a Saga that was bounced to hand mid-chapters)
   // is stripped by stripSagaProgress so this fresh cast always starts its
   // chapters over, same as any other fresh entrance.
-  const movedCard = stripSagaProgress({ ...card, tapped: isPermanent && !!def.entersTapped, damageMarked: 0, summoningSick: def.type === 'creature' ? !hasHaste : false });
+  let movedCard = stripSagaProgress({ ...card, tapped: isPermanent && !!def.entersTapped, damageMarked: 0, summoningSick: def.type === 'creature' ? !hasHaste : false });
+
+  // "When you next cast a creature spell this turn, [bonus]" (Summon:
+  // Fenrir's Heavenward Howl, Summon: Brynhildr's Gestalt Mode) - consumed
+  // by THIS spell if it qualifies (a creature spell, same controller).
+  const nextSpellBonus = def.type === 'creature' ? next.pendingNextCreatureSpellBonus : null;
+  if (nextSpellBonus && nextSpellBonus.controllerId === playerId) {
+    if (nextSpellBonus.counterLabel && nextSpellBonus.counterAmount) {
+      movedCard = { ...movedCard, counters: [...movedCard.counters, { label: nextSpellBonus.counterLabel, amount: nextSpellBonus.counterAmount }] };
+    }
+    if (nextSpellBonus.grantsHaste) movedCard = { ...movedCard, summoningSick: false };
+    next = { ...next, pendingNextCreatureSpellBonus: null };
+  }
 
   next = updatePlayer(next, playerId, (p) => ({ ...p, zones: { ...p.zones, [targetZone]: [...p.zones[targetZone], movedCard] } }));
   next = checkLegendRule(next, playerId);
@@ -594,8 +626,15 @@ function castCard(
     effectLogLines = [...effectLogLines, ...artifactWatchResult.logLines];
   }
 
+  if (isPermanent) {
+    const subtypeWatchResult = triggerSubtypeEnterWatchers(next, playerId, def.subtype);
+    next = subtypeWatchResult.state;
+    effectLogLines = [...effectLogLines, ...subtypeWatchResult.logLines];
+  }
+
   if (def.type !== 'creature') {
     const triggered = triggerNoncreatureCastAbilities(next, playerId, manaValue(parsed) + extraGeneric, preCastBattlefieldIds);
+
     next = triggered.state;
     effectLogLines = [...effectLogLines, ...triggered.logLines];
   }
@@ -637,7 +676,16 @@ function castFromGraveyard(state: GameState, playerId: string, instanceId: strin
   const isPermanent = def.type === 'creature' || def.type === 'artifact' || def.type === 'enchantment';
   const targetZone: ZoneName = isPermanent ? 'battlefield' : 'exile';
   const hasHaste = hasKeyword(def, 'haste');
-  const movedCard = stripSagaProgress({ ...card, tapped: isPermanent && !!def.entersTapped, damageMarked: 0, summoningSick: def.type === 'creature' ? !hasHaste : false });
+  let movedCard = stripSagaProgress({ ...card, tapped: isPermanent && !!def.entersTapped, damageMarked: 0, summoningSick: def.type === 'creature' ? !hasHaste : false });
+
+  const nextSpellBonus = def.type === 'creature' ? next.pendingNextCreatureSpellBonus : null;
+  if (nextSpellBonus && nextSpellBonus.controllerId === playerId) {
+    if (nextSpellBonus.counterLabel && nextSpellBonus.counterAmount) {
+      movedCard = { ...movedCard, counters: [...movedCard.counters, { label: nextSpellBonus.counterLabel, amount: nextSpellBonus.counterAmount }] };
+    }
+    if (nextSpellBonus.grantsHaste) movedCard = { ...movedCard, summoningSick: false };
+    next = { ...next, pendingNextCreatureSpellBonus: null };
+  }
 
   next = updatePlayer(next, playerId, (p) => ({ ...p, zones: { ...p.zones, [targetZone]: [...p.zones[targetZone], movedCard] } }));
   next = checkLegendRule(next, playerId);
@@ -667,8 +715,15 @@ function castFromGraveyard(state: GameState, playerId: string, instanceId: strin
     effectLogLines = [...effectLogLines, ...artifactWatchResult.logLines];
   }
 
+  if (isPermanent) {
+    const subtypeWatchResult = triggerSubtypeEnterWatchers(next, playerId, def.subtype);
+    next = subtypeWatchResult.state;
+    effectLogLines = [...effectLogLines, ...subtypeWatchResult.logLines];
+  }
+
   if (def.type !== 'creature') {
     const triggered = triggerNoncreatureCastAbilities(next, playerId, manaValue(parsed) + extraGeneric, preCastBattlefieldIds);
+
     next = triggered.state;
     effectLogLines = [...effectLogLines, ...triggered.logLines];
   }
@@ -742,10 +797,10 @@ function activateAbility(state: GameState, playerId: string, instanceId: string,
   // the battlefield, not still sitting in hand (or anywhere else) as a
   // card. Real MTG rules: you cast/play the card first, THEN activate what
   // it does once it's out - there's no such thing as tapping a card in your
-  // hand. returnFromGraveyardTransformed is the one deliberate exception
-  // (Garland, Knight of Cornelia's own ability explicitly lives in the
-  // graveyard instead).
-  if (ability.returnFromGraveyardTransformed) {
+  // hand. returnFromGraveyardTransformed and returnSelfFromGraveyard are the
+  // deliberate exceptions (Garland, Knight of Cornelia and Relentless
+  // X-ATM092's own abilities explicitly live in the graveyard instead).
+  if (ability.returnFromGraveyardTransformed || ability.returnSelfFromGraveyard) {
     if (found.zone !== 'graveyard') return { ok: false, error: `${ability.label} can only be activated from the graveyard.` };
   } else if (found.zone !== 'battlefield') {
     return { ok: false, error: `${def.name} must be on the battlefield before you can activate ${ability.label} - cast or play it first.` };
@@ -753,7 +808,16 @@ function activateAbility(state: GameState, playerId: string, instanceId: string,
 
   const owner = getPlayer(state, found.ownerPlayerId);
   const mutual = isMutualActive(state);
-  const manaCost = ability.cost.manaLabel ? parseCostLabel(ability.cost.manaLabel) : null;
+  // "This ability costs [N] less to activate for each [subtype] you
+  // control" (Qiqirn Merchant) - reduces the GENERIC portion only, capped
+  // at 0, same as every spell-level cost reduction (engine/mana.ts:
+  // dynamicCostReduction) but scoped to this one activated ability's cost.
+  const rawManaCost = ability.cost.manaLabel ? parseCostLabel(ability.cost.manaLabel) : null;
+  const abilityCostReduction = ability.cost.reducePerControlledSubtype
+    ? ability.cost.reducePerControlledSubtype.amountPerUnit *
+      owner.zones.battlefield.filter((c) => getCardDefinition(c.defId).subtype?.toLowerCase().includes(ability.cost.reducePerControlledSubtype!.subtype.toLowerCase())).length
+    : 0;
+  const manaCost = rawManaCost ? { ...rawManaCost, generic: Math.max(0, rawManaCost.generic - abilityCostReduction) } : null;
 
   let sacrificeTargets: CardInstance[] = [];
   if (ability.cost.sacrificeAnother) {
@@ -901,6 +965,11 @@ function activateAbility(state: GameState, playerId: string, instanceId: string,
   if (ability.returnFromGraveyardTransformed && def.transformsInto) {
     returnedFromGraveyardDef = getCardDefinition(def.transformsInto);
     const result = returnFromGraveyardTransformed(next, found.ownerPlayerId, instanceId);
+    next = checkLegendRule(result.state, found.ownerPlayerId);
+    exileReturnLogLines = result.logLines;
+  }
+  if (ability.returnSelfFromGraveyard) {
+    const result = returnSelfFromGraveyard(next, found.ownerPlayerId, instanceId, ability.returnSelfFromGraveyard);
     next = checkLegendRule(result.state, found.ownerPlayerId);
     exileReturnLogLines = result.logLines;
   }
@@ -1181,7 +1250,7 @@ function declareAttackers(state: GameState, playerId: string, instanceIds: strin
       battlefield: p.zones.battlefield.map((c) => {
         if (!attackerIds.has(c.instanceId)) return c;
         const def = getCardDefinition(c.defId);
-        return hasKeyword(def, 'vigilance') ? c : { ...c, tapped: true };
+        return hasKeyword(def, 'vigilance') || hasBoardGrantedKeyword(state, playerId, c, def, 'vigilance') ? c : { ...c, tapped: true };
       }),
     },
   }));
@@ -1251,7 +1320,7 @@ function declareBlockers(state: GameState, playerId: string, assignments: Combat
     const attackerCreature = attackerPlayer.zones.battlefield.find((c) => c.instanceId === assignment.attackerInstanceId);
     if (!attackerCreature) return { ok: false, error: 'Unknown attacker in blocking assignment.' };
     const attackerDef = getCardDefinition(attackerCreature.defId);
-    const menace = hasKeyword(attackerDef, 'menace');
+    const menace = hasKeyword(attackerDef, 'menace') || hasBoardGrantedKeyword(state, attackerPlayer.id, attackerCreature, attackerDef, 'menace');
 
     if (menace && assignment.blockerInstanceIds.length === 1) {
       return { ok: false, error: `${attackerDef.name} has menace - it must be blocked by two or more creatures, or not at all.` };
@@ -1274,6 +1343,7 @@ function declareBlockers(state: GameState, playerId: string, assignments: Combat
       const blockerHasFlyingOrReach =
         hasKeyword(blockerDef, 'flying') ||
         hasKeyword(blockerDef, 'reach') ||
+        hasBoardGrantedKeyword(state, blockerPlayer.id, blocker, blockerDef, 'reach') ||
         hasEquipGrantedKeywordDuringOwnTurn(state, blockerPlayer.id, blocker.instanceId, 'flying') ||
         hasSelfGrantedKeywordDuringOwnTurn(state, blockerPlayer.id, blockerDef, 'flying');
       if (attackerHasFlying && !blockerHasFlyingOrReach) {
@@ -1315,7 +1385,7 @@ function orderBlockers(state: GameState, playerId: string, attackerInstanceId: s
   return { ok: true, state: next };
 }
 
-function chooseTarget(state: GameState, playerId: string, targetInstanceId: string | null): ActionResult {
+function chooseTarget(state: GameState, playerId: string, targetInstanceId: string | null, wardPaid = false): ActionResult {
   const pending = state.pendingTarget;
   if (!pending) return { ok: false, error: 'No effect is waiting for a target right now.' };
   if (pending.controllerId !== playerId) return { ok: false, error: "It's not your target to choose." };
@@ -1338,6 +1408,41 @@ function chooseTarget(state: GameState, playerId: string, targetInstanceId: stri
     const source = findCardAnywhere(state, pending.sourceInstanceId);
     const sourceName = source ? getCardDefinition(source.card.defId).name : 'This ability';
     return { ok: true, state: { ...state, pendingTarget: null, log: [...state.log, `${sourceName}'s optional target was declined.`] } };
+  }
+
+  // "Hexproof" - can't be targeted by an opponent's spells or abilities at
+  // all (unlike Ward, there's no cost to pay around it - it's simply not a
+  // legal target). Checked before Ward for exactly that reason: no point
+  // even offering to pay Ward's cost for a target that was never legal in
+  // the first place. Self-targeting (found.ownerPlayerId === playerId) is
+  // untouched, same as real hexproof only stopping OPPONENTS.
+  {
+    const hexproofCheckTarget = findCardAnywhere(state, targetInstanceId);
+    if (hexproofCheckTarget && hexproofCheckTarget.ownerPlayerId !== playerId) {
+      const hexproofTargetDef = getCardDefinition(hexproofCheckTarget.card.defId);
+      const hasHexproof =
+        hasKeywordEffective(hexproofTargetDef, hexproofCheckTarget.card, 'hexproof') ||
+        hasBoardGrantedKeyword(state, hexproofCheckTarget.ownerPlayerId, hexproofCheckTarget.card, hexproofTargetDef, 'hexproof');
+      if (hasHexproof) {
+        return { ok: false, error: `${hexproofTargetDef.name} has hexproof - it can't be targeted by your spells or abilities.` };
+      }
+    }
+  }
+
+  // "Ward [cost]" - targeting an opponent's warded permanent pauses here
+  // (pendingTarget deliberately left untouched) until they pay or decline
+  // via RESOLVE_WARD_PAYMENT. Paying re-enters this same function with
+  // wardPaid so it isn't asked to pay twice. See engine/combat.ts:
+  // effectiveWardCost, resolveWardPayment below.
+  if (!wardPaid) {
+    const targetFound = findCardAnywhere(state, targetInstanceId);
+    if (targetFound && targetFound.ownerPlayerId !== playerId) {
+      const targetDef = getCardDefinition(targetFound.card.defId);
+      const ward = effectiveWardCost(state, targetFound.ownerPlayerId, targetFound.card, targetDef);
+      if (ward) {
+        return { ok: true, state: { ...state, pendingWardPayment: { controllerId: playerId, targetInstanceId, wardOwnerId: targetFound.ownerPlayerId, cost: ward } } };
+      }
+    }
   }
 
   if (pending.effect.type === 'tapAndStun') {
@@ -1366,6 +1471,21 @@ function chooseTarget(state: GameState, playerId: string, targetInstanceId: stri
     const actor = getPlayer(next, playerId);
     const stunNote = pending.effect.noStunCounter ? '' : ' and puts a stun counter on it';
     return { ok: true, state: { ...next, log: [...next.log, `${actor.name} taps ${targetDef.name}${stunNote}.`] } };
+  }
+
+  if (pending.effect.type === 'untapTargetAttacker') {
+    const found = findCardAnywhere(state, targetInstanceId);
+    if (!found || found.zone !== 'battlefield' || !state.declaredAttackers.includes(targetInstanceId)) {
+      return { ok: false, error: "That's not a legal target - it must be an attacking creature." };
+    }
+    const targetDef = getCardDefinition(found.card.defId);
+    let next = updatePlayer(state, found.ownerPlayerId, (p) => ({
+      ...p,
+      zones: { ...p.zones, battlefield: p.zones.battlefield.map((c) => (c.instanceId === targetInstanceId ? { ...c, tapped: false } : c)) },
+    }));
+    next = { ...next, pendingTarget: null };
+    const actor = getPlayer(next, playerId);
+    return { ok: true, state: { ...next, log: [...next.log, `${actor.name} untaps ${targetDef.name}.`] } };
   }
 
   if (pending.effect.type === 'tapStunAndGainLifeForNonbasicLands') {
@@ -1499,15 +1619,123 @@ function chooseTarget(state: GameState, playerId: string, targetInstanceId: stri
   }
 
   if (pending.effect.type === 'pumpTarget') {
-    // No controller restriction stated, so either player's creature is a legal target.
+    // No controller restriction stated by default (either player's creature
+    // is a legal target) - restrictToOwnCreature (Magic Damper) narrows it.
     if (targetDef.type !== 'creature') return { ok: false, error: `${targetDef.name} is not a legal target - it must be a creature.` };
-    const { power, toughness, grantKeyword } = pending.effect;
+    const { power, toughness, grantKeyword, restrictToOwnCreature, alsoUntap } = pending.effect;
+    if (restrictToOwnCreature && found.ownerPlayerId !== playerId) {
+      return { ok: false, error: `${targetDef.name} is not a legal target - it must be a creature you control.` };
+    }
     let next = applyTemporaryBuff(state, targetInstanceId, power, toughness);
     if (grantKeyword) next = grantTemporaryKeyword(next, targetInstanceId, grantKeyword);
+    if (alsoUntap) {
+      next = updatePlayer(next, found.ownerPlayerId, (p) => ({
+        ...p,
+        zones: { ...p.zones, battlefield: p.zones.battlefield.map((c) => (c.instanceId === targetInstanceId ? { ...c, tapped: false } : c)) },
+      }));
+    }
     next = { ...next, pendingTarget: null };
     const actor = getPlayer(next, playerId);
     const keywordNote = grantKeyword ? ` and gains ${grantKeyword}` : '';
-    return { ok: true, state: { ...next, log: [...next.log, `${actor.name} targets ${targetDef.name}: it gets +${power}/+${toughness}${keywordNote} until end of turn.`] } };
+    const untapNote = alsoUntap ? ' It is untapped.' : '';
+    return { ok: true, state: { ...next, log: [...next.log, `${actor.name} targets ${targetDef.name}: it gets +${power}/+${toughness}${keywordNote} until end of turn.${untapNote}`] } };
+  }
+
+  if (pending.effect.type === 'grantKeywordsToTargetPermanent') {
+    const { keywords } = pending.effect;
+    let next = state;
+    for (const keyword of keywords) {
+      next = grantTemporaryKeyword(next, targetInstanceId, keyword);
+    }
+    next = { ...next, pendingTarget: null };
+    const actor = getPlayer(next, playerId);
+    return { ok: true, state: { ...next, log: [...next.log, `${actor.name} targets ${targetDef.name}: it gains ${keywords.join(' and ')} until end of turn.`] } };
+  }
+
+  if (pending.effect.type === 'gainControlOfTargetCreature') {
+    if (targetDef.type !== 'creature') return { ok: false, error: `${targetDef.name} is not a legal target - it must be a creature.` };
+    if (pending.effect.opponentControlledOnly && found.ownerPlayerId === playerId) {
+      return { ok: false, error: `${targetDef.name} is not a legal target - it must be a creature an opponent controls.` };
+    }
+    const { untap, grantKeywords } = pending.effect;
+    const movingCard = found.card;
+    let next = state;
+    if (found.ownerPlayerId !== playerId) {
+      next = updatePlayer(next, found.ownerPlayerId, (p) => ({ ...p, zones: { ...p.zones, battlefield: p.zones.battlefield.filter((c) => c.instanceId !== targetInstanceId) } }));
+      next = updatePlayer(next, playerId, (p) => ({
+        ...p,
+        zones: { ...p.zones, battlefield: [...p.zones.battlefield, { ...movingCard, tapped: untap ? false : movingCard.tapped, temporaryControlUntilEndOfTurn: true }] },
+      }));
+      next = triggerControlLostToOpponentWatchers(next, found.ownerPlayerId);
+    } else if (untap) {
+      next = updatePlayer(next, playerId, (p) => ({
+        ...p,
+        zones: { ...p.zones, battlefield: p.zones.battlefield.map((c) => (c.instanceId === targetInstanceId ? { ...c, tapped: false } : c)) },
+      }));
+    }
+    for (const keyword of grantKeywords ?? []) {
+      next = grantTemporaryKeyword(next, targetInstanceId, keyword);
+    }
+    next = { ...next, pendingTarget: null };
+    const actor = getPlayer(next, playerId);
+    const untapNote = untap ? ' It is untapped.' : '';
+    const keywordNote = grantKeywords && grantKeywords.length > 0 ? ` It gains ${grantKeywords.join(' and ')} until end of turn.` : '';
+    return { ok: true, state: { ...next, log: [...next.log, `${actor.name} gains control of ${targetDef.name} until end of turn.${untapNote}${keywordNote}`] } };
+  }
+
+  if (pending.effect.type === 'giveControlOfAnotherOwnPermanentToOpponent') {
+    if (found.ownerPlayerId !== playerId) return { ok: false, error: `${targetDef.name} is not a legal target - it must be a permanent you control.` };
+    if (targetInstanceId === pending.sourceInstanceId) return { ok: false, error: 'You must choose a permanent other than the source.' };
+    const opponent = getOpponent(state, playerId);
+    const movingCard = found.card;
+    let next = updatePlayer(state, playerId, (p) => ({ ...p, zones: { ...p.zones, battlefield: p.zones.battlefield.filter((c) => c.instanceId !== targetInstanceId) } }));
+    next = updatePlayer(next, opponent.id, (p) => ({ ...p, zones: { ...p.zones, battlefield: [...p.zones.battlefield, movingCard] } }));
+    next = checkLegendRule(next, opponent.id);
+    next = triggerControlLostToOpponentWatchers(next, playerId);
+    if (pending.effect.drawCard) {
+      const drawn = getPlayer(next, playerId).zones.library.slice(0, 1);
+      next = updatePlayer(next, playerId, (p) => ({ ...p, zones: { ...p.zones, library: p.zones.library.slice(1), hand: [...p.zones.hand, ...drawn] } }));
+    }
+    next = { ...next, pendingTarget: null };
+    const actor = getPlayer(next, playerId);
+    const drawNote = pending.effect.drawCard ? ` ${actor.name} draws a card.` : '';
+    return { ok: true, state: { ...next, log: [...next.log, `${opponent.name} gains control of ${targetDef.name}.${drawNote}`] } };
+  }
+
+  if (pending.effect.type === 'gainControlOfTargetEquipmentAndAttach') {
+    if (!pending.firstInstanceId) {
+      if (targetDef.type !== 'creature' || found.ownerPlayerId !== playerId) {
+        return { ok: false, error: `${targetDef.name} is not a legal target - it must be a creature you control.` };
+      }
+      const next = { ...state, pendingTarget: { ...pending, firstInstanceId: targetInstanceId } };
+      const actor = getPlayer(next, playerId);
+      return { ok: true, state: { ...next, log: [...next.log, `${actor.name} chooses ${targetDef.name} - now choose an Equipment.`] } };
+    }
+    if (!targetDef.subtype?.toLowerCase().includes('equipment')) {
+      return { ok: false, error: `${targetDef.name} is not a legal target - it must be an Equipment.` };
+    }
+    const creatureInstanceId = pending.firstInstanceId;
+    const movingEquipment = found.card;
+    let next = state;
+    if (found.ownerPlayerId !== playerId) {
+      next = updatePlayer(next, found.ownerPlayerId, (p) => ({ ...p, zones: { ...p.zones, battlefield: p.zones.battlefield.filter((c) => c.instanceId !== targetInstanceId) } }));
+      next = updatePlayer(next, playerId, (p) => ({
+        ...p,
+        zones: { ...p.zones, battlefield: [...p.zones.battlefield, { ...movingEquipment, temporaryControlUntilEndOfTurn: true }] },
+      }));
+      next = triggerControlLostToOpponentWatchers(next, found.ownerPlayerId);
+    }
+    next = updatePlayer(next, playerId, (p) => ({
+      ...p,
+      zones: { ...p.zones, battlefield: p.zones.battlefield.map((c) => (c.instanceId === targetInstanceId ? { ...c, attachedToInstanceId: creatureInstanceId } : c)) },
+    }));
+    next = { ...next, pendingTarget: null };
+    const actor = getPlayer(next, playerId);
+    const creatureName = getCardDefinition(findCardAnywhere(next, creatureInstanceId)!.card.defId).name;
+    return {
+      ok: true,
+      state: { ...next, log: [...next.log, `${actor.name} gains control of ${targetDef.name} until end of turn and attaches it to ${creatureName}.`] },
+    };
   }
 
   if (pending.effect.type === 'putCounterOnTarget') {
@@ -1712,7 +1940,7 @@ function chooseTarget(state: GameState, playerId: string, targetInstanceId: stri
     if (targetInstanceId === pending.sourceInstanceId) return { ok: false, error: 'You must choose a creature other than the source.' };
     const sourceFound = findCardAnywhere(state, pending.sourceInstanceId);
     const amount = sourceFound ? effectivePower(getCardDefinition(sourceFound.card.defId), sourceFound.card, state, sourceFound.ownerPlayerId) : 0;
-    const { counterLabel } = pending.effect;
+    const { counterLabel, alsoGrantsSubtype } = pending.effect;
     let next = updatePlayer(state, found.ownerPlayerId, (p) => ({
       ...p,
       zones: {
@@ -1723,13 +1951,15 @@ function chooseTarget(state: GameState, playerId: string, targetInstanceId: stri
           const counters = hasCounter
             ? c.counters.map((ctr) => (ctr.label === counterLabel ? { ...ctr, amount: ctr.amount + amount } : ctr))
             : [...c.counters, { label: counterLabel, amount }];
-          return { ...c, counters };
+          const grantedSubtypes = alsoGrantsSubtype && !c.grantedSubtypes?.includes(alsoGrantsSubtype) ? [...(c.grantedSubtypes ?? []), alsoGrantsSubtype] : c.grantedSubtypes;
+          return { ...c, counters, grantedSubtypes };
         }),
       },
     }));
     next = { ...next, pendingTarget: null };
     const actor = getPlayer(next, playerId);
-    return { ok: true, state: { ...next, log: [...next.log, `${actor.name} puts ${amount} ${counterLabel} counter(s) on ${targetDef.name}.`] } };
+    const subtypeNote = alsoGrantsSubtype ? ` and becomes a ${alsoGrantsSubtype}` : '';
+    return { ok: true, state: { ...next, log: [...next.log, `${actor.name} puts ${amount} ${counterLabel} counter(s) on ${targetDef.name}${subtypeNote}.`] } };
   }
 
   if (pending.effect.type === 'damageTargetAndControllerByEquipmentCount') {
@@ -1841,10 +2071,12 @@ function chooseTarget(state: GameState, playerId: string, targetInstanceId: stri
     return { ok: true, state: next };
   }
 
-  // 'bounceTarget' (Eject) - "Return target nonland permanent to its
-  // owner's hand." No controller restriction, so it's the last member of
-  // the pendingTarget.effect union and needs no further type narrowing.
-  if (targetDef.type === 'land') return { ok: false, error: `${targetDef.name} is not a legal target - it must be a nonland permanent.` };
+  // 'bounceTarget' (Eject's 'nonland', Ice Magic's Blizzard 'creature') - no
+  // controller restriction, so it's the last member of the
+  // pendingTarget.effect union and needs no further type narrowing.
+  if (pending.effect.targetFilter === 'creature' ? targetDef.type !== 'creature' : targetDef.type === 'land') {
+    return { ok: false, error: `${targetDef.name} is not a legal target - it must be a ${pending.effect.targetFilter === 'creature' ? 'creature' : 'nonland permanent'}.` };
+  }
   const bounceOwner = getPlayer(state, found.ownerPlayerId);
   let next = detachEverythingFrom(state, targetInstanceId);
   next = updatePlayer(next, found.ownerPlayerId, (p) => ({
@@ -1859,6 +2091,50 @@ function chooseTarget(state: GameState, playerId: string, targetInstanceId: stri
   return { ok: true, state: next };
 }
 
+/** "Ward [cost]" - the player who tried to target a warded permanent (via
+ * chooseTarget, above) either pays up (re-entering chooseTarget with
+ * wardPaid so it goes through this time) or declines, countering the
+ * whole spell/ability's targeting (clears pendingTarget entirely, same as
+ * real Ward - it's the targeting that's countered, not just this one
+ * target swapped for another). */
+function resolveWardPayment(state: GameState, playerId: string, pay: boolean): ActionResult {
+  const pending = state.pendingWardPayment;
+  if (!pending) return { ok: false, error: 'Nothing is waiting on a Ward payment right now.' };
+  if (pending.controllerId !== playerId) return { ok: false, error: "It's not your payment to make." };
+
+  const targetPending = state.pendingTarget;
+  if (!targetPending) return { ok: true, state: { ...state, pendingWardPayment: null } };
+
+  const wardTargetFound = findCardAnywhere(state, pending.targetInstanceId);
+  const wardedName = wardTargetFound ? getCardDefinition(wardTargetFound.card.defId).name : 'That permanent';
+
+  if (!pay) {
+    const sourceFound = findCardAnywhere(state, targetPending.sourceInstanceId);
+    const sourceName = sourceFound ? getCardDefinition(sourceFound.card.defId).name : "That ability";
+    return {
+      ok: true,
+      state: { ...state, pendingWardPayment: null, pendingTarget: null, log: [...state.log, `${sourceName} is countered by ${wardedName}'s Ward - the cost wasn't paid.`] },
+    };
+  }
+
+  const actor = getPlayer(state, playerId);
+  if (pending.cost.mana) {
+    const parsed = parseCostLabel(pending.cost.mana);
+    if (!canPay(actor.manaPool, parsed, 0)) return { ok: false, error: "Not enough mana to pay this Ward's cost." };
+    const next = updatePlayer(state, playerId, (p) => ({ ...p, manaPool: payCost(p.manaPool, parsed, 0) }));
+    const paidState = { ...next, pendingWardPayment: null, log: [...next.log, `${actor.name} pays ${wardedName}'s Ward cost.`] };
+    return chooseTarget(paidState, playerId, pending.targetInstanceId, true);
+  }
+  if (pending.cost.lifeEqualToOwnPower && wardTargetFound) {
+    const wardedDef = getCardDefinition(wardTargetFound.card.defId);
+    const amount = effectivePower(wardedDef, wardTargetFound.card, state, pending.wardOwnerId);
+    const next = loseLife(state, playerId, amount);
+    const paidState = { ...next, pendingWardPayment: null, log: [...next.log, `${actor.name} pays ${amount} life for ${wardedName}'s Ward.`] };
+    return chooseTarget(paidState, playerId, pending.targetInstanceId, true);
+  }
+  return { ok: false, error: "This Ward's cost can no longer be computed." };
+}
+
 /** "As it enters, choose a color" (Crossroads Village) - see types.ts:
  * ChooseManaColorEffect. Locks the choice onto the card instance forever
  * after; see toggleTap for where that then takes priority over the
@@ -1867,6 +2143,12 @@ function chooseManaColor(state: GameState, playerId: string, color: ManaColor): 
   const pending = state.pendingManaColorChoice;
   if (!pending) return { ok: false, error: 'Nothing is waiting on a colour choice right now.' };
   if (pending.controllerId !== playerId) return { ok: false, error: "It's not your colour to choose." };
+  // "Choose a color" (Crossroads Village) - one of the five real colors,
+  // never colorless, matching real rules' distinction between "a color" and
+  // {C}. Nothing currently uses this effect for anything but a genuine
+  // 5-color choice, so this rejects 'C' unconditionally rather than needing
+  // a per-card flag.
+  if (color === 'C') return { ok: false, error: 'Choose one of the five colors (not colorless).' };
 
   const found = findCardAnywhere(state, pending.instanceId);
   const name = found ? getCardDefinition(found.card.defId).name : 'That permanent';
@@ -2285,13 +2567,22 @@ function resolveLibrarySearch(state: GameState, playerId: string, instanceId: st
   }
 
   const rest = player.zones.library.filter((_, i) => i !== foundIndex);
-  const movedCard: CardInstance = pending.reveal ? { ...foundCard, revealedToOpponentWhileInHand: true } : foundCard;
-  let next = updatePlayer(state, playerId, (p) => ({ ...p, zones: { ...p.zones, library: shuffle(rest), hand: [...p.zones.hand, movedCard] } }));
+  const foundName = getCardDefinition(foundCard.defId).name;
+  const logLines: string[] = [];
+  let next: GameState;
+
+  if (pending.toBattlefieldTapped) {
+    const movedCard: CardInstance = { ...foundCard, tapped: true };
+    next = updatePlayer(state, playerId, (p) => ({ ...p, zones: { ...p.zones, library: shuffle(rest), battlefield: [...p.zones.battlefield, movedCard] } }));
+    logLines.push(`${player.name} finds ${foundName} and puts it onto the battlefield tapped.`);
+  } else {
+    const movedCard: CardInstance = pending.reveal ? { ...foundCard, revealedToOpponentWhileInHand: true } : foundCard;
+    next = updatePlayer(state, playerId, (p) => ({ ...p, zones: { ...p.zones, library: shuffle(rest), hand: [...p.zones.hand, movedCard] } }));
+    logLines.push(`${player.name} finds ${foundName}.`);
+  }
   next = { ...next, pendingLibrarySearch: null };
 
-  const foundName = getCardDefinition(foundCard.defId).name;
-  const logLines = [`${player.name} finds ${foundName}.`];
-  if (pending.reveal) {
+  if (pending.reveal && !pending.toBattlefieldTapped) {
     next = { ...next, lastReveal: { instanceId, ownerId: playerId, sourceInstanceId: pending.sourceInstanceId } };
     const sourceFound = findCardAnywhere(next, pending.sourceInstanceId);
     const sourceName = sourceFound ? getCardDefinition(sourceFound.card.defId).name : 'an ability';
@@ -2665,6 +2956,12 @@ function applyCombatDamageToPlayerTriggers(state: GameState): GameState {
     // resolveCombatDamage is about to deal it (effectivePower *
     // damageMultiplierFor) since this runs before that actually happens.
     const equipment = getPlayer(next, found.ownerPlayerId).zones.battlefield.filter((c) => c.attachedToInstanceId === attackerId);
+    for (const eq of equipment) {
+      const eqDef = getCardDefinition(eq.defId);
+      if (!eqDef.equipGrantsOnCombatDamageToPlayer || eqDef.equipGrantsOnCombatDamageToPlayer.length === 0) continue;
+      const resolved = resolveCardEffects(next, found.ownerPlayerId, eqDef.equipGrantsOnCombatDamageToPlayer, attackerId);
+      next = { ...resolved.state, log: [...resolved.state.log, ...resolved.logLines] };
+    }
     if (equipment.some((eq) => getCardDefinition(eq.defId).equipGrantsDrawThenMayCastFreeUpToCombatDamage)) {
       const damage = effectivePower(def, found.card, next, found.ownerPlayerId) * damageMultiplierFor(next, found.ownerPlayerId, def);
       const drawn = getPlayer(next, found.ownerPlayerId).zones.library.slice(0, 1);
@@ -2675,6 +2972,90 @@ function applyCombatDamageToPlayerTriggers(state: GameState): GameState {
       const drawNote = drawn.length > 0 ? `${getPlayer(next, found.ownerPlayerId).name} draws a card.` : `${getPlayer(next, found.ownerPlayerId).name}'s library is empty.`;
       next = { ...next, pendingFreeCastFromHand: { sourceInstanceId: attackerId, controllerId: found.ownerPlayerId, maxManaValue: damage }, log: [...next.log, drawNote] };
     }
+  }
+  return next;
+}
+
+/** "Whenever [this] deals combat damage to a player, that player gains
+ * control of it. If they do, you draw that many cards, create that many
+ * tapped Treasure tokens, then lose that much life." (Kain, Traitorous
+ * Dragoon) - unlike every other onCombatDamageToPlayer-family trigger
+ * (which fires from applyCombatDamageToPlayerTriggers, BEFORE the damage
+ * itself resolves), a control change has to happen AFTER
+ * resolveCombatDamage actually deals the damage: dealDamagePass looks up an
+ * attacker by CURRENT control (findInstance searches every player's
+ * battlefield, and treats whichever one it's found on as "the attacker's
+ * controller"), so swapping control first would make the creature attack
+ * its own new controller instead. Approximates "deals combat damage to a
+ * player" as "is UNBLOCKED", same caveat as every sibling trigger. "You" in
+ * the card's own text is the ORIGINAL controller (the one who just lost
+ * Kain), not whoever just gained it - real MTG has exactly this kind of
+ * "you still benefit even though you're handing over the creature" text. */
+/** "Whenever an opponent gains control of a permanent from you, [effect]"
+ * (Zidane, Tantalus Thief) - called right after ANY control-change
+ * mechanism moves a permanent away from `formerControllerId` to an
+ * opponent, for every OTHER permanent formerControllerId still controls
+ * carrying this field. See types.ts: CardDefinition.onOpponentGainsControlFromYouTrigger. */
+function triggerControlLostToOpponentWatchers(state: GameState, formerControllerId: string): GameState {
+  let next = state;
+  for (const card of getPlayer(next, formerControllerId).zones.battlefield) {
+    const def = getCardDefinition(card.defId);
+    if (!def.onOpponentGainsControlFromYouTrigger || def.onOpponentGainsControlFromYouTrigger.length === 0) continue;
+    const resolved = resolveCardEffects(next, formerControllerId, def.onOpponentGainsControlFromYouTrigger, card.instanceId);
+    next = { ...resolved.state, log: [...resolved.state.log, ...resolved.logLines] };
+  }
+  return next;
+}
+
+function applyPostCombatDamageControlChanges(state: GameState): GameState {
+  let next = state;
+  for (const attackerId of state.declaredAttackers) {
+    const assignment = state.combatAssignments.find((a) => a.attackerInstanceId === attackerId);
+    if (!assignment || assignment.blockerInstanceIds.length > 0) continue;
+    const found = findCardAnywhere(next, attackerId);
+    if (!found || found.zone !== 'battlefield') continue;
+    const def = getCardDefinition(found.card.defId);
+    if (!def.combatDamageToPlayerGrantsControlToThem) continue;
+
+    const damage = effectivePower(def, found.card, next, found.ownerPlayerId) * damageMultiplierFor(next, found.ownerPlayerId, def);
+    if (damage <= 0) continue;
+
+    const oldControllerId = found.ownerPlayerId;
+    const newControllerId = getOpponent(next, oldControllerId).id;
+    const movingCard = getPlayer(next, oldControllerId).zones.battlefield.find((c) => c.instanceId === attackerId);
+    if (!movingCard) continue;
+
+    next = updatePlayer(next, oldControllerId, (p) => ({ ...p, zones: { ...p.zones, battlefield: p.zones.battlefield.filter((c) => c.instanceId !== attackerId) } }));
+    next = updatePlayer(next, newControllerId, (p) => ({ ...p, zones: { ...p.zones, battlefield: [...p.zones.battlefield, movingCard] } }));
+    next = triggerControlLostToOpponentWatchers(next, oldControllerId);
+
+    const drawn = getPlayer(next, oldControllerId).zones.library.slice(0, damage);
+    next = updatePlayer(next, oldControllerId, (p) => ({ ...p, zones: { ...p.zones, library: p.zones.library.slice(damage), hand: [...p.zones.hand, ...drawn] } }));
+
+    const treasureDef = getCardDefinition('token-treasure');
+    const treasures: CardInstance[] = Array.from({ length: damage }, () => ({
+      instanceId: nextInstanceId(),
+      defId: treasureDef.id,
+      ownerId: oldControllerId,
+      tapped: true,
+      counters: [],
+      damageMarked: 0,
+      summoningSick: true,
+      isToken: true,
+      sacrificesOnTap: !!treasureDef.sacrificesOnTap,
+    }));
+    next = updatePlayer(next, oldControllerId, (p) => ({ ...p, zones: { ...p.zones, battlefield: [...p.zones.battlefield, ...treasures] } }));
+    next = loseLife(next, oldControllerId, damage);
+
+    const oldController = getPlayer(next, oldControllerId);
+    const newController = getPlayer(next, newControllerId);
+    next = {
+      ...next,
+      log: [
+        ...next.log,
+        `${newController.name} gains control of ${def.name}. ${oldController.name} draws ${damage} card(s), creates ${damage} Treasure token(s), and loses ${damage} life.`,
+      ],
+    };
   }
   return next;
 }
@@ -2751,6 +3132,31 @@ function applyEndStepTriggers(state: GameState): GameState {
  * right as cleanup begins. Shared by nextPhase and endTurn. */
 function applyCleanupResets(state: GameState): GameState {
   let next = state;
+
+  // "Gain control of [it] until end of turn" (Unexpected Request, Zidane,
+  // Stolen Uniform) reverts here. ownerId never changes, so a card whose
+  // temporaryControlUntilEndOfTurn flag is set and is sitting in a
+  // battlefield array that ISN'T its owner's is exactly the set that needs
+  // to move back - no separate "who controlled it before" tracking needed.
+  // Kain, Traitorous Dragoon's permanent control change never sets this
+  // flag, so it's untouched here.
+  for (const player of next.players) {
+    const toRevert = player.zones.battlefield.filter((c) => c.temporaryControlUntilEndOfTurn && c.ownerId !== player.id);
+    if (toRevert.length === 0) continue;
+    next = updatePlayer(next, player.id, (p) => ({
+      ...p,
+      zones: { ...p.zones, battlefield: p.zones.battlefield.filter((c) => !toRevert.some((r) => r.instanceId === c.instanceId)) },
+    }));
+    for (const d of toRevert) {
+      const ownerName = getPlayer(next, d.ownerId).name;
+      next = updatePlayer(next, d.ownerId, (p) => ({
+        ...p,
+        zones: { ...p.zones, battlefield: [...p.zones.battlefield, { ...d, temporaryControlUntilEndOfTurn: undefined }] },
+      }));
+      next = { ...next, log: [...next.log, `${getCardDefinition(d.defId).name} returns to ${ownerName}'s control.`] };
+    }
+  }
+
   for (const player of next.players) {
     next = updatePlayer(next, player.id, (p) => ({
       ...p,
@@ -2773,7 +3179,7 @@ function applyCleanupResets(state: GameState): GameState {
       },
     }));
   }
-  next = { ...next, creaturesDiedThisTurn: 0 };
+  next = { ...next, creaturesDiedThisTurn: 0, pendingNextCreatureSpellBonus: null };
   const active = getPlayer(next, next.activePlayerId);
   if (active.zones.hand.length > 7) {
     next = { ...next, log: [...next.log, `${active.name} has more than 7 cards - discard down to 7 before ending the turn.`] };
@@ -2797,6 +3203,7 @@ function nextPhase(state: GameState, playerId: string): ActionResult {
   if (state.phase === 'combat_damage') {
     if (isMutualActive(state)) {
       let next = resolveCombatDamage(applyCombatDamageToPlayerTriggers(state));
+      next = applyPostCombatDamageControlChanges(next);
       next = { ...next, phase: 'combat_end', combatReadyPlayers: [] };
       next = clearManaAndRefundUnspentLands(next);
       return { ok: true, state: next };
@@ -2811,6 +3218,7 @@ function nextPhase(state: GameState, playerId: string): ActionResult {
 
     if (readyNow.length >= 2) {
       let next = resolveCombatDamage(applyCombatDamageToPlayerTriggers({ ...state, combatReadyPlayers: [] }));
+      next = applyPostCombatDamageControlChanges(next);
       next = { ...next, phase: 'combat_end' };
       next = clearManaAndRefundUnspentLands(next);
       return { ok: true, state: next };
@@ -2937,6 +3345,7 @@ function runUntapStep(state: GameState, playerId: string): GameState {
     ...p,
     hasPlayedLandThisTurn: false,
     hasDrawnThisTurn: false,
+    usedFirstLegendaryCreatureSpellDiscountThisTurn: false,
     zones: {
       ...p.zones,
       battlefield: p.zones.battlefield.map((c) => {

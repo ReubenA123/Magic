@@ -106,10 +106,30 @@ export function dynamicCostReduction(def: CardDefinition, player: PlayerState): 
   const controlledTypeCount = def.costReductionPerControlledType
     ? player.zones.battlefield.filter((c) => getCardDefinition(c.defId).type === def.costReductionPerControlledType!.type).length
     : 0;
+
+  // Board-wide reducers (The Water Crystal/The Wind Crystal's "[Color]
+  // spells you cast cost {N} less", Serah Farron/Crystallized Serah's
+  // "first legendary creature spell each turn") - unlike the self-only
+  // fields above, these come from OTHER permanents the caster controls,
+  // so every one of them needs checking, not just `def` itself.
+  const ownCost = parseCostLabel(def.costLabel);
+  let boardWideReduction = 0;
+  const isLegendaryCreature = def.type === 'creature' && !!def.subtype?.toLowerCase().includes('legendary');
+  for (const c of player.zones.battlefield) {
+    const other = getCardDefinition(c.defId);
+    if (other.reducesCastCostForColor && (ownCost.colors[other.reducesCastCostForColor.color] ?? 0) > 0) {
+      boardWideReduction += other.reducesCastCostForColor.amount;
+    }
+    if (other.reducesCastCostForFirstLegendaryCreatureSpellEachTurn && isLegendaryCreature && !player.usedFirstLegendaryCreatureSpellDiscountThisTurn) {
+      boardWideReduction += other.reducesCastCostForFirstLegendaryCreatureSpellEachTurn;
+    }
+  }
+
   return (
     (def.costReductionPerGraveyardPermanent ? def.costReductionPerGraveyardPermanent * graveyardPermanentCount : 0) +
     (def.costReductionPerControlledSubtype ? def.costReductionPerControlledSubtype.amountPerUnit * controlledSubtypeCount : 0) +
-    (def.costReductionPerControlledType ? def.costReductionPerControlledType.amountPerUnit * controlledTypeCount : 0)
+    (def.costReductionPerControlledType ? def.costReductionPerControlledType.amountPerUnit * controlledTypeCount : 0) +
+    boardWideReduction
   );
 }
 

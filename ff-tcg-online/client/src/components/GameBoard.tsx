@@ -452,7 +452,8 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   const opponent = state.players.find((p) => p.id !== yourPlayerId)!;
   const isYourTurn = soloControl ? true : state.activePlayerId === yourPlayerId;
   const mutualActive = state.mutualAdjustment.status === 'active';
-  const pendingTargetForYou = state.pendingTarget && (state.pendingTarget.controllerId === yourPlayerId || soloControl) ? state.pendingTarget : null;
+  const pendingTargetForYou =
+    state.pendingTarget && !state.pendingWardPayment && (state.pendingTarget.controllerId === yourPlayerId || soloControl) ? state.pendingTarget : null;
   const pendingTargetSourceName = pendingTargetForYou ? getCardDefinition(findCard(state, pendingTargetForYou.sourceInstanceId)?.card.defId ?? '')?.name ?? 'Ability' : '';
   const pendingSacrificeForYou = state.pendingSacrifice && (state.pendingSacrifice.remainingPlayerIds[0] === yourPlayerId || soloControl) ? state.pendingSacrifice : null;
 
@@ -2453,6 +2454,18 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                                   ? `Choose a creature you control for ${pendingTargetSourceName}'s ability - it deals damage equal to its power to every other creature.`
                                   : effect.type === 'grantTemporaryBaseStatsAndDeathReturn'
                                   ? `Choose a creature you control for ${pendingTargetSourceName}'s ability.`
+                                  : effect.type === 'untapTargetAttacker'
+                                  ? `Choose an attacking creature for ${pendingTargetSourceName}'s ability to untap.`
+                                  : effect.type === 'grantKeywordsToTargetPermanent'
+                                  ? `Choose a permanent for ${pendingTargetSourceName}'s ability - it gains ${effect.keywords.join(' and ')} until end of turn (either player's).`
+                                  : effect.type === 'gainControlOfTargetCreature'
+                                  ? `Choose a creature${effect.opponentControlledOnly ? " an opponent controls" : " (either player's)"} for ${pendingTargetSourceName} to gain control of until end of turn.`
+                                  : effect.type === 'giveControlOfAnotherOwnPermanentToOpponent'
+                                  ? `Choose another permanent you control for ${pendingTargetSourceName}'s ability to give to your opponent.`
+                                  : effect.type === 'gainControlOfTargetEquipmentAndAttach'
+                                  ? pendingTargetForYou.firstInstanceId
+                                    ? 'Now choose an Equipment (either player’s) to gain control of and attach.'
+                                    : 'Choose a creature you control for the Equipment to be attached to.'
                                   : effect.targetFilter === 'artifactOrEnchantment'
                                   ? `Choose an artifact or enchantment for ${pendingTargetSourceName}'s ability (either player's).`
                                   : effect.targetFilter === 'anyPermanent'
@@ -2565,6 +2578,34 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
               </button>
               <button className="opponent-view-exit-button" onClick={() => onAction({ type: 'RESOLVE_OPTIONAL_TRANSFORM', accept: false }, pending.controllerId)}>
                 Skip
+              </button>
+            </div>
+          );
+        })()}
+
+      {state.pendingWardPayment &&
+        (state.pendingWardPayment.controllerId === yourPlayerId || soloControl) &&
+        (() => {
+          const pending = state.pendingWardPayment;
+          const wardedFound = findCard(state, pending.targetInstanceId);
+          const wardedName = wardedFound ? getCardDefinition(wardedFound.card.defId).name : 'That permanent';
+          const sourceFound = state.pendingTarget ? findCard(state, state.pendingTarget.sourceInstanceId) : null;
+          const sourceName = sourceFound ? getCardDefinition(sourceFound.card.defId).name : 'This ability';
+          const costLabel = pending.cost.mana
+            ? `Pay {${pending.cost.mana}}`
+            : wardedFound
+              ? `Pay ${effectivePower(getCardDefinition(wardedFound.card.defId), wardedFound.card, state, pending.wardOwnerId)} Life`
+              : 'Pay Ward’s cost';
+          return (
+            <div className="pending-target-banner">
+              <span>
+                {wardedName} has Ward - {sourceName} is countered unless you pay its cost.
+              </span>
+              <button className="opponent-view-exit-button" onClick={() => onAction({ type: 'RESOLVE_WARD_PAYMENT', pay: true }, pending.controllerId)}>
+                {costLabel}
+              </button>
+              <button className="opponent-view-exit-button" onClick={() => onAction({ type: 'RESOLVE_WARD_PAYMENT', pay: false }, pending.controllerId)}>
+                Decline (Countered)
               </button>
             </div>
           );
@@ -3332,6 +3373,40 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
               modes={pending.modes}
               onChoose={(modeIndex) => onAction({ type: 'RESOLVE_CHOOSE_ONE_MODE', modeIndex }, pending.controllerId)}
             />
+          );
+        })()}
+
+      {/* "As it enters, choose a color" (Crossroads Village) - one of the
+          five real colors only (see engine/actions.ts: chooseManaColor's own
+          rejection of 'C'), so there are only ever 5 buttons here, never a
+          6th colorless one. Blocks the land's own Tap button until resolved
+          (see GameBoard's tapDisabledReason). */}
+      {state.pendingManaColorChoice &&
+        (state.pendingManaColorChoice.controllerId === yourPlayerId || soloControl) &&
+        (() => {
+          const pending = state.pendingManaColorChoice;
+          const sourceFound = findCard(state, pending.instanceId);
+          const sourceName = sourceFound ? getCardDefinition(sourceFound.card.defId).name : 'This land';
+          const colors: ManaColor[] = ['W', 'U', 'B', 'R', 'G'];
+          return (
+            <div className="card-drawer-overlay">
+              <div className="card-actions-panel">
+                <div className="card-actions-header">
+                  <strong>{sourceName} - choose a color</strong>
+                </div>
+                <div className="card-actions-bottom-row">
+                  {colors.map((color) => (
+                    <button
+                      key={color}
+                      className={`mana-choice-button mana-${color}`}
+                      onClick={() => onAction({ type: 'CHOOSE_MANA_COLOR', color }, pending.controllerId)}
+                    >
+                      {color}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
           );
         })()}
 

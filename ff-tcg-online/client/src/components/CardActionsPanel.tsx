@@ -408,20 +408,21 @@ export default function CardActionsPanel({
 
         {/* A permanent's activated ability only makes sense once it's
             actually a permanent ON the battlefield - not still a card in
-            hand (or wherever else). returnFromGraveyardTransformed is the
-            one deliberate exception (Garland, Knight of Cornelia's ability
-            explicitly lives in the graveyard instead). Filtered out
+            hand (or wherever else). returnFromGraveyardTransformed and
+            returnSelfFromGraveyard are the deliberate exceptions (Garland,
+            Knight of Cornelia and Relentless X-ATM092's abilities
+            explicitly live in the graveyard instead). Filtered out
             entirely here rather than shown disabled - there's nothing to
             "activate later from here" about a card that has to be cast or
             played first; see engine/actions.ts: activateAbility for the
             matching server-side rejection. */}
         {!readOnly &&
           definition.abilities &&
-          definition.abilities.filter((a) => (a.returnFromGraveyardTransformed ? currentZone === 'graveyard' : isOnBattlefield)).length > 0 && (
+          definition.abilities.filter((a) => (a.returnFromGraveyardTransformed || a.returnSelfFromGraveyard ? currentZone === 'graveyard' : isOnBattlefield)).length > 0 && (
           <div className="card-actions-section">
             <div className="card-actions-label">Abilities</div>
             {definition.abilities
-              .filter((a) => (a.returnFromGraveyardTransformed ? currentZone === 'graveyard' : isOnBattlefield))
+              .filter((a) => (a.returnFromGraveyardTransformed || a.returnSelfFromGraveyard ? currentZone === 'graveyard' : isOnBattlefield))
               .map((ability) => {
               const manaCost = ability.cost.manaLabel ? parseCostLabel(ability.cost.manaLabel) : null;
               const affordable = mutualActive || !manaCost || canPay(ownerManaPool, manaCost, 0);

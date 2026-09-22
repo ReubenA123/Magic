@@ -2,7 +2,7 @@
 // engine/combat.ts
 // ============================================================================
 
-import { CardDefinition, CardInstance, GameState } from '../types';
+import { CardDefinition, CardInstance, GameState, WardCost } from '../types';
 import { getCardDefinition, frontFaceDefId } from '../data/cards';
 import { getOpponent, getPlayer, updatePlayer, detachEverythingFrom, nextInstanceId } from './state';
 import { hasKeyword, hasKeywordEffective } from './keywords';
@@ -29,6 +29,16 @@ function lifeBasedBaseStat(state: GameState, controllerId: string, instanceId: s
     (c) => c.attachedToInstanceId === instanceId && getCardDefinition(c.defId).setsBasePowerToughnessToControllerLife
   );
   return hasLifeBasedEquipment ? controller.life : null;
+}
+
+/** Base power override for CardDefinition.basePowerEqualsControlledCreatureCount
+ * (Snow Villiers) - counts every creature on the controller's battlefield,
+ * including this one itself (same as real Magic's "creatures you control"). */
+function creatureCountBaseStat(state: GameState, controllerId: string, def: CardDefinition): number | null {
+  if (!def.basePowerEqualsControlledCreatureCount) return null;
+  const controller = state.players.find((p) => p.id === controllerId);
+  if (!controller) return null;
+  return controller.zones.battlefield.filter((c) => getCardDefinition(c.defId).type === 'creature').length;
 }
 
 /** Whether `instanceId` currently has `keyword` from an attached Equipment's
@@ -62,6 +72,65 @@ export function hasEquipGrantedKeyword(state: GameState, controllerId: string, i
     if (!granted || c.attachedToInstanceId !== instanceId) return false;
     return Array.isArray(granted) ? granted.includes(keyword) : granted === keyword;
   });
+}
+
+/** Whether `instance` (controlled by `controllerId`, whose own definition is
+ * `def`) currently has `keyword` via ANY controlled permanent's board-wide
+ * keyword grant - checks two independent sources:
+ *  - CardDefinition.grantsControlledGroupKeywordsDuringOwnTurn (Yuna, Hope
+ *    of Spira's "Yuna and enchantment creatures you control have trample,
+ *    lifelink..."), only during that controller's own turn.
+ *  - CardDefinition.staticAnthemForControlledSubtype.grantKeywords (Balthier
+ *    and Fran's "Vehicles you control...have vigilance and reach", Ardyn,
+ *    the Usurper's "Demons you control have menace, lifelink, and haste"),
+ *    ALWAYS on, same subtype-match rule as that field's power/toughness
+ *    half (engine/combat.ts: anthemBuffBonus) - unlike the turn-gated
+ *    source above, this one has no "includeSelf" option since every
+ *    existing anthem card is careful to exclude itself via
+ *    CardDefinition.excludeSelfKeywords instead.
+ * See engine/keywords.ts's header for why both stay a plain substring
+ * check on `subtype`, same as every other subtype filter in this engine. */
+export function hasBoardGrantedKeyword(state: GameState, controllerId: string, instance: CardInstance, def: CardDefinition, keyword: string): boolean {
+  const controller = state.players.find((p) => p.id === controllerId);
+  if (!controller) return false;
+  const hasSubtype = (subtype: string) =>
+    !!def.subtype?.toLowerCase().includes(subtype.toLowerCase()) || !!instance.grantedSubtypes?.some((s) => s.toLowerCase() === subtype.toLowerCase());
+  const viaStaticAnthem = controller.zones.battlefield.some((c) => {
+    const anthem = getCardDefinition(c.defId).staticAnthemForControlledSubtype;
+    return !!anthem?.grantKeywords?.includes(keyword) && hasSubtype(anthem.subtype);
+  });
+  if (viaStaticAnthem) return true;
+  if (state.activePlayerId !== controllerId) return false;
+  return controller.zones.battlefield.some((c) => {
+    const grant = getCardDefinition(c.defId).grantsControlledGroupKeywordsDuringOwnTurn;
+    if (!grant?.keywords?.includes(keyword)) return false;
+    if (c.instanceId === instance.instanceId) return grant.includeSelf;
+    return !!grant.subtypeMatch && def.type === 'creature' && hasSubtype(grant.subtypeMatch);
+  });
+}
+
+/** The Ward cost currently protecting `instance` (controlled by
+ * `ownerId`), if any - checked in this order: the permanent's own printed
+ * wardCost, an attached Equipment's equipGrantsWard, then any controlled
+ * permanent's grantsControlledGroupKeywordsDuringOwnTurn.ward (during the
+ * owner's own turn only, same scoping as hasBoardGrantedKeyword). Returns
+ * null if nothing currently grants Ward. See engine/actions.ts:
+ * chooseTarget/resolveWardPayment. */
+export function effectiveWardCost(state: GameState, ownerId: string, instance: CardInstance, def: CardDefinition): WardCost | null {
+  if (def.wardCost) return def.wardCost;
+  const owner = state.players.find((p) => p.id === ownerId);
+  if (!owner) return null;
+  const equip = owner.zones.battlefield.find((c) => c.attachedToInstanceId === instance.instanceId && getCardDefinition(c.defId).equipGrantsWard);
+  if (equip) return getCardDefinition(equip.defId).equipGrantsWard!;
+  if (state.activePlayerId === ownerId) {
+    for (const c of owner.zones.battlefield) {
+      const grant = getCardDefinition(c.defId).grantsControlledGroupKeywordsDuringOwnTurn;
+      if (!grant?.ward) continue;
+      if (c.instanceId === instance.instanceId && grant.includeSelf) return grant.ward;
+      if (grant.subtypeMatch && def.type === 'creature' && def.subtype?.toLowerCase().includes(grant.subtypeMatch.toLowerCase())) return grant.ward;
+    }
+  }
+  return null;
 }
 
 /** Adds `amount` life to playerId AND tracks it in
@@ -127,6 +196,27 @@ function hasActiveControlledTypeCountBuff(def: CardDefinition, state: GameState,
 
 /** Sum of +X/+Y from any Equipment attached to `instanceId` that carries a
  * static equipBuff (e.g. Coral Sword's "+1/+0"). */
+/** Whether `instanceId` currently counts as `subtypeWord` via an attached
+ * Equipment's "equipped creature is a [X] in addition to its other types"
+ * grant (CardDefinition.equipGrantsSubtype, e.g. Sage's Nouliths granting
+ * Cleric) - checked ALONGSIDE the permanent's own printed subtype text
+ * wherever a subtype-counting/filtering effect needs to agree with what the
+ * card's own type line now shows (see engine/effects.ts: pumpControlledSubtype,
+ * engine/combat.ts: applyGainLifeTriggers's subtypeFilter). */
+export function hasGrantedSubtype(state: GameState, controllerId: string, instanceId: string, subtypeWord: string): boolean {
+  const controller = state.players.find((p) => p.id === controllerId);
+  if (!controller) return false;
+  const self = controller.zones.battlefield.find((c) => c.instanceId === instanceId);
+  // CardInstance.grantedSubtypes (Jenova, Ancient Calamity's "that creature
+  // becomes a Mutant in addition to its other types") - a PERMANENT,
+  // instance-level grant, unlike equipGrantsSubtype below (comes from an
+  // attached Equipment and disappears if it's unattached).
+  if (self?.grantedSubtypes?.some((s) => s.toLowerCase() === subtypeWord.toLowerCase())) return true;
+  return controller.zones.battlefield.some(
+    (c) => c.attachedToInstanceId === instanceId && getCardDefinition(c.defId).equipGrantsSubtype?.toLowerCase() === subtypeWord.toLowerCase()
+  );
+}
+
 function equipBuffBonus(state: GameState, controllerId: string, instanceId: string): { power: number; toughness: number } {
   const controller = state.players.find((p) => p.id === controllerId);
   if (!controller) return { power: 0, toughness: 0 };
@@ -137,9 +227,11 @@ function equipBuffBonus(state: GameState, controllerId: string, instanceId: stri
       const fixed = cDef.equipBuff ?? { power: 0, toughness: 0 };
       const perCounter = cDef.equipBuffPerCounter;
       const perCounterAmount = perCounter ? (c.counters.find((ctr) => ctr.label === perCounter.counterLabel)?.amount ?? 0) : 0;
+      const perType = cDef.equipBuffPerControlledType;
+      const perTypeCount = perType ? controller.zones.battlefield.filter((c2) => getCardDefinition(c2.defId).type === perType.type).length : 0;
       return {
-        power: acc.power + fixed.power + (perCounter ? perCounter.power * perCounterAmount : 0),
-        toughness: acc.toughness + fixed.toughness + (perCounter ? perCounter.toughness * perCounterAmount : 0),
+        power: acc.power + fixed.power + (perCounter ? perCounter.power * perCounterAmount : 0) + (perType ? perType.power * perTypeCount : 0),
+        toughness: acc.toughness + fixed.toughness + (perCounter ? perCounter.toughness * perCounterAmount : 0) + (perType ? perType.toughness * perTypeCount : 0),
       };
     },
     { power: 0, toughness: 0 }
@@ -174,8 +266,10 @@ export function equipmentContributions(state: GameState, controllerId: string, i
     const fixed = cDef.equipBuff ?? { power: 0, toughness: 0 };
     const perCounter = cDef.equipBuffPerCounter;
     const perCounterAmount = perCounter ? (c.counters.find((ctr) => ctr.label === perCounter.counterLabel)?.amount ?? 0) : 0;
-    const power = fixed.power + (perCounter ? perCounter.power * perCounterAmount : 0);
-    const toughness = fixed.toughness + (perCounter ? perCounter.toughness * perCounterAmount : 0);
+    const perType = cDef.equipBuffPerControlledType;
+    const perTypeCount = perType ? controller.zones.battlefield.filter((c2) => getCardDefinition(c2.defId).type === perType.type).length : 0;
+    const power = fixed.power + (perCounter ? perCounter.power * perCounterAmount : 0) + (perType ? perType.power * perTypeCount : 0);
+    const toughness = fixed.toughness + (perCounter ? perCounter.toughness * perCounterAmount : 0) + (perType ? perType.toughness * perTypeCount : 0);
     const keywords: string[] = [];
     if (cDef.equipGrantsKeyword) keywords.push(...(Array.isArray(cDef.equipGrantsKeyword) ? cDef.equipGrantsKeyword : [cDef.equipGrantsKeyword]));
     if (cDef.equipGrantsKeywordDuringOwnTurn && state.activePlayerId === controllerId) keywords.push(cDef.equipGrantsKeywordDuringOwnTurn);
@@ -204,7 +298,11 @@ function anthemBuffBonus(state: GameState, controllerId: string, def: CardDefini
 }
 
 export function effectivePower(def: CardDefinition, instance: CardInstance, state: GameState, controllerId: string): number {
-  const base = instance.temporaryBaseStats?.power ?? lifeBasedBaseStat(state, controllerId, instance.instanceId) ?? (def.power ?? 0);
+  const base =
+    instance.temporaryBaseStats?.power ??
+    lifeBasedBaseStat(state, controllerId, instance.instanceId) ??
+    creatureCountBaseStat(state, controllerId, def) ??
+    (def.power ?? 0);
   const plus = instance.counters.find((c) => c.label === '+1/+1')?.amount ?? 0;
   const minus = instance.counters.find((c) => c.label === '-1/-1')?.amount ?? 0;
   const buff = hasActiveLandCountBuff(def, state, controllerId) ? def.landCountBuff!.power : 0;
@@ -244,10 +342,20 @@ export function effectiveToughness(def: CardDefinition, instance: CardInstance, 
  * game there. */
 export function isLegalPendingTarget(state: GameState, pendingTarget: NonNullable<GameState['pendingTarget']>, card: CardInstance, ownerId: string): boolean {
   const def = getCardDefinition(card.defId);
+  // Hexproof - never a legal target for an OPPONENT's spell/ability,
+  // regardless of what the specific effect below would otherwise allow.
+  // Self-targeting is unaffected (real hexproof only stops opponents). See
+  // engine/actions.ts: chooseTarget for the matching server-side rejection.
+  if (ownerId !== pendingTarget.controllerId && (hasKeywordEffective(def, card, 'hexproof') || hasBoardGrantedKeyword(state, ownerId, card, def, 'hexproof'))) {
+    return false;
+  }
   const effect = pendingTarget.effect;
   if (effect.type === 'tapAndStun') {
     if (ownerId === pendingTarget.controllerId) return false;
     return effect.targetType === 'artifactOrCreature' ? def.type === 'artifact' || def.type === 'creature' : def.type === effect.targetType;
+  }
+  if (effect.type === 'untapTargetAttacker') {
+    return state.declaredAttackers.includes(card.instanceId);
   }
   if (effect.type === 'tapStunAndGainLifeForNonbasicLands') {
     if (ownerId === pendingTarget.controllerId) return false;
@@ -260,7 +368,28 @@ export function isLegalPendingTarget(state: GameState, pendingTarget: NonNullabl
   if (effect.type === 'grantTemporaryBaseStatsAndDeathReturn') {
     return def.type === 'creature' && ownerId === pendingTarget.controllerId;
   }
-  if (effect.type === 'pumpTarget' || effect.type === 'putCounterOnTarget') {
+  if (effect.type === 'pumpTarget') {
+    return def.type === 'creature' && (!effect.restrictToOwnCreature || ownerId === pendingTarget.controllerId);
+  }
+  if (effect.type === 'grantKeywordsToTargetPermanent') {
+    return true;
+  }
+  if (effect.type === 'gainControlOfTargetCreature') {
+    if (def.type !== 'creature') return false;
+    return !effect.opponentControlledOnly || ownerId !== pendingTarget.controllerId;
+  }
+  if (effect.type === 'giveControlOfAnotherOwnPermanentToOpponent') {
+    return ownerId === pendingTarget.controllerId && card.instanceId !== pendingTarget.sourceInstanceId;
+  }
+  if (effect.type === 'gainControlOfTargetEquipmentAndAttach') {
+    if (!pendingTarget.firstInstanceId) {
+      // First pick: "target creature you control".
+      return def.type === 'creature' && ownerId === pendingTarget.controllerId;
+    }
+    // Second pick: "target Equipment" (either player's).
+    return !!def.subtype?.toLowerCase().includes('equipment');
+  }
+  if (effect.type === 'putCounterOnTarget') {
     return def.type === 'creature';
   }
   if (effect.type === 'debuffTargetByGraveyard') {
@@ -295,7 +424,7 @@ export function isLegalPendingTarget(state: GameState, pendingTarget: NonNullabl
     return def.type === 'creature';
   }
   if (effect.type === 'bounceTarget') {
-    return def.type !== 'land';
+    return effect.targetFilter === 'creature' ? def.type === 'creature' : def.type !== 'land';
   }
   if (effect.type === 'bounceUpToOneOtherNonlandPermanent') {
     return def.type !== 'land' && card.instanceId !== pendingTarget.sourceInstanceId;
@@ -426,7 +555,8 @@ export function applyGainLifeTriggers(state: GameState, playerId: string): GameS
           // creature matching that subtype, which may or may not include
           // the watcher itself depending on its own subtype.
           const matches = subtypeFilter
-            ? getCardDefinition(c.defId).type === 'creature' && !!getCardDefinition(c.defId).subtype?.toLowerCase().includes(subtypeFilter.toLowerCase())
+            ? getCardDefinition(c.defId).type === 'creature' &&
+              (!!getCardDefinition(c.defId).subtype?.toLowerCase().includes(subtypeFilter.toLowerCase()) || hasGrantedSubtype(next, playerId, c.instanceId, subtypeFilter))
             : c.instanceId === card.instanceId;
           if (!matches) return c;
           const hasCounter = c.counters.some((ctr) => ctr.label === counterLabel);
@@ -459,8 +589,8 @@ function dealDamagePass(state: GameState, pass: 1 | 2): GameState {
       .filter((b): b is NonNullable<typeof b> => !!b)
       .filter((b) => !isPendingDeath(next, b.instance.instanceId));
     const isDeathtouch = hasKeyword(attackerDef, 'deathtouch');
-    const isTrample = hasKeywordEffective(attackerDef, attackerFound.instance, 'trample');
-    const isLifelink = hasKeyword(attackerDef, 'lifelink');
+    const isTrample = hasKeywordEffective(attackerDef, attackerFound.instance, 'trample') || hasBoardGrantedKeyword(next, attackerFound.controllerId, attackerFound.instance, attackerDef, 'trample');
+    const isLifelink = hasKeyword(attackerDef, 'lifelink') || hasBoardGrantedKeyword(next, attackerFound.controllerId, attackerFound.instance, attackerDef, 'lifelink');
 
     if (strikesInPass(next, attackerDef, attackerFound.instance, attackerFound.controllerId, pass)) {
       const power = effectivePower(attackerDef, attackerFound.instance, next, attackerFound.controllerId) * damageMultiplierFor(next, attackerFound.controllerId, attackerDef);
@@ -512,7 +642,7 @@ function dealDamagePass(state: GameState, pass: 1 | 2): GameState {
       const blockerHasDeathtouch = hasKeyword(blockerDef, 'deathtouch');
       next = markDamage(next, attackerFound.instance.instanceId, blockerPower, blockerHasDeathtouch);
       next = { ...next, log: [...next.log, `${blockerDef.name} deals ${blockerPower} damage to ${attackerDef.name}.`] };
-      if (hasKeyword(blockerDef, 'lifelink')) {
+      if (hasKeyword(blockerDef, 'lifelink') || hasBoardGrantedKeyword(next, blocker.controllerId, blocker.instance, blockerDef, 'lifelink')) {
         next = addLife(next, blocker.controllerId, blockerPower);
         next = applyGainLifeTriggers(next, blocker.controllerId);
       }
@@ -583,17 +713,32 @@ export function moveCreaturesToGraveyard(state: GameState, deadIds: string[], ve
     // Adamantoise) redirects away from the graveyard entirely - checked
     // before the commander check, since exiling takes priority.
     const toExileWithTokens = dead.filter((d) => getCardDefinition(d.defId).onDeathExileAndCreateTokens);
-    // A commander dying goes to the command zone instead of the graveyard -
-    // untapped (tapped means nothing there), and its Commander Tax goes up
-    // by 2 right away, on the return trip rather than the next cast - so a
-    // freshly-cast commander that's never died shows no tax at all, and each
-    // death after that raises what it'll cost to bring back out again.
-    // Checked against frontFaceDefId(d.defId) rather than d.defId directly -
-    // a commander that had transformed (e.g. Jecht into Braska's Final
-    // Aeon) is still THAT commander underneath, even though the instance
-    // currently sitting on the battlefield carries the back face's defId.
-    const toCommandZone = dead.filter((d) => !toExileWithTokens.includes(d) && player.commanderDefId && frontFaceDefId(d.defId) === player.commanderDefId);
-    const toGraveyard = dead.filter((d) => !toExileWithTokens.includes(d) && !(player.commanderDefId && frontFaceDefId(d.defId) === player.commanderDefId));
+    // "If a creature with a finality counter on it would die, exile it
+    // instead" (Esper Origins, Relentless X-ATM092) - a replacement effect,
+    // same priority tier as onDeathExileAndCreateTokens above. Per real
+    // rules text, this means it never actually "dies" (exile, not
+    // graveyard), so - same reasoning as toExileWithTokens - it's excluded
+    // from diedCreatureCount below and from onDeath trigger eligibility
+    // (engine/effects.ts: resolveOnDeathTriggers only checks the graveyard/
+    // commander zones).
+    const toExileFromFinality = dead.filter((d) => !toExileWithTokens.includes(d) && d.counters.some((c) => c.label === 'Finality'));
+    // Ownership-aware commander check: a permanent under a TEMPORARY control
+    // change (Unexpected Request, Zidane, Stiltzkin's giveaway) is still
+    // sitting in `player`'s battlefield array, but a real "is this someone's
+    // commander" check has to look at its actual owner's commanderDefId, not
+    // whoever currently controls it - same reasoning as the graveyard/exile
+    // routing below (a permanent always goes to its OWNER's zones on death,
+    // never the current controller's, regardless of who controlled it when
+    // it died). ownerOf/commanderDefIdFor read whichever of the two players
+    // (this one or its opponent) actually owns each individual dead card.
+    const opponent = getOpponent(next, player.id);
+    const ownerOf = (d: CardInstance) => (d.ownerId === player.id ? player : opponent);
+    const toCommandZone = dead.filter((d) => {
+      if (toExileWithTokens.includes(d) || toExileFromFinality.includes(d)) return false;
+      const owner = ownerOf(d);
+      return !!owner.commanderDefId && frontFaceDefId(d.defId) === owner.commanderDefId;
+    });
+    const toGraveyard = dead.filter((d) => !toExileWithTokens.includes(d) && !toExileFromFinality.includes(d) && !toCommandZone.includes(d));
 
     // "Died this turn" (Deadly Embrace) only counts an actual death - a
     // creature redirected to exile by a replacement effect (toExileWithTokens,
@@ -620,6 +765,34 @@ export function moveCreaturesToGraveyard(state: GameState, deadIds: string[], ve
       }
     }
 
+    // A permanent always goes to its OWNER's graveyard/exile/command zone on
+    // death, never the current controller's - matters once control can
+    // change (Unexpected Request, Zidane, Stiltzkin's giveaway ability).
+    // Split each destination category by real ownership and write the
+    // owner's own zones in a second updatePlayer call below; battlefield
+    // removal and any death-triggered tokens still happen on `player.id`
+    // (the CONTROLLER'S array/side), since that's unaffected by ownership.
+    const graveyardMap = (d: CardInstance) => ({ ...d, defId: frontFaceDefId(d.defId), damageMarked: 0, tookDeathtouchDamage: false });
+    const exileMap = (d: CardInstance) => ({ ...d, damageMarked: 0, tookDeathtouchDamage: false });
+    const commanderMap = (d: CardInstance) => {
+      const existingTax = d.counters.find((c) => c.label === 'Commander Tax')?.amount ?? 0;
+      return {
+        ...d,
+        defId: frontFaceDefId(d.defId),
+        damageMarked: 0,
+        tookDeathtouchDamage: false,
+        tapped: false,
+        producedManaColor: undefined,
+        counters: [...d.counters.filter((c) => c.label !== 'Commander Tax'), { label: 'Commander Tax', amount: existingTax + 2 }],
+      };
+    };
+    const ownGraveyard = toGraveyard.filter((d) => d.ownerId === player.id).map(graveyardMap);
+    const foreignGraveyard = toGraveyard.filter((d) => d.ownerId !== player.id).map(graveyardMap);
+    const ownExile = [...toExileWithTokens.filter((d) => d.ownerId === player.id), ...toExileFromFinality.filter((d) => d.ownerId === player.id)].map(exileMap);
+    const foreignExile = [...toExileWithTokens.filter((d) => d.ownerId !== player.id), ...toExileFromFinality.filter((d) => d.ownerId !== player.id)].map(exileMap);
+    const ownCommander = toCommandZone.filter((d) => d.ownerId === player.id).map(commanderMap);
+    const foreignCommander = toCommandZone.filter((d) => d.ownerId !== player.id).map(commanderMap);
+
     next = updatePlayer(next, player.id, (p) => ({
       ...p,
       zones: {
@@ -637,32 +810,29 @@ export function moveCreaturesToGraveyard(state: GameState, deadIds: string[], ve
         // re-reads the definition from whatever's already sitting in the
         // graveyard/commander zone by then. No current card has an onDeath
         // on a back face, so this doesn't bite yet.
-        graveyard: [...p.zones.graveyard, ...toGraveyard.map((d) => ({ ...d, defId: frontFaceDefId(d.defId), damageMarked: 0, tookDeathtouchDamage: false }))],
-        exile: [...p.zones.exile, ...toExileWithTokens.map((d) => ({ ...d, damageMarked: 0, tookDeathtouchDamage: false }))],
-        commander: [
-          ...p.zones.commander,
-          ...toCommandZone.map((d) => {
-            const existingTax = d.counters.find((c) => c.label === 'Commander Tax')?.amount ?? 0;
-            return {
-              ...d,
-              defId: frontFaceDefId(d.defId),
-              damageMarked: 0,
-              tookDeathtouchDamage: false,
-              tapped: false,
-              producedManaColor: undefined,
-              counters: [...d.counters.filter((c) => c.label !== 'Commander Tax'), { label: 'Commander Tax', amount: existingTax + 2 }],
-            };
-          }),
-        ],
+        graveyard: [...p.zones.graveyard, ...ownGraveyard],
+        exile: [...p.zones.exile, ...ownExile],
+        commander: [...p.zones.commander, ...ownCommander],
       },
     }));
+    if (foreignGraveyard.length > 0 || foreignExile.length > 0 || foreignCommander.length > 0) {
+      next = updatePlayer(next, opponent.id, (p) => ({
+        ...p,
+        zones: {
+          ...p.zones,
+          graveyard: [...p.zones.graveyard, ...foreignGraveyard],
+          exile: [...p.zones.exile, ...foreignExile],
+          commander: [...p.zones.commander, ...foreignCommander],
+        },
+      }));
+    }
     for (const d of toGraveyard) {
       const def = getCardDefinition(d.defId);
       next = { ...next, log: [...next.log, `${def.name} ${verb}.`] };
     }
     for (const d of toCommandZone) {
       const def = getCardDefinition(d.defId);
-      next = { ...next, log: [...next.log, `${def.name} dies and returns to ${player.name}'s command zone.`] };
+      next = { ...next, log: [...next.log, `${def.name} dies and returns to ${ownerOf(d).name}'s command zone.`] };
     }
     for (const d of toExileWithTokens) {
       const def = getCardDefinition(d.defId);
@@ -716,6 +886,35 @@ export function moveCreaturesToGraveyard(state: GameState, deadIds: string[], ve
           },
         }));
         next = { ...next, log: [...next.log, `${watcherDef.name} triggers: ${player.name} draws a card.`] };
+      }
+    }
+
+    // "Whenever a [Subtype] you control dies during your turn, you draw
+    // cards equal to its power" (Jenova, Ancient Calamity) - filtered to
+    // deaths matching the watcher's chosen subtype, gated to its own turn.
+    // Read power from the pre-removal instance (`d`), same reasoning as
+    // every other "approximate the last-known stats" spot in this pipeline.
+    const subtypeDrawWatchers = player.zones.battlefield.filter((c) => getCardDefinition(c.defId).onAnyDeathDrawEqualToPowerIfSubtype);
+    if (subtypeDrawWatchers.length > 0 && qualifyingDeaths.length > 0) {
+      for (const watcher of subtypeDrawWatchers) {
+        const watcherDef = getCardDefinition(watcher.defId);
+        const { subtype, duringOwnTurnOnly } = watcherDef.onAnyDeathDrawEqualToPowerIfSubtype!;
+        if (duringOwnTurnOnly && next.activePlayerId !== player.id) continue;
+        const matchingDeaths = qualifyingDeaths.filter((d) => {
+          const dDef = getCardDefinition(d.defId);
+          return dDef.type === 'creature' && (!!dDef.subtype?.toLowerCase().includes(subtype.toLowerCase()) || !!d.grantedSubtypes?.some((s) => s.toLowerCase() === subtype.toLowerCase()));
+        });
+        for (const d of matchingDeaths) {
+          const dDef = getCardDefinition(d.defId);
+          const amount = Math.max(0, effectivePower(dDef, d, next, player.id));
+          if (amount === 0) continue;
+          const drawn = getPlayer(next, player.id).zones.library.slice(0, amount);
+          next = updatePlayer(next, player.id, (p) => ({
+            ...p,
+            zones: { ...p.zones, library: p.zones.library.slice(drawn.length), hand: [...p.zones.hand, ...drawn] },
+          }));
+          next = { ...next, log: [...next.log, `${dDef.name}'s death triggers ${watcherDef.name}: ${player.name} draws ${drawn.length} card(s).`] };
+        }
       }
     }
 

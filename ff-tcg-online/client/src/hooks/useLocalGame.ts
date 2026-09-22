@@ -10,6 +10,7 @@ import { canPay, parseCostLabel } from '../engine/mana';
 import { hasKeyword } from '../engine/keywords';
 import { effectivePower, effectiveToughness, isLegalPendingTarget } from '../engine/combat';
 import { matchesLibrarySearchFilter } from '../engine/effects';
+import { findCardAnywhere } from '../engine/state';
 
 const MAX_HISTORY = 25;
 const AI_PLAYER_ID = 'ai';
@@ -205,6 +206,49 @@ export function useLocalGame(initialState: GameState) {
     return () => clearTimeout(timer);
   }, [state, dispatch]);
 
+  // --- AI: resolve its own pending mana color choice (Crossroads Village) -
+  // Same "nobody else can choose for it" problem again. Deliberately simple:
+  // always picks the same fixed color rather than reasoning about its hand.
+  useEffect(() => {
+    if (state.winnerId) return;
+    if (state.mutualAdjustment.status !== 'inactive') return;
+    const pending = state.pendingManaColorChoice;
+    if (!pending || pending.controllerId !== AI_PLAYER_ID) return;
+
+    const timer = setTimeout(() => {
+      dispatch({ type: 'CHOOSE_MANA_COLOR', color: 'B' }, AI_PLAYER_ID);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [state, dispatch]);
+
+  // --- AI: resolve its own pending Ward payment ----------------------------
+  // Same "nobody else can choose for it" problem again. Deliberately simple:
+  // pays if it can afford to (mana cost checked against its own pool, life
+  // cost checked against its own current life so it never drops itself to
+  // 0 or below over a Ward payment), declines otherwise.
+  useEffect(() => {
+    if (state.winnerId) return;
+    if (state.mutualAdjustment.status !== 'inactive') return;
+    const pending = state.pendingWardPayment;
+    if (!pending || pending.controllerId !== AI_PLAYER_ID) return;
+
+    const timer = setTimeout(() => {
+      const ai = state.players.find((p) => p.id === AI_PLAYER_ID)!;
+      let canAfford = false;
+      if (pending.cost.mana) {
+        canAfford = canPay(ai.manaPool, parseCostLabel(pending.cost.mana), 0);
+      } else if (pending.cost.lifeEqualToOwnPower) {
+        const wardedFound = findCardAnywhere(state, pending.targetInstanceId);
+        if (wardedFound) {
+          const amount = effectivePower(getCardDefinition(wardedFound.card.defId), wardedFound.card, state, pending.wardOwnerId);
+          canAfford = amount < ai.life;
+        }
+      }
+      dispatch({ type: 'RESOLVE_WARD_PAYMENT', pay: canAfford }, AI_PLAYER_ID);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [state, dispatch]);
+
   // --- AI: resolve its own pending optional transform (Jecht) -------------
   // Same "nobody else can choose for it" problem again. Deliberately simple:
   // always accepts. Gated to the same post-combat phases the server itself
@@ -251,6 +295,7 @@ export function useLocalGame(initialState: GameState) {
     if (state.pendingFreeCastFromHand?.controllerId === AI_PLAYER_ID) return;
     if (state.pendingDiscard?.controllerId === AI_PLAYER_ID) return;
     if (state.pendingLibrarySearch?.controllerId === AI_PLAYER_ID) return;
+    if (state.pendingManaColorChoice?.controllerId === AI_PLAYER_ID) return;
 
     const timer = setTimeout(() => {
       const ai = state.players.find((p) => p.id === AI_PLAYER_ID)!;
