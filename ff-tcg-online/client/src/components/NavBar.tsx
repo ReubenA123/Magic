@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import Avatar from './Avatar';
 import AccountAuthModal from './AccountAuthModal';
 
-export type Page = 'home' | 'library' | 'deckbuilder' | 'versus' | 'account';
+export type Page = 'home' | 'library' | 'deckbuilder' | 'decks' | 'versus' | 'account';
 
 interface NavBarProps {
   page: Page;
@@ -18,6 +18,7 @@ export default function NavBar({ page, onNavigate }: NavBarProps) {
     { id: 'home', label: 'Home' },
     { id: 'library', label: 'Library' },
     { id: 'deckbuilder', label: 'Deck Builder' },
+    { id: 'decks', label: 'Decks' },
     { id: 'versus', label: 'Versus' },
   ];
 

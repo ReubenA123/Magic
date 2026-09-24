@@ -16,6 +16,7 @@ import { registerSocketHandlers } from './socket';
 import authRoutes from './routes/auth';
 import deckRoutes from './routes/decks';
 import friendRoutes from './routes/friends';
+import communityDeckRoutes from './routes/communityDecks';
 
 const PORT = Number(process.env.PORT) || 4000;
 // In dev, the client runs on its own Vite dev server (default port 5173) and
@@ -31,6 +32,7 @@ app.get('/health', (_req, res) => res.json({ ok: true }));
 app.use('/auth', authRoutes);
 app.use('/decks', deckRoutes);
 app.use('/friends', friendRoutes);
+app.use('/community-decks', communityDeckRoutes);
 
 const httpServer = createServer(app);
 const io = new Server(httpServer, {

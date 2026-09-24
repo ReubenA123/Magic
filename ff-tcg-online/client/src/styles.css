@@ -341,6 +341,20 @@ button {
   font-size: 16px;
 }
 
+.life-total-targetable {
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 2px 6px;
+  outline: 2px solid #d4a24c;
+  outline-offset: 1px;
+  animation: targetable-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes targetable-pulse {
+  0%, 100% { outline-color: #d4a24c; }
+  50% { outline-color: #f5d998; }
+}
+
 .life-buttons {
   display: flex;
   gap: 6px;
@@ -3283,4 +3297,177 @@ button {
 
 .corner-column {
   width: 200px;
+}
+
+/* ============================================================================
+   Decks tab (community, voted-on decks) + the Home page's Top Decks widget.
+   ============================================================================ */
+
+.decks-page {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.decks-page-header {
+  margin-bottom: 16px;
+}
+
+.decks-publish-panel {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.decks-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.community-deck-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.community-deck-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+
+.community-deck-rank {
+  font-family: 'Cinzel', serif;
+  color: var(--accent);
+  font-size: 15px;
+  min-width: 28px;
+  text-align: center;
+}
+
+.community-deck-commander-thumb {
+  flex-shrink: 0;
+}
+
+.community-deck-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.community-deck-meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.community-deck-archetype-tag {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 6px;
+  color: var(--text-dim);
+}
+
+.community-deck-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.community-deck-vote-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.community-deck-vote-button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.community-deck-vote-active {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+}
+
+.community-deck-vote-static {
+  cursor: default;
+  align-self: flex-start;
+}
+
+.home-top-decks {
+  max-width: 900px;
+  margin: 40px auto 0;
+  text-align: left;
+}
+
+.home-top-decks-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 12px;
+}
+
+.home-top-decks-viewall {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.home-top-decks-grid {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.home-top-deck-card {
+  flex: 1;
+  min-width: 180px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  text-align: left;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.home-top-deck-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
 }

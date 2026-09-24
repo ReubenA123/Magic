@@ -27,6 +27,8 @@ function filterLabel(filter: LibrarySearchFilter): string {
       return `a ${filter.subtype} card`;
     case 'exactName':
       return `a card named ${filter.name}`;
+    case 'basicLandOrSubtype':
+      return `a basic land or ${filter.subtype} card`;
   }
 }
 

@@ -26,7 +26,8 @@ export function hasKeyword(def: CardDefinition, keyword: CombatKeyword): boolean
  * CardInstance.temporaryKeywords (e.g. Blitzball Shot granting trample, or
  * Cecil, Redeemed Paladin's Protect granting indestructible to other
  * attackers) - use this instead of hasKeyword wherever a temporary grant
- * should count too. */
+ * should count too. Also checks temporaryKeywordsUntilNextTurn (Hydaelyn),
+ * the longer-lived cousin of temporaryKeywords. */
 export function hasKeywordEffective(def: CardDefinition, instance: CardInstance, keyword: CombatKeyword): boolean {
-  return hasKeyword(def, keyword) || !!instance.temporaryKeywords?.includes(keyword);
+  return hasKeyword(def, keyword) || !!instance.temporaryKeywords?.includes(keyword) || !!instance.temporaryKeywordsUntilNextTurn?.includes(keyword);
 }

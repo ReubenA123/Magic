@@ -317,7 +317,12 @@ export function useLocalGame(initialState: GameState) {
           break;
 
         case 'main1': {
-          if (!ai.hasPlayedLandThisTurn) {
+          // Ordinarily one land per turn, but CardDefinition.extraLandsPerTurn
+          // (Zell Dincht) can raise that - same cap engine/actions.ts:
+          // maxLandsPerTurn enforces server-side, just recomputed here since
+          // that helper isn't exported.
+          const maxLands = 1 + ai.zones.battlefield.reduce((sum, c) => sum + (getCardDefinition(c.defId).extraLandsPerTurn ?? 0), 0);
+          if (ai.landsPlayedThisTurn < maxLands) {
             const land = ai.zones.hand.find((c) => getCardDefinition(c.defId).type === 'land');
             if (land) {
               dispatch({ type: 'CAST_CARD', instanceId: land.instanceId }, AI_PLAYER_ID);

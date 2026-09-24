@@ -106,6 +106,13 @@ interface CardActionsPanelProps {
    * must be present). */
   ownerBattlefieldDefIds: string[];
   alreadyPlayedLand: boolean;
+  /** Set (non-null) when the CURRENT VIEWER holds a GameState.exilePlayGrants
+   * entry for this exact instance (Lightning, Security Sergeant's persistent
+   * grant, or Reno and Rude's this-turn one) - only ever meaningful while
+   * currentZone is 'exile'. anyColorMana mirrors the grant's own field, used
+   * to compute affordability the same way engine/actions.ts: castFromExile
+   * actually pays it (as pure generic mana value instead of specific colors). */
+  exilePlayGrant?: { anyColorMana?: boolean } | null;
   attachedToName: string | null;
   /** RevealTopThenLoseLifeByManaValueEffect's (Dark Confidant) running
    * history - every card this permanent has revealed while continuously on
@@ -150,6 +157,7 @@ interface CardActionsPanelProps {
   onStartCrew: () => void;
   onCycle: () => void;
   onFlashback: () => void;
+  onPlayFromExile: () => void;
   onClose: () => void;
 }
 
@@ -181,6 +189,7 @@ export default function CardActionsPanel({
   costReduction,
   ownerBattlefieldDefIds,
   alreadyPlayedLand,
+  exilePlayGrant,
   attachedToName,
   revealedCards,
   equipmentContributions,
@@ -199,6 +208,7 @@ export default function CardActionsPanel({
   onStartCrew,
   onCycle,
   onFlashback,
+  onPlayFromExile,
   onClose,
 }: CardActionsPanelProps) {
   const [showManaChoice, setShowManaChoice] = useState(false);
@@ -219,6 +229,15 @@ export default function CardActionsPanel({
   const canCycle = canCycleHere && (mutualActive || canPay(ownerManaPool, parseCostLabel(definition.cycling!.cost), 0));
   const canFlashbackHere = currentZone === 'graveyard' && !!definition.flashback;
   const canFlashback = canFlashbackHere && (mutualActive || canPay(ownerManaPool, parseCostLabel(definition.flashback!.cost), 0));
+  const canPlayFromExileHere = currentZone === 'exile' && !!exilePlayGrant;
+  // Reno and Rude's grant lets any mana pay any pip (engine/actions.ts:
+  // castFromExile pays it as pure generic mana value) - approximated here
+  // the same way, so the button isn't wrongly greyed out for having the
+  // "wrong" colors when any color actually works.
+  const exilePlayCost = exilePlayGrant?.anyColorMana
+    ? { generic: printedCost.generic + Object.values(printedCost.colors).reduce((a: number, b) => a + (b ?? 0), 0), colors: {}, hasX: printedCost.hasX }
+    : printedCost;
+  const canPlayFromExile = canPlayFromExileHere && (isLand ? isMyTurn && !alreadyPlayedLand : mutualActive || canPay(ownerManaPool, exilePlayCost, 0));
   const isActualCommander = ownerCommanderDefId === definition.id;
   const isOnBattlefield = currentZone === 'battlefield';
   const needsManaChoice = !instance.tapped && !!manaOptions && manaOptions.length > 0;
@@ -554,6 +573,17 @@ export default function CardActionsPanel({
         {!readOnly && canFlashbackHere && (
           <button className="card-action-button card-action-button-play" disabled={!canFlashback} onClick={onFlashback} title={canFlashback ? '' : 'Not enough mana'}>
             {`Flashback (${definition.flashback!.cost})`}
+          </button>
+        )}
+
+        {!readOnly && canPlayFromExileHere && (
+          <button
+            className="card-action-button card-action-button-play"
+            disabled={!canPlayFromExile}
+            onClick={onPlayFromExile}
+            title={canPlayFromExile ? '' : isLand ? 'Already played a land, or not your turn' : 'Not enough mana'}
+          >
+            {isLand ? `Play ${definition.name} from exile` : `Play from exile (${definition.costLabel})`}
           </button>
         )}
       </div>

@@ -3,13 +3,14 @@ import NavBar, { Page } from './components/NavBar';
 import HomePage from './pages/HomePage';
 import LibraryPage from './pages/LibraryPage';
 import DeckBuilderPage from './pages/DeckBuilderPage';
+import DecksPage from './pages/DecksPage';
 import VersusPage from './pages/VersusPage';
 import AccountPage from './pages/AccountPage';
 import { GameActivityProvider } from './context/GameActivity';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
 const PAGE_STORAGE_KEY = 'magic-current-page';
-const VALID_PAGES: Page[] = ['home', 'library', 'deckbuilder', 'versus', 'account'];
+const VALID_PAGES: Page[] = ['home', 'library', 'deckbuilder', 'decks', 'versus', 'account'];
 
 function loadInitialPage(): Page {
   try {
@@ -43,6 +44,7 @@ export default function App() {
             {page === 'home' && <HomePage onNavigate={navigate} />}
             {page === 'library' && <LibraryPage />}
             {page === 'deckbuilder' && <DeckBuilderPage />}
+            {page === 'decks' && <DecksPage onNavigate={navigate} />}
             {page === 'versus' && <VersusPage />}
             {/* Falls back to Home rather than a blank page if the saved "last
                 page was Account" gets restored after a session has expired. */}

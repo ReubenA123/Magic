@@ -495,6 +495,11 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   // cost.)" spells (see types.ts: CardDefinition.tieredModes) - exactly one
   // tier is picked, then Cast dispatches CAST_CARD with chosenTierIndex.
   const [pendingTieredCast, setPendingTieredCast] = useState<CardInstance | null>(null);
+  // Same idea again, for "Kicker - [cost]" spells (see types.ts:
+  // CardDefinition.kicker) - the player either picks a specific permanent
+  // to pay the kicker cost with (dispatching CAST_CARD with
+  // kickerPaymentInstanceId), or skips to cast unkicked.
+  const [pendingKickerCast, setPendingKickerCast] = useState<CardInstance | null>(null);
   // Set while an ability with a sacrificeAnother cost (e.g. Ahriman, or The
   // Gold Saucer's "Sacrifice two artifacts") is waiting on the player to
   // click which OTHER permanent(s) to sacrifice - the choice is
@@ -712,7 +717,15 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   // never needed a manual-override door here, and leaving one in would just
   // be a way to cheat against it. Mutual Adjustment is the one deliberate
   // exception: both players explicitly agreed to suspend this.
-  const openCardIsReadOnly = !!openCard && openCard.player.id !== yourPlayerId && !mutualActive;
+  // "You may play that card" (Lightning, Security Sergeant; Reno and Rude) -
+  // the exiled card's OWNER can be the opponent (Reno and Rude exiles from
+  // the opponent's library), but the GRANT HOLDER is who actually gets to
+  // act on it, so a grant naming the viewer punches through the normal
+  // "only ever a look at someone else's card" rule below, same as Mutual
+  // Adjustment does. See GameState.exilePlayGrants.
+  const openCardExilePlayGrant =
+    openCard?.zone === 'exile' ? (state.exilePlayGrants.find((g) => g.instanceId === openCard.card.instanceId && g.playerId === yourPlayerId) ?? null) : null;
+  const openCardIsReadOnly = !!openCard && openCard.player.id !== yourPlayerId && !mutualActive && !openCardExilePlayGrant;
 
   // soloControl (VS AI) means the same person plays both sides, so whichever
   // side needs to declare attackers/blockers right now, it's them - without
@@ -1233,6 +1246,10 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     }
     if (def.tieredModes && def.tieredModes.length > 0) {
       setPendingTieredCast(card);
+      return;
+    }
+    if (def.kicker) {
+      setPendingKickerCast(card);
       return;
     }
     const parsed = parseCostLabel(def.costLabel);
@@ -2056,10 +2073,24 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     // function) - so this is only ever actually used for the opponent's.
     const handRow = isOpponentSide ? renderHandRow(player, isOpponentSide, !mirrorLayout) : null;
 
+    // "Any other target" effects (currently just dealDamageToAnyOtherTargetAndSelf)
+    // can name a PLAYER as their second pick, not just a creature - shown as
+    // a clickable life total (either player's, including your own - the
+    // printed text names no restriction beyond "other than the source").
+    // See types.ts: GameAction 'CHOOSE_TARGET's targetPlayerId, a
+    // general-purpose addition meant to be reused by future "any target"
+    // effects rather than a one-off UI for this single effect.
+    const canTargetThisPlayer =
+      !!pendingTargetForYou && pendingTargetForYou.effect.type === 'dealDamageToAnyOtherTargetAndSelf' && !!pendingTargetForYou.firstInstanceId;
+
     const lifeRow = (
       <div className="life-row">
         <div className="life-total-group">
-          <span className="life-total">
+          <span
+            className={`life-total${canTargetThisPlayer ? ' life-total-targetable' : ''}`}
+            onClick={canTargetThisPlayer ? () => onAction({ type: 'CHOOSE_TARGET', targetInstanceId: null, targetPlayerId: player.id }, pendingTargetForYou!.controllerId) : undefined}
+            title={canTargetThisPlayer ? `Target ${player.name}` : undefined}
+          >
             {player.name}: {player.life} life
           </span>
           {player.commanderDamageTaken > 0 && <span className="commander-damage-badge">Commander dmg: {player.commanderDamageTaken}</span>}
@@ -2426,7 +2457,17 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                       ? pendingTargetForYou.firstInstanceId
                         ? "Now choose an opponent's creature to fight it."
                         : 'Choose a creature you control to fight.'
-                      : effect.type === 'modifySagaLoreCounter'
+                      : effect.type === 'chooseCreatureDealsDamageToOpponentCreature'
+                        ? pendingTargetForYou.firstInstanceId
+                          ? "Now choose an opponent's creature to deal damage to."
+                          : 'Choose a creature you control to deal damage.'
+                        : effect.type === 'dealDamageToAnyOtherTargetAndSelf'
+                          ? pendingTargetForYou.firstInstanceId
+                            ? 'Now choose any other target - a creature (either player’s) or a player’s life total.'
+                            : 'Choose a creature you control as the damage source.'
+                          : effect.type === 'putCounterOnTargetLand'
+                            ? `Choose a land for ${pendingTargetSourceName}'s ability (either player's).`
+                            : effect.type === 'modifySagaLoreCounter'
                         ? `Choose a Saga you control for ${pendingTargetSourceName}'s ability.`
                         : effect.type === 'tapTarget'
                           ? `Choose a ${effect.targetFilter === 'nonlandPermanent' ? 'nonland permanent' : 'creature'} for ${pendingTargetSourceName}'s ability to tap (either player's).`
@@ -2466,6 +2507,16 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                                   ? pendingTargetForYou.firstInstanceId
                                     ? 'Now choose an Equipment (either player’s) to gain control of and attach.'
                                     : 'Choose a creature you control for the Equipment to be attached to.'
+                                  : effect.type === 'pumpUpToTwoTargets'
+                                  ? `Choose one or two creatures for ${pendingTargetSourceName}'s ability (either player's)${pendingTargetForYou.firstInstanceId ? ' - or Skip to stop at one.' : '.'}`
+                                  : effect.type === 'putCounterOnAnotherCreatureGrantsIndestructibleUntilNextTurn'
+                                  ? `Choose another creature you control for ${pendingTargetSourceName}'s ability.`
+                                  : effect.type === 'exileThenReturnTargetOwnCreature'
+                                  ? `Choose a creature you control for ${pendingTargetSourceName} to exile and return to the battlefield.`
+                                  : effect.type === 'attachAllControlledEquipmentToTargetCreature'
+                                  ? `Choose a creature you control for ${pendingTargetSourceName}'s ability - or Skip.`
+                                  : effect.type === 'exileTargetPermanent'
+                                  ? `Choose ${effect.targetFilter === 'artifact' ? 'an artifact' : effect.targetFilter === 'creature' ? 'a creature' : 'a permanent'} for ${pendingTargetSourceName}'s ability to exile (either player's).`
                                   : effect.targetFilter === 'artifactOrEnchantment'
                                   ? `Choose an artifact or enchantment for ${pendingTargetSourceName}'s ability (either player's).`
                                   : effect.targetFilter === 'anyPermanent'
@@ -2490,7 +2541,9 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                 effect.type === 'putCounterOnUpToOneOwnCreature' ||
                 effect.type === 'bounceUpToOneOtherNonlandPermanent' ||
                 effect.type === 'putCounterOnUpToOneOtherCreatureEqualToOwnPower' ||
-                effect.type === 'tapStunAndGainLifeForNonbasicLands') && (
+                effect.type === 'tapStunAndGainLifeForNonbasicLands' ||
+                effect.type === 'attachAllControlledEquipmentToTargetCreature' ||
+                (effect.type === 'pumpUpToTwoTargets' && !!pendingTargetForYou.firstInstanceId)) && (
                 <button className="opponent-view-exit-button" onClick={() => onAction({ type: 'CHOOSE_TARGET', targetInstanceId: null }, pendingTargetForYou.controllerId)}>
                   Skip
                 </button>
@@ -2879,16 +2932,24 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
         )}
       </div>
 
-      {openCard && (
+      {openCard && (() => {
+        // For an exile-play grant, every "can I afford/is it my turn" check
+        // below needs to read the GRANT HOLDER's state (mana, land drops,
+        // phase), not the exiled card's owner - they can be different
+        // players (Reno and Rude). Every other zone (hand/battlefield/
+        // graveyard/...) never has this split, so it's always just
+        // openCard.player there.
+        const exilePlayActingPlayer = openCardExilePlayGrant ? state.players.find((p) => p.id === yourPlayerId)! : openCard.player;
+        return (
         <CardActionsPanel
           definition={getCardDefinition(openCard.card.defId)}
           instance={openCard.card}
           currentZone={openCard.zone}
           readOnly={openCardIsReadOnly}
-          ownerManaPool={openCard.player.manaPool}
+          ownerManaPool={exilePlayActingPlayer.manaPool}
           ownerCommanderDefId={openCard.player.commanderDefId}
           mutualActive={mutualActive}
-          isMyTurn={state.activePlayerId === openCard.player.id}
+          isMyTurn={state.activePlayerId === exilePlayActingPlayer.id}
           isMyEndStep={state.phase === 'end' && state.activePlayerId === openCard.player.id}
           isMyFirstMainPhase={state.phase === 'main1' && state.activePlayerId === openCard.player.id}
           isMyUpkeep={state.phase === 'upkeep' && state.activePlayerId === openCard.player.id}
@@ -2902,7 +2963,11 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           }
           costReduction={dynamicCostReduction(getCardDefinition(openCard.card.defId), openCard.player)}
           ownerBattlefieldDefIds={openCard.player.zones.battlefield.map((c) => c.defId)}
-          alreadyPlayedLand={openCard.player.hasPlayedLandThisTurn}
+          exilePlayGrant={openCardExilePlayGrant}
+          alreadyPlayedLand={
+            exilePlayActingPlayer.landsPlayedThisTurn >=
+            1 + exilePlayActingPlayer.zones.battlefield.reduce((sum, c) => sum + (getCardDefinition(c.defId).extraLandsPerTurn ?? 0), 0)
+          }
           revealedCards={
             openCard.zone === 'battlefield' && openCard.card.revealedCardIds && openCard.card.revealedCardIds.length > 0
               ? openCard.card.revealedCardIds
@@ -2973,9 +3038,14 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
             onAction({ type: 'CAST_FROM_GRAVEYARD', instanceId: openCard.card.instanceId });
             setOpenPanelId(null);
           }}
+          onPlayFromExile={() => {
+            onAction({ type: 'CAST_FROM_EXILE', instanceId: openCard.card.instanceId });
+            setOpenPanelId(null);
+          }}
           onClose={() => setOpenPanelId(null)}
         />
-      )}
+        );
+      })()}
 
       {openZone &&
         (() => {
@@ -3275,6 +3345,127 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           );
         })()}
 
+      {/* Mandatory version of the above (Zell Dincht's end step trigger) -
+          no Skip button, and only ever set when at least one land exists to
+          return (see engine/effects.ts: the returnControlledLandToHand branch). */}
+      {state.pendingLandBounce &&
+        (() => {
+          const pending = state.pendingLandBounce;
+          const sourceFound = findCard(state, pending.sourceInstanceId);
+          const sourceName = sourceFound ? getCardDefinition(sourceFound.card.defId).name : 'This ability';
+          const controller = state.players.find((p) => p.id === pending.controllerId)!;
+          const eligible = controller.zones.battlefield.filter((c) => getCardDefinition(c.defId).type === 'land');
+          return (
+            <OptionalBounceModal
+              sourceName={sourceName}
+              cards={eligible.map((c) => ({ definition: getCardDefinition(c.defId), instance: c }))}
+              onChoose={(instanceId) => onAction({ type: 'RESOLVE_LAND_BOUNCE', instanceId }, pending.controllerId)}
+              title="Return a land"
+              prompt="Return a land you control to its owner's hand."
+            />
+          );
+        })()}
+
+      {state.pendingPutLandFromHand &&
+        (() => {
+          const pending = state.pendingPutLandFromHand;
+          const sourceFound = findCard(state, pending.sourceInstanceId);
+          const sourceName = sourceFound ? getCardDefinition(sourceFound.card.defId).name : 'This ability';
+          const controller = state.players.find((p) => p.id === pending.controllerId)!;
+          const eligible = controller.zones.hand.filter((c) => getCardDefinition(c.defId).type === 'land');
+          return (
+            <OptionalBounceModal
+              sourceName={sourceName}
+              cards={eligible.map((c) => ({ definition: getCardDefinition(c.defId), instance: c }))}
+              onChoose={(instanceId) => onAction({ type: 'RESOLVE_PUT_LAND_FROM_HAND', instanceId }, pending.controllerId)}
+              onSkip={() => onAction({ type: 'RESOLVE_PUT_LAND_FROM_HAND', instanceId: null }, pending.controllerId)}
+              title="Put a land onto the battlefield?"
+              prompt="You may put a land card from your hand onto the battlefield."
+            />
+          );
+        })()}
+
+      {state.pendingReturnInstantOrSorceryFromGraveyard &&
+        (() => {
+          const pending = state.pendingReturnInstantOrSorceryFromGraveyard;
+          const sourceFound = findCard(state, pending.sourceInstanceId);
+          const sourceName = sourceFound ? getCardDefinition(sourceFound.card.defId).name : 'This ability';
+          const controller = state.players.find((p) => p.id === pending.controllerId)!;
+          const eligible = controller.zones.graveyard.filter((c) => ['instant', 'sorcery'].includes(getCardDefinition(c.defId).type));
+          return (
+            <OptionalBounceModal
+              sourceName={sourceName}
+              cards={eligible.map((c) => ({ definition: getCardDefinition(c.defId), instance: c }))}
+              onChoose={(instanceId) => onAction({ type: 'RESOLVE_RETURN_INSTANT_OR_SORCERY_FROM_GRAVEYARD', instanceId }, pending.controllerId)}
+              title="Return a card"
+              prompt="Return an instant or sorcery card from your graveyard to your hand."
+            />
+          );
+        })()}
+
+      {state.pendingCastFromGraveyardAnyMana &&
+        (() => {
+          const pending = state.pendingCastFromGraveyardAnyMana;
+          const sourceFound = findCard(state, pending.sourceInstanceId);
+          const sourceName = sourceFound ? getCardDefinition(sourceFound.card.defId).name : 'This ability';
+          const eligible = [...state.players[0].zones.graveyard, ...state.players[1].zones.graveyard].filter((c) =>
+            ['instant', 'sorcery'].includes(getCardDefinition(c.defId).type)
+          );
+          return (
+            <OptionalBounceModal
+              sourceName={sourceName}
+              cards={eligible.map((c) => ({ definition: getCardDefinition(c.defId), instance: c }))}
+              onChoose={(instanceId) => onAction({ type: 'RESOLVE_CAST_FROM_GRAVEYARD_ANY_MANA', instanceId }, pending.controllerId)}
+              onSkip={() => onAction({ type: 'RESOLVE_CAST_FROM_GRAVEYARD_ANY_MANA', instanceId: null }, pending.controllerId)}
+              title="Cast from a graveyard?"
+              prompt="You may cast target instant or sorcery card from a graveyard - mana of any type can be spent to cast it."
+            />
+          );
+        })()}
+
+      {state.pendingMillThenPutLandIntoHand &&
+        (() => {
+          const pending = state.pendingMillThenPutLandIntoHand;
+          const sourceFound = findCard(state, pending.sourceInstanceId);
+          const sourceName = sourceFound ? getCardDefinition(sourceFound.card.defId).name : 'This ability';
+          const controller = state.players.find((p) => p.id === pending.controllerId)!;
+          const eligible = controller.zones.graveyard.filter(
+            (c) => pending.milledInstanceIds.includes(c.instanceId) && getCardDefinition(c.defId).type === 'land'
+          );
+          return (
+            <OptionalBounceModal
+              sourceName={sourceName}
+              cards={eligible.map((c) => ({ definition: getCardDefinition(c.defId), instance: c }))}
+              onChoose={(instanceId) => onAction({ type: 'RESOLVE_MILL_THEN_PUT_LAND_INTO_HAND', instanceId }, pending.controllerId)}
+              onSkip={() => onAction({ type: 'RESOLVE_MILL_THEN_PUT_LAND_INTO_HAND', instanceId: null }, pending.controllerId)}
+              title="Put a land into hand?"
+              prompt="You may put a land card from among the milled cards into your hand."
+            />
+          );
+        })()}
+
+      {state.pendingLibraryOrGraveyardSearch &&
+        (() => {
+          const pending = state.pendingLibraryOrGraveyardSearch;
+          const sourceFound = findCard(state, pending.sourceInstanceId);
+          const sourceName = sourceFound ? getCardDefinition(sourceFound.card.defId).name : 'This ability';
+          const controller = state.players.find((p) => p.id === pending.controllerId)!;
+          const matches = (c: CardInstance) => {
+            const d = getCardDefinition(c.defId);
+            return d.type === 'artifact' && manaValue(parseCostLabel(d.costLabel)) <= pending.maxManaValue;
+          };
+          const eligible = [...controller.zones.library.filter(matches), ...controller.zones.graveyard.filter(matches)];
+          return (
+            <OptionalBounceModal
+              sourceName={sourceName}
+              cards={eligible.map((c) => ({ definition: getCardDefinition(c.defId), instance: c }))}
+              onChoose={(instanceId) => onAction({ type: 'RESOLVE_LIBRARY_OR_GRAVEYARD_SEARCH', instanceId }, pending.controllerId)}
+              title="Search your library and graveyard"
+              prompt={`Search your library and/or graveyard for an artifact card with mana value ${pending.maxManaValue} or less.`}
+            />
+          );
+        })()}
+
       {/* Like pendingSurveil/pendingDiscard, the revealed cards come from the
           library - private information, so only the controller (or
           soloControl) ever renders this modal at all. */}
@@ -3358,6 +3549,37 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                 setOpenPanelId(null);
               }}
               onCancel={() => setPendingTieredCast(null)}
+            />
+          );
+        })()}
+
+      {pendingKickerCast &&
+        (() => {
+          const def = getCardDefinition(pendingKickerCast.defId);
+          const found = findCard(state, pendingKickerCast.instanceId);
+          const caster = found ? found.player : null;
+          const eligible = (caster?.zones.battlefield ?? []).filter((c) => {
+            const cDef = getCardDefinition(c.defId);
+            return def.kicker!.cost === 'returnLandToHand' ? cDef.type === 'land' : cDef.type === 'creature' || cDef.type === 'artifact';
+          });
+          const costLabel = def.kicker!.cost === 'returnLandToHand' ? 'return a land you control to its owner’s hand' : 'sacrifice a creature or artifact you control';
+          return (
+            <OptionalBounceModal
+              sourceName={def.name}
+              cards={eligible.map((c) => ({ definition: getCardDefinition(c.defId), instance: c }))}
+              title="Pay Kicker?"
+              prompt={`Kicker — ${costLabel}.`}
+              emptyText="Nothing eligible to pay Kicker with."
+              onChoose={(instanceId) => {
+                onAction({ type: 'CAST_CARD', instanceId: pendingKickerCast.instanceId, kickerPaymentInstanceId: instanceId });
+                setPendingKickerCast(null);
+                setOpenPanelId(null);
+              }}
+              onSkip={() => {
+                onAction({ type: 'CAST_CARD', instanceId: pendingKickerCast.instanceId });
+                setPendingKickerCast(null);
+                setOpenPanelId(null);
+              }}
             />
           );
         })()}
