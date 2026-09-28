@@ -183,6 +183,7 @@ export function createStateFromDeck(deck: SavedDeck, humanName: string): GameSta
     pendingReturnCreaturesFromGraveyard: null,
     pendingOptionalTransform: null,
     pendingOptionalPayLife: null,
+    pendingCommanderZoneChoice: null,
     pendingWardPayment: null,
     pendingFreeCastFromHand: null,
     pendingNextCreatureSpellBonus: null,
@@ -195,6 +196,7 @@ export function createStateFromDeck(deck: SavedDeck, humanName: string): GameSta
     lastCoinFlip: null,
     pendingHideaway: null,
     battlefieldLeaveWatchers: [],
+    exileUntilSourceLeaves: [],
   };
 }
 

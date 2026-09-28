@@ -511,6 +511,9 @@ export function isLegalPendingTarget(state: GameState, pendingTarget: NonNullabl
   if (effect.type === 'damageTargetCreature') {
     return def.type === 'creature';
   }
+  if (effect.type === 'becomeCopyOfAnyCreatureThenAddCounters') {
+    return def.type === 'creature';
+  }
   if (effect.type === 'exileTargetPermanent') {
     return effect.targetFilter === 'artifact'
       ? def.type === 'artifact'
@@ -519,6 +522,20 @@ export function isLegalPendingTarget(state: GameState, pendingTarget: NonNullabl
         : effect.targetFilter === 'nonlandPermanent'
           ? def.type !== 'land'
           : true;
+  }
+  if (effect.type === 'exileTargetCreatureWithLessPowerUntilSourceLeaves') {
+    if (def.type !== 'creature' || ownerId === pendingTarget.controllerId) return false;
+    const sourceFound = findInstance(state, pendingTarget.sourceInstanceId);
+    if (!sourceFound) return false;
+    const sourceDef = getCardDefinition(sourceFound.instance.defId);
+    const sourcePower = effectivePower(sourceDef, sourceFound.instance, state, sourceFound.controllerId);
+    return effectivePower(def, card, state, ownerId) < sourcePower;
+  }
+  if (effect.type === 'putStunCounterOnTargetAttacker') {
+    return pendingTarget.controllerId !== ownerId && state.declaredAttackers.includes(card.instanceId);
+  }
+  if (effect.type === 'proliferate') {
+    return card.counters.length > 0 && !(effect.alreadyChosen ?? []).includes(card.instanceId);
   }
   if (effect.type === 'sweepDamageFromChosenCreature') {
     return def.type === 'creature' && ownerId === pendingTarget.controllerId;
@@ -555,7 +572,12 @@ function findInstance(state: GameState, instanceId: string) {
 
 function isCommanderAttack(state: GameState, controllerId: string, attackerDefId: string): boolean {
   const controller = state.players.find((p) => p.id === controllerId);
-  return !!controller?.commanderDefId && controller.commanderDefId === attackerDefId;
+  // frontFaceDefId, not a raw defId compare: a commander that transformed
+  // mid-game (Jecht, Reluctant Guardian -> Braska's Final Aeon) is still the
+  // same commander, but its instance's defId is now the back face's id,
+  // which never matches commanderDefId (set at deck-build time to the front
+  // face) without normalizing through the front face first.
+  return !!controller?.commanderDefId && frontFaceDefId(attackerDefId) === controller.commanderDefId;
 }
 
 function markDamage(state: GameState, instanceId: string, amount: number, isDeathtouch: boolean = false): GameState {
@@ -772,12 +794,47 @@ export function resolveCombatDamage(state: GameState): GameState {
   return next;
 }
 
-/** Actually moves the given creatures to their owners' graveyards (or, for
- * commanders, back to the command zone with increased tax), cascading any
- * attached Auras/Equipment off first. `verb` only changes the log wording
- * ("is destroyed" vs "is sacrificed" etc). Shared by resolvePendingDeaths
- * (combat, batched at the End Combat step) and by immediate effects like
- * sacrifice (see engine/actions.ts: chooseSacrifice). */
+/** Queues the OWNER's choice between the command zone and wherever a
+ * commander was actually headed (the real "commander replacement effect") -
+ * see GameState.pendingCommanderZoneChoice. `destinationCard` should already
+ * be shaped exactly the way that departure path normally resets a card
+ * (whatever the caller's own existing graveyard/exile/bounce map does) -
+ * this only adds the command-zone alternative (front face reverted,
+ * Commander Tax bumped) on top, it doesn't touch the destination shape.
+ * Multiple calls before the first is resolved queue up rather than
+ * clobbering each other (a board wipe killing both players' commanders at
+ * once). */
+export function beginCommanderZoneChoice(
+  state: GameState,
+  ownerId: string,
+  destinationZone: 'graveyard' | 'exile' | 'hand',
+  destinationCard: CardInstance
+): GameState {
+  const existingTax = destinationCard.counters.find((c) => c.label === 'Commander Tax')?.amount ?? 0;
+  const commandZoneCard: CardInstance = {
+    ...destinationCard,
+    defId: frontFaceDefId(destinationCard.defId),
+    damageMarked: 0,
+    tookDeathtouchDamage: false,
+    tapped: false,
+    producedManaColor: undefined,
+    counters: [...destinationCard.counters.filter((c) => c.label !== 'Commander Tax'), { label: 'Commander Tax', amount: existingTax + 2 }],
+  };
+  const entry = { ownerId, destinationZone, destinationCard, commandZoneCard };
+  if (state.pendingCommanderZoneChoice) {
+    return { ...state, pendingCommanderZoneChoice: { ...state.pendingCommanderZoneChoice, queued: [...state.pendingCommanderZoneChoice.queued, entry] } };
+  }
+  return { ...state, pendingCommanderZoneChoice: { ...entry, queued: [] } };
+}
+
+/** Actually moves the given creatures to their owners' graveyards, cascading
+ * any attached Auras/Equipment off first. A commander among them doesn't go
+ * straight to the graveyard OR the command zone - see toCommandZone below,
+ * which instead queues its owner's choice (beginCommanderZoneChoice) and
+ * leaves it out of this pass entirely until that resolves. `verb` only
+ * changes the log wording ("is destroyed" vs "is sacrificed" etc). Shared by
+ * resolvePendingDeaths (combat, batched at the End Combat step) and by
+ * immediate effects like sacrifice (see engine/actions.ts: chooseSacrifice). */
 export function moveCreaturesToGraveyard(state: GameState, deadIds: string[], verb: string = 'is destroyed'): GameState {
   if (deadIds.length === 0) return state;
   let next = state;
@@ -883,24 +940,13 @@ export function moveCreaturesToGraveyard(state: GameState, deadIds: string[], ve
     // (the CONTROLLER'S array/side), since that's unaffected by ownership.
     const graveyardMap = (d: CardInstance) => ({ ...d, defId: frontFaceDefId(d.defId), damageMarked: 0, tookDeathtouchDamage: false });
     const exileMap = (d: CardInstance) => ({ ...d, damageMarked: 0, tookDeathtouchDamage: false });
-    const commanderMap = (d: CardInstance) => {
-      const existingTax = d.counters.find((c) => c.label === 'Commander Tax')?.amount ?? 0;
-      return {
-        ...d,
-        defId: frontFaceDefId(d.defId),
-        damageMarked: 0,
-        tookDeathtouchDamage: false,
-        tapped: false,
-        producedManaColor: undefined,
-        counters: [...d.counters.filter((c) => c.label !== 'Commander Tax'), { label: 'Commander Tax', amount: existingTax + 2 }],
-      };
-    };
     const ownGraveyard = toGraveyard.filter((d) => d.ownerId === player.id).map(graveyardMap);
     const foreignGraveyard = toGraveyard.filter((d) => d.ownerId !== player.id).map(graveyardMap);
     const ownExile = [...toExileWithTokens.filter((d) => d.ownerId === player.id), ...toExileFromFinality.filter((d) => d.ownerId === player.id)].map(exileMap);
     const foreignExile = [...toExileWithTokens.filter((d) => d.ownerId !== player.id), ...toExileFromFinality.filter((d) => d.ownerId !== player.id)].map(exileMap);
-    const ownCommander = toCommandZone.filter((d) => d.ownerId === player.id).map(commanderMap);
-    const foreignCommander = toCommandZone.filter((d) => d.ownerId !== player.id).map(commanderMap);
+    // A dying commander doesn't land in either zone yet - see toCommandZone's
+    // handling below (beginCommanderZoneChoice), which queues its owner's
+    // choice instead of writing it into `commander:` here.
 
     next = updatePlayer(next, player.id, (p) => ({
       ...p,
@@ -921,17 +967,15 @@ export function moveCreaturesToGraveyard(state: GameState, deadIds: string[], ve
         // on a back face, so this doesn't bite yet.
         graveyard: [...p.zones.graveyard, ...ownGraveyard],
         exile: [...p.zones.exile, ...ownExile],
-        commander: [...p.zones.commander, ...ownCommander],
       },
     }));
-    if (foreignGraveyard.length > 0 || foreignExile.length > 0 || foreignCommander.length > 0) {
+    if (foreignGraveyard.length > 0 || foreignExile.length > 0) {
       next = updatePlayer(next, opponent.id, (p) => ({
         ...p,
         zones: {
           ...p.zones,
           graveyard: [...p.zones.graveyard, ...foreignGraveyard],
           exile: [...p.zones.exile, ...foreignExile],
-          commander: [...p.zones.commander, ...foreignCommander],
         },
       }));
     }
@@ -939,9 +983,16 @@ export function moveCreaturesToGraveyard(state: GameState, deadIds: string[], ve
       const def = getCardDefinition(d.defId);
       next = { ...next, log: [...next.log, `${def.name} ${verb}.`] };
     }
+    // A commander dying is a real "commander replacement effect" - its
+    // owner chooses between the graveyard and the command zone, rather than
+    // this being automatic (see GameState.pendingCommanderZoneChoice). The
+    // graveyard shape is what it'd get if that choice comes back "no";
+    // beginCommanderZoneChoice derives the command-zone alternative itself.
     for (const d of toCommandZone) {
       const def = getCardDefinition(d.defId);
-      next = { ...next, log: [...next.log, `${def.name} dies and returns to ${ownerOf(d).name}'s command zone.`] };
+      const owner = ownerOf(d);
+      next = beginCommanderZoneChoice(next, owner.id, 'graveyard', graveyardMap(d));
+      next = { ...next, log: [...next.log, `${def.name} dies - ${owner.name} chooses whether it goes to the command zone or the graveyard.`] };
     }
     for (const d of toExileWithTokens) {
       const def = getCardDefinition(d.defId);

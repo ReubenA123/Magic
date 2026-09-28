@@ -249,6 +249,64 @@ export function useLocalGame(initialState: GameState) {
     return () => clearTimeout(timer);
   }, [state, dispatch]);
 
+  // --- AI: resolve its own pending optional pay-life (Seymour Flux) -------
+  // Same "nobody else can choose for it" problem again - without this, the
+  // AI's own upkeep just sat there forever the moment Seymour Flux was on
+  // its battlefield, since nothing else ever dispatches
+  // RESOLVE_OPTIONAL_PAY_LIFE for it (the banner only shows/responds to a
+  // human click - see GameBoard.tsx's pendingOptionalPayLife banner).
+  // Deliberately simple: pays if it can afford to without dropping to 0 or
+  // below, declines otherwise.
+  useEffect(() => {
+    if (state.winnerId) return;
+    if (state.mutualAdjustment.status !== 'inactive') return;
+    const pending = state.pendingOptionalPayLife;
+    if (!pending || pending.controllerId !== AI_PLAYER_ID) return;
+
+    const timer = setTimeout(() => {
+      const ai = state.players.find((p) => p.id === AI_PLAYER_ID)!;
+      dispatch({ type: 'RESOLVE_OPTIONAL_PAY_LIFE', accept: pending.lifeCost < ai.life }, AI_PLAYER_ID);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [state, dispatch]);
+
+  // --- AI: pick up its own pending revealed card (Dark Confidant) ---------
+  // Same "nobody else can choose for it" problem again - without this, the
+  // AI's Dark Confidant only ever seemed to work the one time a human
+  // happened to click its library pile themselves (soloControl lets you act
+  // on either side) - every upkeep after that just left the reveal sitting
+  // there forever with nobody automatically picking it up. Always accepts
+  // (no choice involved - "reveal top, take it, lose that much life" isn't
+  // optional once triggered).
+  useEffect(() => {
+    if (state.winnerId) return;
+    if (state.mutualAdjustment.status !== 'inactive') return;
+    const pending = state.pendingRevealPickup;
+    if (!pending || pending.controllerId !== AI_PLAYER_ID) return;
+
+    const timer = setTimeout(() => {
+      dispatch({ type: 'RESOLVE_REVEAL_PICKUP' }, AI_PLAYER_ID);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [state, dispatch]);
+
+  // --- AI: resolve its own pending commander zone choice -------------------
+  // Same "nobody else can choose for it" problem again - the real "commander
+  // replacement effect" (see GameState.pendingCommanderZoneChoice). Always
+  // picks the command zone - simple, and generally the safer choice for a
+  // commander (avoids graveyard/exile hate, keeps it accessible to recast).
+  useEffect(() => {
+    if (state.winnerId) return;
+    if (state.mutualAdjustment.status !== 'inactive') return;
+    const pending = state.pendingCommanderZoneChoice;
+    if (!pending || pending.ownerId !== AI_PLAYER_ID) return;
+
+    const timer = setTimeout(() => {
+      dispatch({ type: 'RESOLVE_COMMANDER_ZONE_CHOICE', toCommandZone: true }, AI_PLAYER_ID);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [state, dispatch]);
+
   // --- AI: resolve its own pending optional transform (Jecht) -------------
   // Same "nobody else can choose for it" problem again. Deliberately simple:
   // always accepts. Gated to the same post-combat phases the server itself
@@ -296,6 +354,10 @@ export function useLocalGame(initialState: GameState) {
     if (state.pendingDiscard?.controllerId === AI_PLAYER_ID) return;
     if (state.pendingLibrarySearch?.controllerId === AI_PLAYER_ID) return;
     if (state.pendingManaColorChoice?.controllerId === AI_PLAYER_ID) return;
+    if (state.pendingWardPayment?.controllerId === AI_PLAYER_ID) return;
+    if (state.pendingOptionalPayLife?.controllerId === AI_PLAYER_ID) return;
+    if (state.pendingRevealPickup?.controllerId === AI_PLAYER_ID) return;
+    if (state.pendingCommanderZoneChoice?.ownerId === AI_PLAYER_ID) return;
 
     const timer = setTimeout(() => {
       const ai = state.players.find((p) => p.id === AI_PLAYER_ID)!;
@@ -349,7 +411,20 @@ export function useLocalGame(initialState: GameState) {
             return canPay(ai.manaPool, parseCostLabel(d.costLabel), 0);
           });
           if (castable) {
-            dispatch({ type: 'CAST_CARD', instanceId: castable.instanceId }, AI_PLAYER_ID);
+            const d = getCardDefinition(castable.defId);
+            // Tiered (Vincent's Limit Break, Cure, ...) and "choose one or
+            // more" (Clash of the Eikons) spells need a choice attached to
+            // the same CAST_CARD action or engine/actions.ts's castCard
+            // rejects it outright ("requires choosing one tier/mode") -
+            // without this the AI just bounced off its own hand forever,
+            // stuck failing to cast the same card every tick. The AI isn't
+            // smart about which one is best, so it always takes the
+            // cheapest tier (index 0 is {0} additional cost on every
+            // tieredModes card in the pool) / first mode - simple but at
+            // least it actually casts the spell.
+            const chosenTierIndex = d.tieredModes ? 0 : undefined;
+            const chosenModeIndices = d.chooseModes ? [0] : undefined;
+            dispatch({ type: 'CAST_CARD', instanceId: castable.instanceId, chosenTierIndex, chosenModeIndices }, AI_PLAYER_ID);
             break;
           }
 

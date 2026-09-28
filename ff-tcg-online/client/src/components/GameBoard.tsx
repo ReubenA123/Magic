@@ -2,8 +2,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { CardDefinition, CardInstance, GameAction, GameState, ManaColor, PlayerState, ZoneName } from '../types';
 import { getCardDefinition } from '../data/cards';
 import { parseCostLabel, canPay, effectiveCastCost, dynamicCostReduction, manaValue } from '../engine/mana';
-import { hasKeyword, hasKeywordEffective } from '../engine/keywords';
-import { effectivePower, effectiveToughness, equipmentContributions, isLegalPendingTarget as isLegalPendingTargetShared } from '../engine/combat';
+import { CombatKeyword, hasKeyword, hasKeywordEffective } from '../engine/keywords';
+import { effectivePower, effectiveToughness, equipmentContributions, hasBoardGrantedKeyword, isLegalPendingTarget as isLegalPendingTargetShared } from '../engine/combat';
 import { matchesLibrarySearchFilter } from '../engine/effects';
 import Card from './Card';
 import PhaseBar from './PhaseBar';
@@ -50,6 +50,37 @@ function findCard(state: GameState, instanceId: string): { player: PlayerState; 
     }
   }
   return null;
+}
+
+/** Printed/temporary OR board-granted (anthem, turn-gated group grant, ...) -
+ * the same "does this creature actually have this keyword right now" check
+ * the engine itself uses for legality, reused here purely for combat's
+ * visual flourishes (see combatZoneEl in GameBoard) so a granted keyword
+ * shows the same effect a printed one would. */
+function creatureHasKeywordNow(state: GameState, controllerId: string, instance: CardInstance, def: CardDefinition, keyword: CombatKeyword): boolean {
+  return hasKeywordEffective(def, instance, keyword) || hasBoardGrantedKeyword(state, controllerId, instance, def, keyword);
+}
+
+const COLOR_NAMES: Record<string, string> = { W: 'White', U: 'Blue', B: 'Black', R: 'Red', G: 'Green' };
+
+/** Which of this player's own permanents (The Darkness Crystal and its four
+ * siblings - see CardDefinition.reducesCastCostForColor) are currently
+ * discounting `def`'s cost, for the Modifiers breakdown in
+ * CardActionsPanel - mirrors the boardWideReduction loop in engine/mana.ts:
+ * dynamicCostReduction exactly, just building display text instead of a
+ * number. Empty whenever nothing on the board reduces this particular
+ * card's cost (wrong color, or no such permanent out). */
+function costReductionSourcesFor(def: CardDefinition, player: PlayerState): { sourceName: string; text: string }[] {
+  const ownCost = parseCostLabel(def.costLabel);
+  const sources: { sourceName: string; text: string }[] = [];
+  for (const c of player.zones.battlefield) {
+    const other = getCardDefinition(c.defId);
+    if (other.reducesCastCostForColor && (ownCost.colors[other.reducesCastCostForColor.color] ?? 0) > 0) {
+      const colorName = COLOR_NAMES[other.reducesCastCostForColor.color] ?? other.reducesCastCostForColor.color;
+      sources.push({ sourceName: other.name, text: `${colorName} spells cost ${other.reducesCastCostForColor.amount} less.` });
+    }
+  }
+  return sources;
 }
 
 function splitBattlefield(cards: CardInstance[]) {
@@ -478,6 +509,20 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   // until ATTACH_CARD actually fires).
   const [pendingAttach, setPendingAttach] = useState<{ instanceId: string; ownerId: string } | null>(null);
   const [openZone, setOpenZone] = useState<{ playerId: string; zone: 'graveyard' | 'exile' } | null>(null);
+  // Library/graveyard/exile now share one corner spot instead of three -
+  // this is which one is currently the "front" pile for each player (keyed
+  // by player id, since your corner and the opponent's cycle independently).
+  // Purely a local display preference, not game state - defaults to
+  // 'library' (via the ?? fallback below) for anyone not in this map yet.
+  const [activeCornerZone, setActiveCornerZone] = useState<Record<string, 'library' | 'graveyard' | 'exile'>>({});
+  // Lets you collapse EITHER corner (yours or the opponent's -
+  // commander/library/graveyard/exile) down to a thin strip at any time, to
+  // reclaim board space - most useful in Full Board during combat where
+  // every column is competing for room. Keyed by player id. Undefined for a
+  // player defaults to shown for you, hidden for the opponent (see
+  // buildPlayerZonePieces's storedCornerCollapsed) - both are just starting
+  // points once a corner's actually been toggled explicitly.
+  const [collapsedCorners, setCollapsedCorners] = useState<Record<string, boolean>>({});
   const [selectedAttackers, setSelectedAttackers] = useState<Set<string>>(new Set());
   const [blockerAssignments, setBlockerAssignments] = useState<Record<string, string[]>>({});
   const [pendingBlocker, setPendingBlocker] = useState<string | null>(null);
@@ -574,6 +619,11 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   });
   const [editingZoom, setEditingZoom] = useState(false);
   const [boardViewExpanded, setBoardViewExpanded] = useState(false);
+  // Mutual Adjustment/Concede moved out of the Board View panel and behind
+  // their own small arrow next to the turn box - collapsed by default so
+  // they're out of the way, but always one click away right next to
+  // Next Phase/End Turn instead of buried in a separate panel across the screen.
+  const [turnExtrasExpanded, setTurnExtrasExpanded] = useState(false);
   // Full Board only - lets a crowded creatures/others/lands row collapse to
   // a thin summary strip so the two boards fit together more comfortably.
   // Keyed "playerId:rowKey" since either player's board can be full there.
@@ -726,6 +776,23 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   const openCardExilePlayGrant =
     openCard?.zone === 'exile' ? (state.exilePlayGrants.find((g) => g.instanceId === openCard.card.instanceId && g.playerId === yourPlayerId) ?? null) : null;
   const openCardIsReadOnly = !!openCard && openCard.player.id !== yourPlayerId && !mutualActive && !openCardExilePlayGrant;
+
+  // Equipment/Aura attached to a creature on the battlefield - lets the open
+  // panel cycle between the creature and whatever's attached to it (or, if
+  // you opened the attached card itself, back to its host and any siblings)
+  // via arrows in the panel header, rather than having to close the panel
+  // and go hunt for the tiny stack-cycle arrows on the battlefield card
+  // itself (see renderCreatureCard's stack-cycle-arrow buttons).
+  const openCardCycleGroup = (() => {
+    if (!openCard || openCard.zone !== 'battlefield') return null;
+    const battlefield = openCard.player.zones.battlefield;
+    const hostId = openCard.card.attachedToInstanceId ?? openCard.card.instanceId;
+    const host = battlefield.find((c) => c.instanceId === hostId);
+    if (!host) return null;
+    const attachments = battlefield.filter((c) => c.attachedToInstanceId === hostId);
+    if (attachments.length === 0) return null;
+    return [host, ...attachments].map((c) => ({ instanceId: c.instanceId, name: getCardDefinition(c.defId).name }));
+  })();
 
   // soloControl (VS AI) means the same person plays both sides, so whichever
   // side needs to declare attackers/blockers right now, it's them - without
@@ -1942,7 +2009,18 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
    * across the table, without granting any extra visibility or control.
    * `allowMinimizeRows` is Full-Board-only - see renderBattlefieldRow.
    */
-  function buildPlayerZonePieces(player: PlayerState, isOpponentSide: boolean, mirrorLayout: boolean, allowMinimizeRows: boolean) {
+  function buildPlayerZonePieces(
+    player: PlayerState,
+    isOpponentSide: boolean,
+    mirrorLayout: boolean,
+    allowMinimizeRows: boolean,
+    // Which way the collapse/expand arrow should point - the corner column
+    // sits at the LEFT edge everywhere except Full Board's right-hand rail
+    // (see the full-board-grid JSX, the only caller that passes true), so
+    // the glyphs need to mirror there: pointing further right would push
+    // off-screen instead of toward the board.
+    cornerOnRightSide: boolean = false,
+  ) {
     const { creatures, others, lands } = splitBattlefield(player.zones.battlefield);
     const visibleCreatures = creatures.filter((c) => !isInCombatZone(player.id, c.instanceId));
     const creatureGroups = groupForStacking(orderedRow(player.id, 'creatures', visibleCreatures), (c) => state.pendingDeaths.includes(c.instanceId));
@@ -1962,13 +2040,19 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     const pendingReveal = state.pendingRevealPickup?.controllerId === player.id ? state.pendingRevealPickup : null;
     const canActOnLibrary = canDrawHere;
 
-    const commanderColumn = (
-      <div className="corner-column">
-        {commanderCard ? (
-          <Card definition={getCardDefinition(commanderCard.defId)} instance={commanderCard} onClick={() => setOpenPanelId(commanderCard.instanceId)} />
-        ) : (
-          <div className="corner-box">In play</div>
-        )}
+    // Library/graveyard/exile share one "pile" spot now instead of two
+    // separate corners (see activeCornerZone) - whichever is active renders
+    // as the big clickable pile, the other two shrink to a small label
+    // underneath that switches which one is active when clicked. Library
+    // keeps its existing draw/reveal-pickup click behavior; graveyard/exile
+    // keep their existing "click to open the full zone view" behavior -
+    // only which one is up front changed, not what clicking it does.
+    const activeZone = activeCornerZone[player.id] ?? 'library';
+    const inactiveZones = (['library', 'graveyard', 'exile'] as const).filter((z) => z !== activeZone);
+    const ZONE_LABEL: Record<'library' | 'graveyard' | 'exile', string> = { library: 'Library', graveyard: 'Graveyard', exile: 'Exile' };
+
+    const activePileEl =
+      activeZone === 'library' ? (
         <div
           className={`library-stack ${isDrawStep ? 'library-stack-draw-highlight' : ''} ${canActOnLibrary ? 'library-stack-clickable' : ''} ${pendingReveal ? 'library-stack-reveal-pending' : ''}`}
           onClick={() => {
@@ -1985,17 +2069,12 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           )}
           <span className="library-stack-count">{player.zones.library.length}</span>
         </div>
-        <ManaRow player={player} />
-      </div>
-    );
-
-    const graveyardExileColumn = (
-      <div className="corner-column">
-        {(['graveyard', 'exile'] as const).map((zoneName) => {
-          const cards = player.zones[zoneName];
+      ) : (
+        (() => {
+          const cards = player.zones[activeZone];
           const topCard = cards[cards.length - 1];
           return (
-            <div key={zoneName} className="zone-pile" onClick={() => setOpenZone({ playerId: player.id, zone: zoneName })}>
+            <div className="zone-pile" onClick={() => setOpenZone({ playerId: player.id, zone: activeZone })}>
               {topCard ? (
                 topCard.faceDown ? (
                   <Card definition={{ id: '', name: '', type: 'creature', costLabel: '', text: '', imagePath: '' }} faceDown />
@@ -2006,10 +2085,68 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                 <div className="card card-empty-pile" />
               )}
               <span className="zone-pile-count">{cards.length}</span>
-              <span className="zone-pile-label">{zoneName === 'graveyard' ? 'Graveyard' : 'Exile'}</span>
             </div>
           );
-        })}
+        })()
+      );
+
+    // Either corner - yours or the opponent's - can be collapsed to a thin
+    // strip at will, to reclaim board space. While it's THIS player's draw
+    // step and they haven't drawn yet, it pops back out automatically
+    // regardless of the stored preference (so you never miss watching a
+    // draw happen), then folds back down again the instant they draw -
+    // collapsedCorners itself is untouched by this, so it's a purely
+    // temporary display override, not a change to what you last chose.
+    const autoPeekDuringDraw = state.phase === 'draw' && state.activePlayerId === player.id && !player.hasDrawnThisTurn;
+    // Yours defaults to shown, the opponent's defaults to hidden - both are
+    // just starting points now that either side can be freely toggled.
+    const storedCornerCollapsed = collapsedCorners[player.id] ?? player.id !== yourPlayerId;
+    const cornerCollapsed = storedCornerCollapsed && !autoPeekDuringDraw;
+    const collapsedArrowGlyph = cornerOnRightSide ? '◀' : '▶';
+    const expandedArrowGlyph = cornerOnRightSide ? '▶' : '◀';
+
+    const cornerColumn = cornerCollapsed ? (
+      <div className="corner-column corner-column-collapsed">
+        <button
+          className="corner-column-toggle-arrow corner-column-toggle-arrow-hidden"
+          onClick={() => setCollapsedCorners((prev) => ({ ...prev, [player.id]: false }))}
+          title="Show commander/library/graveyard/exile"
+          aria-label="Show commander/library/graveyard/exile"
+        >
+          {collapsedArrowGlyph}
+        </button>
+      </div>
+    ) : (
+      <div className="corner-column">
+        <button
+          className="corner-column-toggle-arrow"
+          onClick={() => setCollapsedCorners((prev) => ({ ...prev, [player.id]: true }))}
+          title="Hide commander/library/graveyard/exile to save space"
+          aria-label="Hide commander/library/graveyard/exile to save space"
+        >
+          {expandedArrowGlyph}
+        </button>
+        {commanderCard ? (
+          <Card definition={getCardDefinition(commanderCard.defId)} instance={commanderCard} onClick={() => setOpenPanelId(commanderCard.instanceId)} />
+        ) : (
+          <div className="corner-box">In play</div>
+        )}
+        <div className="corner-pile-cycler">
+          <span className="corner-pile-active-label">{ZONE_LABEL[activeZone]}</span>
+          {activePileEl}
+          <div className="corner-pile-others">
+            {inactiveZones.map((z) => (
+              <button
+                key={z}
+                className="corner-pile-other-button"
+                onClick={() => setActiveCornerZone((prev) => ({ ...prev, [player.id]: z }))}
+                title={`Look at ${ZONE_LABEL[z].toLowerCase()}`}
+              >
+                {ZONE_LABEL[z]} ({player.zones[z].length})
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
     );
 
@@ -2084,14 +2221,20 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
       !!pendingTargetForYou && pendingTargetForYou.effect.type === 'dealDamageToAnyOtherTargetAndSelf' && !!pendingTargetForYou.firstInstanceId;
 
     const lifeRow = (
-      <div className="life-row">
+      <>
+        {/* Mana lives here now instead of inside the corner column, so it
+            stays visible even when that corner is collapsed (see
+            collapsedCorners) - it's needed on every turn, not just while
+            looking at your deck. */}
+        <ManaRow player={player} />
+        <div className="life-row">
         <div className="life-total-group">
           <span
             className={`life-total${canTargetThisPlayer ? ' life-total-targetable' : ''}`}
             onClick={canTargetThisPlayer ? () => onAction({ type: 'CHOOSE_TARGET', targetInstanceId: null, targetPlayerId: player.id }, pendingTargetForYou!.controllerId) : undefined}
             title={canTargetThisPlayer ? `Target ${player.name}` : undefined}
           >
-            {player.name}: {player.life} life
+            {player.life} life
           </span>
           {player.commanderDamageTaken > 0 && <span className="commander-damage-badge">Commander dmg: {player.commanderDamageTaken}</span>}
           {mutualActive && (
@@ -2104,15 +2247,16 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
             </div>
           )}
         </div>
-      </div>
+        </div>
+      </>
     );
 
-    return { commanderColumn, graveyardExileColumn, centerColumn, handRow, lifeRow };
+    return { cornerColumn, centerColumn, handRow, lifeRow };
   }
 
   /** My View/Opponent View - unchanged single-section layout, corner columns inline. */
   function renderPlayerZone(player: PlayerState, isOpponentSide: boolean, mirrorLayout: boolean = isOpponentSide) {
-    const { commanderColumn, graveyardExileColumn, centerColumn, handRow, lifeRow } = buildPlayerZonePieces(player, isOpponentSide, mirrorLayout, false);
+    const { cornerColumn, centerColumn, handRow, lifeRow } = buildPlayerZonePieces(player, isOpponentSide, mirrorLayout, false);
     return (
       // player-zone-fill: this is only ever the single board shown in My
       // View/Opponent View (Full Board builds its own zones separately) -
@@ -2124,15 +2268,13 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
         <div className="zone-top-row">
           {mirrorLayout ? (
             <>
-              {graveyardExileColumn}
               {centerColumn}
-              {commanderColumn}
+              {cornerColumn}
             </>
           ) : (
             <>
-              {commanderColumn}
+              {cornerColumn}
               {centerColumn}
-              {graveyardExileColumn}
             </>
           )}
         </div>
@@ -2252,9 +2394,39 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                 state,
               )
             : null;
+
+          // Purely cosmetic combat flourishes - none of these change what's
+          // legal, just what an attacker with the keyword looks like while
+          // it's in the combat zone. See creatureHasKeywordNow for why this
+          // checks board-granted keywords too, not just printed/temporary ones.
+          const attackerDef = getCardDefinition(found.card.defId);
+          const hasFlying = creatureHasKeywordNow(state, found.player.id, found.card, attackerDef, 'flying');
+          const hasTrample = creatureHasKeywordNow(state, found.player.id, found.card, attackerDef, 'trample');
+          const hasFirstStrike = creatureHasKeywordNow(state, found.player.id, found.card, attackerDef, 'first strike');
+          const hasDoubleStrike = creatureHasKeywordNow(state, found.player.id, found.card, attackerDef, 'double strike');
+          const hasLifelink = creatureHasKeywordNow(state, found.player.id, found.card, attackerDef, 'lifelink');
+          const hasDeathtouch = creatureHasKeywordNow(state, found.player.id, found.card, attackerDef, 'deathtouch');
+          const hasMenace = creatureHasKeywordNow(state, found.player.id, found.card, attackerDef, 'menace');
+          // "Whenever this creature deals combat damage to a player, that
+          // player loses the game" (Summon: Primal Odin's Zantetsuken
+          // chapter, granted at lore counter 2 - see
+          // CardDefinition.saga/grantCombatDamageToPlayerCausesLoss) - the
+          // lore-counter check, not just the granted flag alone, is what
+          // keeps this from also lighting up after chapter III (which
+          // sacrifices Odin anyway, but a future card with a similar
+          // grant-at-a-chapter pattern might not). Blocking doesn't make
+          // this safe to ignore - with trample, damage still gets through
+          // (engine/combat.ts's dealDirectDamageToDefender handles the
+          // trample-over case exactly the same as an unblocked hit), so the
+          // warning stays regardless of whether a blocker is assigned.
+          const loreCounterAmount = found.card.counters.find((c) => c.label === 'lore')?.amount ?? 0;
+          const hasLoseGameOnDamage = loreCounterAmount === 2 && !!found.card.grantedCombatDamageToPlayerCausesLoss;
+
           const attackerCellEl = (
             <div
-              className={`combat-attacker-cell ${attackerIsDead || singleBlockPreview?.attackerDies ? 'destroyed-card-wrapper' : ''}`}
+              className={`combat-attacker-cell ${attackerIsDead || singleBlockPreview?.attackerDies ? 'destroyed-card-wrapper' : ''} ${
+                hasFlying ? 'combat-fx-flying' : ''
+              } ${hasTrample ? 'combat-fx-trample' : ''}`}
               draggable={isDeclaringAttackers}
               onDragStart={() => isDeclaringAttackers && setDraggedInstanceId(id)}
             >
@@ -2263,12 +2435,30 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                 instance={{ ...found.card, tapped: false }}
                 onClick={() => setOpenPanelId(id)}
               />
+              {(hasFirstStrike || hasDoubleStrike) && (
+                <span
+                  className={`combat-fx-strike-badge ${hasDoubleStrike ? 'combat-fx-strike-badge-double' : ''}`}
+                  title={hasDoubleStrike ? 'Double strike' : 'First strike'}
+                >
+                  {'⚡'}
+                  {hasDoubleStrike && <span className="combat-fx-strike-badge combat-fx-strike-badge-echo">{'⚡'}</span>}
+                </span>
+              )}
+              {hasLifelink && (
+                <span className="combat-fx-lifelink" aria-hidden="true">
+                  {[0, 1, 2].map((i) => (
+                    <span key={i} className={`combat-fx-lifelink-plus combat-fx-lifelink-plus-${i}`}>
+                      {'+'}
+                    </span>
+                  ))}
+                </span>
+              )}
             </div>
           );
 
           const blockerSlotEl = blockerSlotsVisible && (
             <div
-              className="combat-blocker-slot"
+              className={`combat-blocker-slot ${hasLoseGameOnDamage ? 'combat-blocker-slot-lethal' : ''}`}
               ref={columnIndex === 0 ? firstBlockerSlotRef : undefined}
               onDragOver={(e) => isDeclaringBlockers && e.preventDefault()}
               onDrop={() => {
@@ -2279,8 +2469,28 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
               }}
               onClick={() => isDeclaringBlockers && handleAttackerClickForBlocking(id)}
             >
+              {hasDeathtouch && (
+                <span className="combat-fx-deathtouch-badge" title="Deathtouch - any damage from this attacker is lethal">
+                  {'☠️'}
+                </span>
+              )}
               {blockers.length === 0 ? (
-                <span className="combat-blocker-slot-empty">{isDeclaringBlockers ? 'Drop blocker here' : 'No blockers'}</span>
+                hasMenace ? (
+                  // Menace needs two or more blockers - shown as two empty
+                  // slots side by side instead of one, even though dropping
+                  // on either half still just calls the same assignBlocker
+                  // (the parent .combat-blocker-slot is the real drop target).
+                  <div className="combat-blocker-slot-menace-pair">
+                    <span className="combat-blocker-slot-empty combat-blocker-slot-empty-half">
+                      {isDeclaringBlockers ? 'Drop blocker here' : hasLoseGameOnDamage ? 'If this creature deals combat damage you lose the game' : 'No blockers'}
+                    </span>
+                    <span className="combat-blocker-slot-empty combat-blocker-slot-empty-half">{isDeclaringBlockers ? 'Drop blocker here' : 'Menace — needs 2+'}</span>
+                  </div>
+                ) : (
+                  <span className="combat-blocker-slot-empty">
+                    {isDeclaringBlockers ? 'Drop blocker here' : hasLoseGameOnDamage ? 'If this creature deals combat damage you lose the game' : 'No blockers'}
+                  </span>
+                )
               ) : blockers.length >= 3 ? (
                 // Three or more read better as a pile, like a land stack
                 // on the battlefield - click it to see (and, while still
@@ -2517,6 +2727,14 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                                   ? `Choose a creature you control for ${pendingTargetSourceName}'s ability - or Skip.`
                                   : effect.type === 'exileTargetPermanent'
                                   ? `Choose ${effect.targetFilter === 'artifact' ? 'an artifact' : effect.targetFilter === 'creature' ? 'a creature' : 'a permanent'} for ${pendingTargetSourceName}'s ability to exile (either player's).`
+                                  : effect.type === 'becomeCopyOfAnyCreatureThenAddCounters'
+                                  ? `Choose a creature (either player's) for ${pendingTargetSourceName} to enter as a copy of, or Skip to enter as itself.`
+                                  : effect.type === 'exileTargetCreatureWithLessPowerUntilSourceLeaves'
+                                  ? `Choose a creature the defending player controls with power less than ${pendingTargetSourceName}'s for it to exile until ${pendingTargetSourceName} leaves the battlefield.`
+                                  : effect.type === 'putStunCounterOnTargetAttacker'
+                                  ? `Choose a creature attacking you for ${pendingTargetSourceName} to put a Stun counter on.`
+                                  : effect.type === 'proliferate'
+                                  ? `Choose a permanent with a counter on it to proliferate, or Skip to stop.`
                                   : effect.targetFilter === 'artifactOrEnchantment'
                                   ? `Choose an artifact or enchantment for ${pendingTargetSourceName}'s ability (either player's).`
                                   : effect.targetFilter === 'anyPermanent'
@@ -2685,6 +2903,27 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           );
         })()}
 
+      {state.pendingCommanderZoneChoice &&
+        (state.pendingCommanderZoneChoice.ownerId === yourPlayerId || soloControl) &&
+        (() => {
+          const pending = state.pendingCommanderZoneChoice;
+          const def = getCardDefinition(pending.destinationCard.defId);
+          const destinationLabel = pending.destinationZone.charAt(0).toUpperCase() + pending.destinationZone.slice(1);
+          return (
+            <div className="pending-target-banner">
+              <span>
+                {def.name}: send Commander to Command Zone or {destinationLabel}?
+              </span>
+              <button className="opponent-view-exit-button" onClick={() => onAction({ type: 'RESOLVE_COMMANDER_ZONE_CHOICE', toCommandZone: true }, pending.ownerId)}>
+                Command Zone
+              </button>
+              <button className="opponent-view-exit-button" onClick={() => onAction({ type: 'RESOLVE_COMMANDER_ZONE_CHOICE', toCommandZone: false }, pending.ownerId)}>
+                {destinationLabel}
+              </button>
+            </div>
+          );
+        })()}
+
       {state.pendingGraveyardExile &&
         (() => {
           const pending = state.pendingGraveyardExile;
@@ -2727,20 +2966,18 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
       {effectiveViewMode === 'full' ? (
         (() => {
           const opponentPieces = buildPlayerZonePieces(opponent, true, true, true);
-          const yourPieces = buildPlayerZonePieces(you, false, false, true);
+          const yourPieces = buildPlayerZonePieces(you, false, false, true, true);
           return (
             <div className={`full-board-grid ${showCombatZones ? 'full-board-combat' : ''}`}>
-              {/* Commander/graveyard live outside the scaled area entirely, on
-                  sticky rails - zooming the middle to fit both boards can no
-                  longer drag them in from the true screen edges, since they're
-                  never part of what's being scaled. Mirrored left/right per
-                  player, same as the center rows already are: opponent's
-                  graveyard sits opposite their commander, and yours the same
-                  way around - not both commanders stacked on one side. */}
-              <div className="full-board-side-rail">
-                {opponentPieces.graveyardExileColumn}
-                {yourPieces.commanderColumn}
-              </div>
+              {/* Commander/library-graveyard-exile corner lives outside the
+                  scaled area entirely, on sticky rails - zooming the middle
+                  to fit both boards can no longer drag it in from the true
+                  screen edges, since it's never part of what's being scaled.
+                  Both rails render now - each one collapses independently
+                  (see collapsedCorners), so you can peek at or hide either
+                  side's commander/library/graveyard/exile whenever you want
+                  instead of the opponent's being unconditionally hidden. */}
+              <div className="full-board-side-rail">{opponentPieces.cornerColumn}</div>
               {renderZoomedBoard(
                 <>
                   <section className="player-zone opponent-zone">
@@ -2756,10 +2993,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                   </section>
                 </>,
               )}
-              <div className="full-board-side-rail">
-                {opponentPieces.commanderColumn}
-                {yourPieces.graveyardExileColumn}
-              </div>
+              <div className="full-board-side-rail">{yourPieces.cornerColumn}</div>
             </div>
           );
         })()
@@ -2831,10 +3065,16 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
               N's turn" shortcut would take for each of them too. */}
           {state.activePlayerId !== yourPlayerId && (
             <button
-              className="opponent-turn-eye"
+              className={`opponent-turn-eye ${viewMode === 'opponent' ? 'opponent-turn-eye-active' : ''}`}
               disabled={showCombatZones}
-              title={showCombatZones ? 'Combat shows the full board until it resolves' : "Opponent's turn - click to watch (Opponent View)"}
-              onClick={() => changeViewMode('opponent')}
+              title={
+                showCombatZones
+                  ? 'Combat shows the full board until it resolves'
+                  : viewMode === 'opponent'
+                    ? 'Click to stop watching (back to My View)'
+                    : "Opponent's turn - click to watch (Opponent View)"
+              }
+              onClick={() => changeViewMode(viewMode === 'opponent' ? 'mine' : 'opponent')}
             >
               {'\u{1F441}'}
             </button>
@@ -2874,31 +3114,6 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                     </button>
                   )}
                 </div>
-                <MutualAdjustmentControls
-                  state={state}
-                  yourPlayerId={yourPlayerId}
-                  onRequest={() => onAction({ type: 'REQUEST_MUTUAL_ADJUSTMENT' }, yourPlayerId)}
-                  onRespond={(accept) => onAction({ type: 'RESPOND_MUTUAL_ADJUSTMENT', accept }, yourPlayerId)}
-                  onRequestExit={() => onAction({ type: 'REQUEST_EXIT_MUTUAL_ADJUSTMENT' }, yourPlayerId)}
-                  onRespondExit={(accept) => onAction({ type: 'RESPOND_EXIT_MUTUAL_ADJUSTMENT', accept }, yourPlayerId)}
-                />
-                {/* Hold rather than click - see startConcedeHold - so an
-                    accidental tap never ends the game outright. */}
-                <button
-                  className="concede-button"
-                  onMouseDown={startConcedeHold}
-                  onMouseUp={cancelConcedeHold}
-                  onMouseLeave={cancelConcedeHold}
-                  onTouchStart={startConcedeHold}
-                  onTouchEnd={cancelConcedeHold}
-                  onTouchCancel={cancelConcedeHold}
-                >
-                  <span
-                    className="concede-button-fill"
-                    style={{ width: concedeHolding ? '100%' : '0%', transitionDuration: concedeHolding ? `${CONCEDE_HOLD_MS}ms` : '0s' }}
-                  />
-                  <span className="concede-button-label">Hold to Concede</span>
-                </button>
               </div>
             )}
           </div>
@@ -2910,21 +3125,61 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
         onMouseDown={startPhaseDrag}
         style={phaseBoxPos ? { left: phaseBoxPos.x, top: phaseBoxPos.y, right: 'auto', bottom: 'auto' } : undefined}
       >
-        <PhaseBar
-          phase={state.phase}
-          turnNumber={state.turnNumber}
-          isYourTurn={isYourTurn || state.phase === 'combat_damage'}
-          nextLabel={nextLabel}
-          hideEndTurn={isDeclaringAttackers || isDeclaringBlockers || isWaitingOnBlockers || state.phase === 'combat_damage'}
-          nextDisabled={isWaitingOnBlockers || (state.phase === 'combat_damage' && youAreReadyForCombat)}
-          onNextPhase={() => {
-            if (isDeclaringAttackers) confirmAttackers();
-            else if (isDeclaringBlockers) confirmBlockers();
-            else if (isWaitingOnBlockers) return;
-            else onAction({ type: 'NEXT_PHASE' }, yourPlayerId);
-          }}
-          onEndTurn={() => onAction({ type: 'END_TURN' }, state.activePlayerId)}
-        />
+        <div className="turn-box-row">
+          <button
+            className="turn-extras-toggle"
+            onClick={() => setTurnExtrasExpanded((v) => !v)}
+            title={turnExtrasExpanded ? 'Hide Mutual Adjustment/Concede' : 'Mutual Adjustment/Concede'}
+            aria-label={turnExtrasExpanded ? 'Hide Mutual Adjustment/Concede' : 'Mutual Adjustment/Concede'}
+          >
+            {'▲'}
+          </button>
+          <PhaseBar
+            phase={state.phase}
+            turnNumber={state.turnNumber}
+            isYourTurn={isYourTurn || state.phase === 'combat_damage'}
+            nextLabel={nextLabel}
+            hideEndTurn={isDeclaringAttackers || isDeclaringBlockers || isWaitingOnBlockers || state.phase === 'combat_damage'}
+            nextDisabled={isWaitingOnBlockers || (state.phase === 'combat_damage' && youAreReadyForCombat)}
+            onNextPhase={() => {
+              if (isDeclaringAttackers) confirmAttackers();
+              else if (isDeclaringBlockers) confirmBlockers();
+              else if (isWaitingOnBlockers) return;
+              else onAction({ type: 'NEXT_PHASE' }, yourPlayerId);
+            }}
+            onEndTurn={() => onAction({ type: 'END_TURN' }, state.activePlayerId)}
+          />
+        </div>
+        {turnExtrasExpanded && (
+          <div className="turn-extras-panel">
+            <MutualAdjustmentControls
+              state={state}
+              yourPlayerId={yourPlayerId}
+              onRequest={() => onAction({ type: 'REQUEST_MUTUAL_ADJUSTMENT' }, yourPlayerId)}
+              onRespond={(accept) => onAction({ type: 'RESPOND_MUTUAL_ADJUSTMENT', accept }, yourPlayerId)}
+              onRequestExit={() => onAction({ type: 'REQUEST_EXIT_MUTUAL_ADJUSTMENT' }, yourPlayerId)}
+              onRespondExit={(accept) => onAction({ type: 'RESPOND_EXIT_MUTUAL_ADJUSTMENT', accept }, yourPlayerId)}
+            />
+            {/* Hold rather than click - see startConcedeHold - so an
+                accidental tap never ends the game outright. Still a 3s
+                hold, just relabeled to fit this smaller panel. */}
+            <button
+              className="concede-button"
+              onMouseDown={startConcedeHold}
+              onMouseUp={cancelConcedeHold}
+              onMouseLeave={cancelConcedeHold}
+              onTouchStart={startConcedeHold}
+              onTouchEnd={cancelConcedeHold}
+              onTouchCancel={cancelConcedeHold}
+            >
+              <span
+                className="concede-button-fill"
+                style={{ width: concedeHolding ? '100%' : '0%', transitionDuration: concedeHolding ? `${CONCEDE_HOLD_MS}ms` : '0s' }}
+              />
+              <span className="concede-button-label">Concede</span>
+            </button>
+          </div>
+        )}
         {phaseBoxPos && (
           <button className="phase-bar-compact-button secondary reset-position-button" onClick={() => setPhaseBoxPos(null)}>
             Reset turn box location
@@ -2962,6 +3217,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
             }).length
           }
           costReduction={dynamicCostReduction(getCardDefinition(openCard.card.defId), openCard.player)}
+          costReductionSources={costReductionSourcesFor(getCardDefinition(openCard.card.defId), openCard.player)}
           ownerBattlefieldDefIds={openCard.player.zones.battlefield.map((c) => c.defId)}
           exilePlayGrant={openCardExilePlayGrant}
           alreadyPlayedLand={
@@ -2981,6 +3237,8 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           equipmentContributions={
             openCard.zone === 'battlefield' ? equipmentContributions(state, openCard.player.id, openCard.card.instanceId) : undefined
           }
+          cycleGroup={openCardCycleGroup}
+          onCycleTo={(instanceId) => setOpenPanelId(instanceId)}
           attachedToName={
             openCard.card.attachedToInstanceId ? getCardDefinition(findCard(state, openCard.card.attachedToInstanceId)?.card.defId ?? '')?.name ?? null : null
           }

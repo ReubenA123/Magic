@@ -19,7 +19,7 @@ export const CARD_POOL: CardDefinition[] = [
   { id: 'a-realm-reborn',
     name: 'A Realm Reborn',
     type: 'enchantment',
-    costLabel: '4GG',
+    costLabel: '{4}{G}{G}',
     text: 'Other permanents you control have Tap Add one mana of any color',
     imagePath: '/assets/cards/a-realm-reborn.webp',
     grantsManaAbilityToOthers: 'any',
@@ -29,7 +29,7 @@ export const CARD_POOL: CardDefinition[] = [
     name: 'Absolute Virtue',
     type: 'creature',
     subtype: 'Legendary Creature \u2014 Avatar Warrior',
-    costLabel: '6WU',
+    costLabel: '{6}{W}{U}',
     power: 8,
     toughness: 8,
     text: "This spell can\u2019t be countered. Flying, You have protection from each of your opponents. (You can\u2019t be dealt damage, enchanted, or targeted by anything controlled by your opponents.)",
@@ -42,7 +42,7 @@ export const CARD_POOL: CardDefinition[] = [
     id: "adventurer's-airship",
     name: 'Adventurers Airship',
     type: 'artifact',
-    costLabel: '3',
+    costLabel: '{3}',
     // Was missing its `crew` field entirely, so it could never actually be
     // crewed. The optional "may draw, then discard" attack trigger is
     // deferred (this engine's LootEffect draw is always mandatory).
@@ -65,7 +65,7 @@ export const CARD_POOL: CardDefinition[] = [
     name: 'Adelbert Steiner',
     type: 'creature',
     subtype: 'Legendary Creature Human Knight',
-    costLabel: '1W',
+    costLabel: '{1}{W}',
     power: 3,
     toughness: 4,
     text: 'Vigilance. A knight\u2019s duty does not end at the front line.',
@@ -76,7 +76,7 @@ export const CARD_POOL: CardDefinition[] = [
     name: 'Aerith Gainsborough',
     type: 'creature',
     subtype: 'Legendary Creature \u2014 Human Cleric',
-    costLabel: '2W',
+    costLabel: '{2}{W}',
     power: 2,
     toughness: 2,
     text: 'Lifelink. Whenever you gain life, put a +1/+1 counter on Aerith Gainsborough. When Aerith Gainsborough dies, put X +1/+1 counters on each legendary creature you control where X is the number of +1/+1 counters on Aerith Gainsborough.',
@@ -89,11 +89,11 @@ export const CARD_POOL: CardDefinition[] = [
     name: 'Aettir and Priwen',
     type: 'artifact',
     subtype: 'Legendary Artifact - Equipment',
-    costLabel: '6',
+    costLabel: '{6}',
     text: "Equipped creatures has base power and toughness X/X, where X is your life total. Equip 5",
     imagePath: '/assets/cards/aettir-and-priwen.webp',
     attachesTo: 'creature',
-    equipCost: '5',
+    equipCost: '{5}',
     setsBasePowerToughnessToControllerLife: true,
   },
   {
@@ -101,7 +101,7 @@ export const CARD_POOL: CardDefinition[] = [
     name: 'Ahriman',
     type: 'creature',
     subtype: 'Creature Eye Horror',
-    costLabel: '2B',
+    costLabel: '{2}{B}',
     power: 2,
     toughness: 2,
     text: 'Flying, deathtouch. 3, Sacrifice another creature or artifact: Draw a card.',
@@ -110,7 +110,7 @@ export const CARD_POOL: CardDefinition[] = [
       {
         id: 'ahriman-draw',
         label: 'Sacrifice, Draw',
-        cost: { manaLabel: '3', sacrificeAnother: 'artifactOrCreature' },
+        cost: { manaLabel: '{3}', sacrificeAnother: 'artifactOrCreature' },
         effects: [{ type: 'loot', drawCount: 1, discardCount: 0 }],
         effectText: 'Sacrifice another creature or artifact: Draw a card.',
       },
@@ -120,10 +120,10 @@ export const CARD_POOL: CardDefinition[] = [
     id: 'airship-crash',
     name: 'Airship Crash',
     type: 'instant',
-    costLabel: '2G',
+    costLabel: '{2}{G}',
     text: 'Destroy target artifact, enchantment, or creature with flying. Cycling 2 (2, Discard this card: Draw a card.)',
     onCast: [{ type: 'destroyTarget', targetFilter: 'artifactEnchantmentOrFlyingCreature' }],
-    cycling: { cost: '2' },
+    cycling: { cost: '{2}' },
     imagePath: '/assets/cards/airship-crash.webp',
   },
   {
@@ -131,7 +131,7 @@ export const CARD_POOL: CardDefinition[] = [
     name: 'Al Bhed Salvagers',
     type: 'creature',
     subtype: 'Creature Human Artificer Warrior',
-    costLabel: '2B',
+    costLabel: '{2}{B}',
     power: 2,
     toughness: 3,
     text: 'Whenever this creature or another creature or artifact you control dies, target opponent loses 1 life and you gain 1 life.',
@@ -139,11 +139,30 @@ export const CARD_POOL: CardDefinition[] = [
     onAnyDeathDrain: { opponentLifeLoss: 1, controllerLifeGain: 1 },
   },
   {
+    id: 'altered-ego',
+    name: 'Altered Ego',
+    type: 'creature',
+    subtype: 'creature shapeshifter',
+    costLabel: '{2}{X}{G}{U}',
+    power: 0,
+    toughness: 0,
+    // "This spell can't be countered" has nothing to hook into - this
+    // engine has no stack/priority system, so there's no countermagic at
+    // all yet (see Syncopate's own card comment for the same conclusion).
+    // Left as flavor/rules text only, same as Syncopate's un-implemented
+    // counter effect.
+    text: 'This spell can’t be countered.\n' +
+      'You may have this creature enter as a copy of any creature on the battlefield, ' +
+      'except it enters with X additional +1/+1 counters on it',
+    imagePath: '/assets/cards/alter-ego.webp',
+    onEnter: [{ type: 'becomeCopyOfAnyCreatureThenAddCounters' }],
+  },
+  {
     id: 'ambrosia-whiteheart',
     name: 'Ambrosia Whiteheart',
     type: 'creature',
     subtype: 'Legendary Creature Bird',
-    costLabel: '1W',
+    costLabel: '{1}{W}',
     power: 2,
     toughness: 2,
     text: "When Ambrosia Whiteheart enters, you may return another permanent you control to its owner's hand. Landfall \u2014 Whenever a land you control enters, Ambrosia Whiteheart gets +1/+0 until end of turn.",
@@ -156,13 +175,13 @@ export const CARD_POOL: CardDefinition[] = [
     name: 'Ancient Adamantoise',
     type: 'creature',
     subtype: 'Creature Turtle',
-    costLabel: '5GGG',
+    costLabel: '{5}{G}{G}{G}',
     power: 8,
     toughness: 20,
     text: "Vigilance, ward 3. Damage isn't removed from this creature during cleanup steps. All damage that would be dealt to you and other permanents you control is dealt to this creature instead. When this creature dies, exile it and create ten tapped Treasure tokens.",
     imagePath: '/assets/cards/ancient-adamantoise.webp',
     onDeathExileAndCreateTokens: { tokenId: 'token-treasure', count: 10 },
-    wardCost: { mana: '3' },
+    wardCost: { mana: '{3}' },
     // "Damage isn't removed during cleanup" and "all damage to you/your
     // other permanents is dealt to this creature instead" are still
     // deferred - the former needs a per-creature damage-persistence flag
@@ -174,7 +193,7 @@ export const CARD_POOL: CardDefinition[] = [
     name: 'Ardyn, the Usurper',
     type: 'creature',
     subtype: 'Legendary Creature \u2014 Elder Human Noble',
-    costLabel: '5BBB',
+    costLabel: '{5}{B}{B}{B}',
     power: 4,
     toughness: 4,
     text: "Demons you control have menace, lifelink, and haste. Starscourge \u2014 At the beginning of combat on your turn, exile up to one target creature card from a graveyard. If you exiled a card this way, create a token thats a copy of that card, except it's a 5/5 black Demon.",
@@ -200,7 +219,7 @@ export const CARD_POOL: CardDefinition[] = [
     name: 'Ashe, Princess of Dalmasca',
     type: 'creature',
     subtype: 'Legendary Creature \u2014 Human Rebel Noble',
-    costLabel: '2W',
+    costLabel: '{2}{W}',
     power: 3,
     toughness: 2,
     text: "Whenever Ashe attacks, look at the top five cards of your library. You may reveal an artifact card from among them and put it into your hand. Put the rest on the bottom of your library in a random order.",
@@ -212,7 +231,7 @@ export const CARD_POOL: CardDefinition[] = [
     name: "Astrologian's Planisphere",
     type: 'artifact',
     subtype: 'Equipment',
-    costLabel: '1W',
+    costLabel: '{1}{W}',
     // Was missing its Equipment subtype entirely (on top of attachesTo/
     // equipCost), so it could never actually be equipped to anything.
     // The "whenever you draw your third card each turn" half of the
@@ -222,16 +241,34 @@ export const CARD_POOL: CardDefinition[] = [
     text: "Job select (When this Equipment enters, create a 1/1 colorless Hero creature token, then attach this to it.) Equipped creature is a Wizard in addition to its other types and has “Whenever you cast a noncreature spell and whenever you draw your third card each turn, put a +1/+1 counter on this creature. Diana — Equip {2}",
     onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
     attachesTo: 'creature',
-    equipCost: '2',
+    equipCost: '{2}',
     equipGrantsSubtype: 'Wizard',
     equipGrantsNoncreatureCastTrigger: { counterIfExpensive: { minManaValue: 0, counterLabel: '+1/+1', counterAmount: 1 } },
     imagePath: '/assets/cards/astrologian-s-planisphere.webp',
   },
   {
+    id: 'auron-venerated-guardian',
+    name: 'Auron, Venerated Guardian',
+    type: 'creature',
+    subtype: 'Legendary Creature Human Spirit Samurai',
+    costLabel: '{3}{W}',
+    power: 2,
+    toughness: 5,
+    text: 'Vigilance \n' +
+      'Shooting Star — Whenever Auron attacks, put a +1/+1 counter on it. When you do, ' +
+      'exile target creature defending player controls with power less than Auron’s ' +
+      'power until Auron leaves the battlefield.',
+    imagePath: '/assets/cards/auron-venerated-guardian.webp',
+    onAttack: [
+      { type: 'putCounterOnSelf', counterLabel: '+1/+1', counterAmount: 1 },
+      { type: 'exileTargetCreatureWithLessPowerUntilSourceLeaves' },
+    ],
+  },
+  {
     id: 'aurons-inspiration',
     name: "Auron's Inspiration",
     type: 'instant',
-    costLabel: '2W',
+    costLabel: '{2}{W}',
     text: "Attacking creatures get +2/+0 until end of turn.Flashback 2WW (You may cast this card from your graveyard for its flashback cost. Then exile it.)",
     onCast: [{ type: 'pumpAttackers', power: 2, toughness: 0 }],
     imagePath: '/assets/cards/aurons-inspiration.webp',
@@ -253,7 +290,7 @@ export const CARD_POOL: CardDefinition[] = [
       {
         id: 'balamb-transform',
         label: 'Transform',
-        cost: { manaLabel: '5GU', tap: true },
+        cost: { manaLabel: '{5}{G}{U}', tap: true },
         transformSelf: true,
         effectText: 'Transform this land.',
       },
@@ -277,12 +314,12 @@ export const CARD_POOL: CardDefinition[] = [
     name: 'Balamb T-Rexaur',
     type: 'creature',
     subtype: 'Creature \u2014 Dinosaur',
-    costLabel: '4GG',
+    costLabel: '{4}{G}{G}',
     power: 6,
     toughness: 6,
     text: "Trample. Whenever this creature enters, you gain 3 life. Forestcycling 2(2 Discard this card: Search your library for a forest card, reveal it, put it into your hand then shuffle)",
     onEnter: [{ type: 'gainLife', amount: 3 }],
-    cycling: { cost: '2', searchLandName: 'Forest' },
+    cycling: { cost: '{2}', searchLandName: 'Forest' },
     imagePath: '/assets/cards/balamb-t-rexaur.webp',
   },
   {
@@ -290,7 +327,7 @@ export const CARD_POOL: CardDefinition[] = [
     name: 'Balthier and Fran',
     type: 'creature',
     subtype: 'Legendary Creature \u2014 Human Rabbit',
-    costLabel: '1RG',
+    costLabel: '{1}{R}{G}',
     power: 4,
     toughness: 3,
     text: "Reach. Vehicles you control get +1/+1 and have vigilance and reach. Whenever a Vehicle crewed by Balthier and Fran this turn attacks, if it\u2019s the first combat phase of the turn, you may pay 1RG. If you do, after this phase, there is an additional combat phase.",
@@ -312,11 +349,11 @@ export const CARD_POOL: CardDefinition[] = [
     name: "Bard's Bow",
     type: 'artifact',
     subtype: 'Equipment',
-    costLabel: '2G',
+    costLabel: '{2}{G}',
     text: "Job select (When this Equipment enters, create a 1/1 colorless Hero creature token, then attach this to it.) Equipped creature gets +2/+2, has reach, and is a Bard in addition to its other types. Perseus’s Bow — Equip 6( 6: Attach to target creature you control. Equip only as a sorcery.)",
     onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
     attachesTo: 'creature',
-    equipCost: '6',
+    equipCost: '{6}',
     equipBuff: { power: 2, toughness: 2 },
     equipGrantsKeyword: 'reach',
     equipGrantsSubtype: 'Bard',
@@ -337,7 +374,7 @@ export const CARD_POOL: CardDefinition[] = [
     name: 'Barret Wallace',
     type: 'creature',
     subtype: 'Legendary Creature \u2014 Human Rebel',
-    costLabel: '3R',
+    costLabel: '{3}{R}',
     power: 4,
     toughness: 4,
     text: "Reach, Whenever Barret Wallace attacks, it deals damage equal to the number of equipped creatures you control to defending player.",
@@ -349,7 +386,7 @@ export const CARD_POOL: CardDefinition[] = [
     name: 'Bartz and Boko',
     type: 'creature',
     subtype: 'Legendary Creature \u2014 Human Bird',
-    costLabel: '3GU',
+    costLabel: '{3}{G}{U}',
     power: 4,
     toughness: 3,
     text: "Affinity for Birds (This spell costs {1} less to cast for each Bird you control.) When Bartz and Boko enters, each other Bird you control deals damage equal to its power to target creature an opponent controls.",
@@ -361,7 +398,7 @@ export const CARD_POOL: CardDefinition[] = [
     id: 'battle-menu',
     name: 'Battle Menu',
     type: 'instant',
-    costLabel: '1W',
+    costLabel: '{1}{W}',
     text: "Choose one — • Attack — Create a 2/2 white Knight creature token. • Ability — Target creature gets +0/+4 until end of turn. " +
       " • Magic — Destroy target creature with power 4 or greater. • Item — You gain 4 life.",
     // Modeled as onCast: [chooseOneMode] (an EFFECT resolved at cast time)
@@ -386,7 +423,7 @@ export const CARD_POOL: CardDefinition[] = [
     name: 'Beatrix, Loyal General',
     type: 'creature',
     subtype: 'Legendary Creature \u2014 Human Soldier',
-    costLabel: '4WW',
+    costLabel: '{4}{W}{W}',
     power: 4,
     toughness: 4,
     text: "Vigilance (Attacking doesn\u2019t cause this creature to tap.) At the beginning of combat on your turn, " +
@@ -399,13 +436,13 @@ export const CARD_POOL: CardDefinition[] = [
     name: "Black Mage's Rod",
     type: 'artifact',
     subtype: 'Equipment',
-    costLabel: '1B',
+    costLabel: '{1}{B}',
     text: 'Job select (When this Equipment enters, create a 1/1 colorless Hero creature token, ' +
       'then attach this to it.) Equipped creature gets +1/+0, has “Whenever you cast a noncreature spell, ' +
       'this creature deals 1 damage to each opponent,” and is a Wizard in addition to its other types.\nEquip 3',
     onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
     attachesTo: 'creature',
-    equipCost: '3',
+    equipCost: '{3}',
     equipBuff: { power: 1, toughness: 0 },
     equipGrantsSubtype: 'Wizard',
     equipGrantsNoncreatureCastTrigger: { damageEachOpponent: 1 },
@@ -416,7 +453,7 @@ export const CARD_POOL: CardDefinition[] = [
     name: 'Black Waltz No. 3',
     type: 'creature',
     subtype: 'Legendary Creature \u2014 Wizard',
-    costLabel: '2BR',
+    costLabel: '{2}{B}{R}',
     power: 2,
     toughness: 2,
     text: "Flying, deathtouch " +
@@ -429,7 +466,7 @@ export const CARD_POOL: CardDefinition[] = [
     name: 'Blazing Bomb',
     type: 'creature',
     subtype: 'Emental',
-    costLabel: 'R',
+    costLabel: '{R}',
     power: 1,
     toughness: 1,
     text: "Whenever you cast a noncreature spell, if at least four mana was spent to cast it, put a +1/+1 counter on this creature. " +
@@ -441,7 +478,7 @@ export const CARD_POOL: CardDefinition[] = [
     id: 'blitzball',
     name: 'Blitzball',
     type: 'artifact',
-    costLabel: "3",
+    costLabel: '{3}',
     text: ": Add one mana of any color. " +
       "GOOOOAAAALLL! — {T}, Sacrifice this artifact: Draw two cards. Activate only if an opponent was dealt combat " +
       "damage by a legendary creature this turn.",
@@ -456,7 +493,7 @@ export const CARD_POOL: CardDefinition[] = [
     id: 'blitzball-shot',
     name: 'Blitzball Shot',
     type: 'instant',
-    costLabel: "1G",
+    costLabel: '{1}{G}',
     text: "Target creature gets +3/+3 and gains trample until end of turn.",
     onCast: [{ type: 'pumpTarget', power: 3, toughness: 3, grantKeyword: 'trample' }],
     imagePath: '/assets/cards/blitzball-shot.webp',
@@ -466,13 +503,13 @@ export const CARD_POOL: CardDefinition[] = [
     name: 'Buster Sword',
     type: 'artifact',
     subtype: 'Equipment',
-    costLabel: '3',
+    costLabel: '{3}',
     text: "Equipped creature gets +3/+2. " +
       "Whenever equipped creature deals combat damage to a player, draw a card, " +
       "then you may cast a spell from your hand with mana value less than or equal to that damage without paying its mana cost. Equip 2",
     imagePath: '/assets/cards/buster-sword.webp',
     attachesTo: 'creature',
-    equipCost: '2',
+    equipCost: '{2}',
     equipBuff: { power: 3, toughness: 2 },
     equipGrantsDrawThenMayCastFreeUpToCombatDamage: true,
   },
@@ -480,7 +517,7 @@ export const CARD_POOL: CardDefinition[] = [
     id: 'cactuar',
     name: 'Cactuar',
     type: 'creature',
-    costLabel: 'G',
+    costLabel: '{G}',
     power: 3,
     toughness: 3,
     text: "Trample. \n" +
@@ -492,12 +529,12 @@ export const CARD_POOL: CardDefinition[] = [
     id: 'call-the-mountain-chocobo',
     name: 'Call the Mountain Chocobo',
     type: 'sorcery',
-    costLabel: '3R',
+    costLabel: '{3}{R}',
     text: "Search your library for a Mountain card, reveal it, put it into your hand, then shuffle. " +
       'Create a 2/2 green Bird creature token with “Whenever a land you control enters, this token gets +1/+0 until end of turn.”' +
       "Flashback {5}{R} (You may cast this card from your graveyard for its flashback cost. Then exile it.)",
     onCast: [{ type: 'searchLibraryForLand', landName: 'Mountain' }, { type: 'createToken', tokenId: 'token-bird' }],
-    flashback: { cost: '5R' },
+    flashback: { cost: '{5}{R}' },
     imagePath: '/assets/cards/call-the-mountain-chocobo.webp',
   },
   {
@@ -506,7 +543,7 @@ export const CARD_POOL: CardDefinition[] = [
     type: 'land',
     costLabel: '-',
     text: "Add Mana \n 1 Tap: Add one mana of any colour. \nCycling 2 (2, Discard this card: Draw a card.)",
-    cycling: { cost: '2' },
+    cycling: { cost: '{2}' },
     imagePath: '/assets/cards/capital-city.webp',
     producesMana: 'C'
   },
@@ -515,7 +552,7 @@ export const CARD_POOL: CardDefinition[] = [
     name: 'Cargo Ship',
     type: 'artifact',
     subtype: 'Vehicle',
-    costLabel: '1U',
+    costLabel: '{1}{U}',
     power: 2,
     toughness: 3,
     text: "Flying, vigilance \n Tap: Add Mana. Spend this mana only to cast an artifact spell or activate an ability of an artifact source. \n Crew 1",
@@ -531,7 +568,7 @@ export const CARD_POOL: CardDefinition[] = [
     name: 'Cecil, Dark Knight',
     type: 'creature',
     subtype: 'Legendary Creature \u2014 Human Knight',
-    costLabel: 'B',
+    costLabel: '{B}',
     power: 2,
     toughness: 3,
     text: "Deathtouch \n Darkness \u2014 Whenever Cecil deals damage, you lose that much life. Then if your life total is less than or equal to half your starting life " +
@@ -559,7 +596,7 @@ export const CARD_POOL: CardDefinition[] = [
     id: 'chocobo-kick',
     name: 'Chocobo Kick',
     type: 'sorcery',
-    costLabel: '1G',
+    costLabel: '{1}{G}',
     text: "Kicker \u2014 Return a land you control to its owner\u2019s hand. " +
       "(You may return a land you control to its owner\u2019s hand in addition to any other costs as you cast this spell.)\n " +
       "Target creature you control deals damage equal to its power to target creature an opponent controls. If this spell was kicked, \n" +
@@ -578,7 +615,7 @@ export const CARD_POOL: CardDefinition[] = [
     id: 'chocobo-racetrack',
     name: 'Chocobo Racetrack',
     type: 'artifact',
-    costLabel: '3GG',
+    costLabel: '{3}{G}{G}',
     text: "Landfall — Whenever a land you control enters, create a 2/2 green Bird creature token with “Whenever a land you control enters, this token gets +1/+0 until end of turn.",
     landfall: { createTokenId: 'token-bird' },
     imagePath: '/assets/cards/chocobo-racetrack.webp',
@@ -587,7 +624,7 @@ export const CARD_POOL: CardDefinition[] = [
     id: 'choco-comet',
     name: 'Choco\u2014Comet',
     type: 'sorcery',
-    costLabel: 'XRR',
+    costLabel: '{X}{R}{R}',
     text: "Choco\u2014Comet deals X damage to any target.\nCreate a 2/2 green Bird creature token with 'Whenever a land you control enters, this token gets +1/+0 until end of turn.'",
     onCast: [{ type: 'createToken', tokenId: 'token-bird' }],
     imagePath: '/assets/cards/choco-comet.webp',
@@ -597,7 +634,7 @@ export const CARD_POOL: CardDefinition[] = [
     name: 'Choco, Seeker of Paradise',
     type: 'creature',
     subtype: 'Legendary Creature \u2014 Bird',
-    costLabel: '1GWU',
+    costLabel: '{1}{G}{W}{U}',
     power: 3,
     toughness: 5,
     text: "Whenever one or more Birds you control attack, look at that many cards from the top of your library. " +
@@ -611,7 +648,7 @@ export const CARD_POOL: CardDefinition[] = [
     id: 'circle-of-power',
     name: 'Circle of Power',
     type: 'sorcery',
-    costLabel: '3B',
+    costLabel: '{3}{B}',
     text: "You draw two cards and you lose 2 life. Create a 0/1 black Wizard creature token with " +
       "'Whenever you cast a noncreature spell, this token deals 1 damage to each opponent.'" +
       "\nWizards you control get +1/+0 and gain lifelink until end of turn.",
@@ -627,7 +664,7 @@ export const CARD_POOL: CardDefinition[] = [
     id: 'clash-of-the-eikons',
     name: 'Clash of the Eikons',
     type: 'sorcery',
-    costLabel: 'G',
+    costLabel: '{G}',
     text: "Choose one or more \u2014 " +
       "\n• Target creature you control fights target creature an opponent controls." +
       "\n• Remove a lore counter from target Saga you control. (Removing lore counters doesn\u2019t cause chapter abilities to trigger.)" +
@@ -644,7 +681,7 @@ export const CARD_POOL: CardDefinition[] = [
     name: "Clive, Ifrit's Dominant",
     type: 'creature',
     subtype: 'Legendary Creature \u2014 Human Noble Warrior',
-    costLabel: "4RR",
+    costLabel: '{4}{R}{R}',
     power: 5,
     toughness: 5,
     text: 'When Clive enters, you may discard your hand, then draw cards equal to your devotion to red. (Each R in the mana costs of permanents you control counts toward your devotion to red.)' +
@@ -656,7 +693,7 @@ export const CARD_POOL: CardDefinition[] = [
       {
         id: 'clive-transform',
         label: 'Transform',
-        cost: { manaLabel: '4RR', tap: true },
+        cost: { manaLabel: '{4}{R}{R}', tap: true },
         exileAndReturnTransformed: true,
         onlyDuringOwnMainPhase: true,
         effectText: "Exile Clive, then return it to the battlefield transformed under its owner's control.",
@@ -703,7 +740,7 @@ export const CARD_POOL: CardDefinition[] = [
       {
         id: 'clives-hideaway-play',
         label: 'Play Hidden Card',
-        cost: { manaLabel: '2', tap: true },
+        cost: { manaLabel: '{2}', tap: true },
         requiresControlledLegendaryCreatureCount: 4,
         playHideawayCard: true,
         effectText: 'You may play the exiled card without paying its mana cost if you control four or more legendary creatures.',
@@ -714,13 +751,13 @@ export const CARD_POOL: CardDefinition[] = [
     id: 'cloudbound-moogle',
     name: 'Cloudbound Moogle',
     type: 'creature',
-    costLabel: '3WW',
+    costLabel: '{3}{W}{W}',
     power: 2,
     toughness: 3,
     text: "Flying \n When this creature enters, put a +1/+1 counter on target creature. \n" +
       "Plainscycling 2 (2, Discard this card: Search your library for a Plains card, reveal it, put it into your hand, then shuffle.)",
     onEnter: [{ type: 'putCounterOnTarget', counterLabel: '+1/+1', counterAmount: 1 }],
-    cycling: { cost: '2', searchLandName: 'Plains' },
+    cycling: { cost: '{2}', searchLandName: 'Plains' },
     imagePath: '/assets/cards/cloudbound-moogle.webp'
   },
   {
@@ -728,7 +765,7 @@ export const CARD_POOL: CardDefinition[] = [
     name: 'Cloud, Midgar Mercenary',
     type: 'creature',
     subtype: 'Legendary Creature \u2014 Human Soldier Mercenary',
-    costLabel: "WW",
+    costLabel: '{W}{W}',
     power: 2,
     toughness: 1,
     text: "When Cloud enters, search your library for an Equipment card, reveal it, put it into your hand, then shuffle." +
@@ -743,7 +780,7 @@ export const CARD_POOL: CardDefinition[] = [
     name: 'Cloud of Darkness',
     type: 'creature',
     subtype: 'Legendary Creature \u2014 Avatar',
-    costLabel: "2BGG",
+    costLabel: '{2}{B}{G}{G}',
     power: 3,
     toughness: 3,
     text: 'Flying \nParticle Beam — When Cloud of Darkness enters, target creature an opponent controls gets -X/-X ' +
@@ -756,7 +793,7 @@ export const CARD_POOL: CardDefinition[] = [
     name: "Cloud, Planet's Champion",
     type: 'creature',
     subtype: 'Legendary Creature \u2014 Human Soldier Mercenary',
-    costLabel: '3RW',
+    costLabel: '{3}{R}{W}',
     power: 4,
     toughness: 4,
     text: "During your turn, as long as Cloud is equipped, it has double strike and indestructible. " +
@@ -777,7 +814,7 @@ export const CARD_POOL: CardDefinition[] = [
     id: 'coeurl',
     name: 'Coeurl',
     type: 'creature',
-    costLabel: '1W',
+    costLabel: '{1}{W}',
     power: 2,
     toughness: 2,
     text: "1W Tap target nonenchantment creature",
@@ -786,7 +823,7 @@ export const CARD_POOL: CardDefinition[] = [
       {
         id: 'coeurl-tap',
         label: 'Tap',
-        cost: { manaLabel: '1W' },
+        cost: { manaLabel: '{1}{W}' },
         effects: [{ type: 'tapTarget' }],
         effectText: 'Tap target nonenchantment creature.',
       },
@@ -796,7 +833,7 @@ export const CARD_POOL: CardDefinition[] = [
     id: 'coliseum-behemoth',
     name: 'Coliseum Behemoth',
     type: 'creature',
-    costLabel: '5GG',
+    costLabel: '{5}{G}{G}',
     power: 7,
     toughness: 7,
     text: "Trample \nWhen this creature enters, choose one \u2014 \n Destroy target artifact or enchantment \nDraw a card",
@@ -815,7 +852,7 @@ export const CARD_POOL: CardDefinition[] = [
     id: 'combat-tutorial',
     name: 'Combat Tutorial',
     type: 'sorcery',
-    costLabel: '2U',
+    costLabel: '{2}{U}',
     text: "Target player draws two cards. Put a +1/+1 counter on up to one target creature you control.",
     onCast: [
       { type: 'drawCardsFromTargetPlayer', count: 2 },
@@ -827,7 +864,7 @@ export const CARD_POOL: CardDefinition[] = [
     id: 'commune-with-beavers',
     name: 'Commune with Beavers',
     type: 'sorcery',
-    costLabel: 'G',
+    costLabel: '{G}',
     text: 'Look at the top three cards of your library. You may reveal an artifact, creature, ' +
       "or land card from among them and put it into your hand. Put the rest on the bottom of your library in any order.",
     onCast: [{ type: 'revealFiltered', count: 3, filterType: ['artifact', 'creature', 'land'] }],
@@ -838,11 +875,11 @@ export const CARD_POOL: CardDefinition[] = [
     name: 'Coral Sword',
     type: 'artifact',
     subtype: 'equipment',
-    costLabel: 'R',
+    costLabel: '{R}',
     text: 'Flash \nWhen this Equipment enters, attach it to target creature you control. That creature gains first strike until end of turn.\n Equipped creature gets +1/+0.\nEquip 1',
     onEnter: [{ type: 'attachSelfToTarget', grantKeyword: 'first strike' }],
     attachesTo: 'creature',
-    equipCost: '1',
+    equipCost: '{1}',
     equipBuff: { power: 1, toughness: 0 },
     imagePath: '/assets/cards/coral-sword.webp',
   },
@@ -850,7 +887,7 @@ export const CARD_POOL: CardDefinition[] = [
     id: 'cornered-by-black-mages',
     name: 'Cornered by Black Mages',
     type: 'sorcery',
-    costLabel: '1BB',
+    costLabel: '{1}{B}{B}',
     text: 'Target opponent sacrifices a creature of their choice. \nCreate a 0/1 black Wizard creature token with “Whenever you cast a noncreature spell, ' +
       ' this token deals 1 damage to each opponent.”',
     onCast: [{ type: 'sacrificeCreature', target: 'opponent' }, { type: 'createToken', tokenId: 'token-wizard' }],
@@ -871,10 +908,10 @@ export const CARD_POOL: CardDefinition[] = [
     name: 'Crystal Fragments',
     type: 'artifact',
     subtype: 'equipment',
-    costLabel: 'W',
+    costLabel: '{W}',
     text: "Equipped creature gets +1/+1. \n5WW: Exile this Equipment, then return it to the battlefield transformed under its owner\u2019s control. Activate only as a sorcery. \nEquip 1",
     attachesTo: 'creature',
-    equipCost: '1',
+    equipCost: '{1}',
     equipBuff: { power: 1, toughness: 1 },
     imagePath: '/assets/cards/crystal-fragments.webp'
   },
@@ -883,7 +920,7 @@ export const CARD_POOL: CardDefinition[] = [
     name: 'Dark Confidant',
     type: 'creature',
     subtype: 'Human Wizard',
-    costLabel: '1B',
+    costLabel: '{1}{B}',
     power: 2,
     toughness: 1,
     text: "At the beginning of your upkeep, reveal the top card of your library and put that card into your hand. You lose life equal to its mana value.",
@@ -895,7 +932,7 @@ export const CARD_POOL: CardDefinition[] = [
     name: "Dark Knight's Greatsword",
     type: 'artifact',
     subtype: 'equipment',
-    costLabel: '2B',
+    costLabel: '{2}{B}',
     text: 'Job select (When this Equipment enters, create a 1/1 colorless Hero creature token, then attach this to it.) \n' +
       "Equipped creature gets +3/+0 and is a Knight in addition to its other types. \nChaosbringer — Equip—Pay 3 life. Activate only once each turn.",
     onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
@@ -908,7 +945,7 @@ export const CARD_POOL: CardDefinition[] = [
     id: 'deadly-embrace',
     name: 'Deadly Embrace',
     type: 'sorcery',
-    costLabel: '3BB',
+    costLabel: '{3}{B}{B}',
     text: 'Destroy target creature an opponent controls. Then draw a card for each creature that died this turn.',
     onCast: [{ type: 'destroyOpponentCreature', thenDrawForCreaturesDiedThisTurn: true }],
     imagePath: '/assets/cards/deadly-embrace.webp'
@@ -918,7 +955,7 @@ export const CARD_POOL: CardDefinition[] = [
     name: 'Delivery Moogle',
     type: 'creature',
     subtype: 'Moogle',
-    costLabel: '3W',
+    costLabel: '{3}{W}',
     power: 3,
     toughness: 2,
     text: 'Flying \nWhen this creature enters, search your library and/or graveyard for an artifact card with mana value 2 or less, ' +
@@ -931,7 +968,7 @@ export const CARD_POOL: CardDefinition[] = [
     name: 'Demon Wall',
     type: 'creature',
     subtype: 'Artifact Creature \u2014 Demon Wall',
-    costLabel: '1B',
+    costLabel: '{1}{B}',
     power: 3,
     toughness: 3,
     text: 'Defender \nMenace (This creature can\u2019t be blocked except by two or more creatures.) ' +
@@ -942,7 +979,7 @@ export const CARD_POOL: CardDefinition[] = [
       {
         id: 'demon-wall-grow',
         label: 'Grow',
-        cost: { manaLabel: '5B' },
+        cost: { manaLabel: '{5}{B}' },
         effects: [{ type: 'putCounterOnSelf', counterLabel: '+1/+1', counterAmount: 2 }],
         effectText: 'Put two +1/+1 counters on this creature.',
       },
@@ -954,7 +991,7 @@ export const CARD_POOL: CardDefinition[] = [
     name: 'Diamond Weapon',
     type: 'creature',
     subtype: 'Legendary Artifact Creature \u2014 Elemental',
-    costLabel: '7GG',
+    costLabel: '{7}{G}{G}',
     power: 8,
     toughness: 8,
     text: "This spell costs 1 less to cast for each permanent card in your graveyard. \nReach \n Immune — Prevent all combat damage that would be dealt to Diamond Weapon.",
@@ -967,7 +1004,7 @@ export const CARD_POOL: CardDefinition[] = [
     name: "Dion Bahamut's Dominant",
     type: 'creature',
     subtype: "Legendary Creature \u2014 Human Noble Knight",
-    costLabel: '3W',
+    costLabel: '{3}{W}',
     power: 3,
     toughness: 3,
     text: 'Dragonfire Dive — During your turn, Dion and other Knights you control have flying.\nWhen Dion enters, create a 2/2 white Knight creature token.' +
@@ -985,7 +1022,7 @@ export const CARD_POOL: CardDefinition[] = [
       {
         id: 'dion-transform',
         label: 'Transform',
-        cost: { manaLabel: '4WW', tap: true },
+        cost: { manaLabel: '{4}{W}{W}', tap: true },
         exileAndReturnTransformed: true,
         onlyDuringOwnMainPhase: true,
         effectText: "Exile Dion, then return it to the battlefield transformed under its owner's control.",
@@ -1024,13 +1061,13 @@ export const CARD_POOL: CardDefinition[] = [
     name: "Dragoon's Lance",
     type: 'artifact',
     subtype: 'equipment',
-    costLabel: '1W',
+    costLabel: '{1}{W}',
     text: 'Job select (When this Equipment enters, create a 1/1 colorless Hero creature token, then attach this to it.)' +
       "\nEquipped creature gets +1/+0 and is a Knight in addition to its other types." +
       "\nDuring your turn, equipped creature has flying.\nGae Bolg — Equip 4",
     onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
     attachesTo: 'creature',
-    equipCost: '4',
+    equipCost: '{4}',
     equipBuff: { power: 1, toughness: 0 },
     equipGrantsKeywordDuringOwnTurn: 'flying',
     equipGrantsSubtype: 'Knight',
@@ -1040,7 +1077,7 @@ export const CARD_POOL: CardDefinition[] = [
     id: 'dragoons-wyvern',
     name: "Dragoon's Wyvern",
     type: 'creature',
-    costLabel: '2U',
+    costLabel: '{2}{U}',
     power: 2,
     toughness: 1,
     text: "Flying\n When this creature enters, create a 1/1 colorless Hero creature token.",
@@ -1051,18 +1088,18 @@ export const CARD_POOL: CardDefinition[] = [
     id: 'dreams-of-laguna',
     name: 'Dreams of Laguna',
     type: 'instant',
-    costLabel: '1U',
+    costLabel: '{1}{U}',
     text: "Surveil 1, then draw a card. (To surveil 1, look at the top card of your library. You may put it into your graveyard.) " +
       "\nFlashback 3U (You may cast this card from your graveyard for its flashback cost. Then exile it.)",
     onCast: [{ type: 'surveil', count: 1, thenDrawCount: 1 }],
-    flashback: { cost: '3U' },
+    flashback: { cost: '{3}{U}' },
     imagePath: '/assets/cards/dreams-of-laguna.webp'
   },
   {
     id: 'dwarven-castel-guard',
     name: 'Dwarven Castle Guard',
     type: 'creature',
-    costLabel: '1W',
+    costLabel: '{1}{W}',
     power: 2,
     toughness: 1,
     text: "When this creature dies, create a 1/1 colorless Hero creature token.",
@@ -1083,7 +1120,7 @@ export const CARD_POOL: CardDefinition[] = [
     name: 'Edgar, King of Figaro',
     type: 'creature',
     subtype: 'Legendary Creatures \u2014 Human Artificer Noble',
-    costLabel: '4UU',
+    costLabel: '{4}{U}{U}',
     power: 4,
     toughness: 5,
     text: "When Edgar enters, draw a card for each artifact you control. " +
@@ -1095,7 +1132,7 @@ export const CARD_POOL: CardDefinition[] = [
     id: 'eject',
     name: 'Eject',
     type: 'instant',
-    costLabel: '3U',
+    costLabel: '{3}{U}',
     text: "This spell can\u2019t be countered.\n Return target nonland permanent to its owner\u2019s hand.\n Draw a card.",
     onCast: [{ type: 'bounceTarget', targetFilter: 'nonland' }, { type: 'loot', drawCount: 1, discardCount: 0 }],
     imagePath: '/assets/cards/eject.webp'
@@ -1104,7 +1141,7 @@ export const CARD_POOL: CardDefinition[] = [
     id: 'elixir',
     name: 'Elixir',
     type: 'artifact',
-    costLabel: '1',
+    costLabel: '{1}',
     text: "This artifact enters tapped.\n5, T, Exile this artifact: Shuffle all nonland cards from your graveyard into your library. " +
       "You gain life equal to the number of cards shuffled into your library this way.",
     imagePath: '/assets/cards/elixir.webp',
@@ -1113,7 +1150,7 @@ export const CARD_POOL: CardDefinition[] = [
       {
         id: 'elixir-shuffle',
         label: 'Shuffle',
-        cost: { manaLabel: '5', tap: true, exileSelf: true },
+        cost: { manaLabel: '{5}', tap: true, exileSelf: true },
         effects: [{ type: 'shuffleGraveyardIntoLibrary', filter: 'nonland' }],
         effectText: 'Shuffle all nonland cards from your graveyard into your library. You gain life equal to the number of cards shuffled in this way.',
       },
@@ -1124,7 +1161,7 @@ export const CARD_POOL: CardDefinition[] = [
     name: "Emet\u2014Selch, Unsundered",
     type: 'creature',
     subtype: 'Legendary Creature \u2014 Elder Wizard',
-    costLabel: '1UB',
+    costLabel: '{1}{U}{B}',
     power: 2,
     toughness: 4,
     text: "Vigilance \nWhenever Emet-Selch enters or attacks, draw a card, then discard a card.\n" +
@@ -1160,11 +1197,11 @@ export const CARD_POOL: CardDefinition[] = [
     id: 'esper-origins',
     name: 'Esper Origins',
     type: 'sorcery',
-    costLabel: '1G',
+    costLabel: '{1}{G}',
     text: "Surveil 2. You gain 2 life. If this spell was cast from a graveyard, exile it, then put it onto the battlefield transformed under its owner\u2019s control " +
       "with a finality counter on it. (If a creature with a finality counter on it would die, exile it instead.)\nFlashback 3G",
     onCast: [{ type: 'surveil', count: 2 }, { type: 'gainLife', amount: 2 }],
-    flashback: { cost: '3G' },
+    flashback: { cost: '{3}{G}' },
     imagePath: '/assets/cards/esper-origins.webp'
     // The "if cast from a graveyard, exile it, then put it onto the
     // battlefield transformed with a finality counter" clause is deferred -
@@ -1178,7 +1215,7 @@ export const CARD_POOL: CardDefinition[] = [
     id: 'ether',
     name: "Ether",
     type: 'artifact',
-    costLabel: '3U',
+    costLabel: '{3}{U}',
     text: "Tap, Exile this artifact: Add {U}. When you next cast an instant or sorcery spell this turn, copy that spell. You may choose new targets for the copy.",
     imagePath: "/assets/cards/ether.webp"
   },
@@ -1186,7 +1223,7 @@ export const CARD_POOL: CardDefinition[] = [
     id: 'evil-reawakened',
     name: "Evil Reawakened",
     type: "sorcery",
-    costLabel: "4B",
+    costLabel: '{4}{B}',
     text: "Return target creature card from your graveyard to the battlefield with two additional +1/+1 counters on it.",
     onCast: [{ type: 'reanimateTargetFromGraveyard', extraCounterLabel: '+1/+1', extraCounterAmount: 2 }],
     imagePath: "/assets/cards/evil-reawakened.webp"
@@ -1196,11 +1233,11 @@ export const CARD_POOL: CardDefinition[] = [
     name: "Excalibur II",
     type: 'artifact',
     subtype: 'equipment',
-    costLabel: '1',
+    costLabel: '{1}',
     text: "Whenever you gain life, put a charge counter on Excalibur II.\nEquipped creature gets +1/+1 for each charge counter on Excalibur II.\nEquip 3",
     onGainLifeTrigger: { counterLabel: 'charge', counterAmount: 1 },
     attachesTo: 'creature',
-    equipCost: '3',
+    equipCost: '{3}',
     equipBuffPerCounter: { counterLabel: 'charge', power: 1, toughness: 1 },
     imagePath: "/assets/cards/excalibur-ii.webp"
   },
@@ -1209,7 +1246,7 @@ export const CARD_POOL: CardDefinition[] = [
     name: "Exdeath, Void Warlock",
     type: "creature",
     subtype: "Legendary Creature \u2014 Spirit Warlock",
-    costLabel: "1BG",
+    costLabel: '{1}{B}{G}',
     power: 3,
     toughness: 3,
     text: "When Exdeath enters, you gain 3 life.\nAt the beginning of your end step, if there are six or more permanent cards in your graveyard, transform Exdeath.",
@@ -1234,7 +1271,7 @@ export const CARD_POOL: CardDefinition[] = [
     id: 'fang-fearless-l-cie',
     name: "Fang, Fearless I'Cie",
     type: 'creature',
-    costLabel: '2B',
+    costLabel: '{2}{B}',
     subtype: 'Legendary Creature \u2014 Human Warrior',
     power: 2,
     toughness: 3,
@@ -1249,7 +1286,7 @@ export const CARD_POOL: CardDefinition[] = [
     id: 'fate-of-the-sun-cryst',
     name: "Fate of the Sun-Cryst",
     type: 'instant',
-    costLabel: '4W',
+    costLabel: '{4}{W}',
     // The cost-reduction clause is deferred - this engine pays mana costs at
     // cast time, before pendingTarget is even set, so "costs less if it
     // targets X" has no target to check yet when the cost would be computed.
@@ -1261,7 +1298,7 @@ export const CARD_POOL: CardDefinition[] = [
     id: "fight-on",
     name: "Fight On!",
     type: 'instant',
-    costLabel: '2B',
+    costLabel: '{2}{B}',
     text: "Return up to two target creature cards from your graveyard to your hand.",
     onCast: [{ type: 'returnCreaturesFromGraveyardToHand', count: 2 }],
     imagePath: '/assets/cards/fight-on.webp'
@@ -1270,16 +1307,16 @@ export const CARD_POOL: CardDefinition[] = [
     id: 'fire-magic',
     name: "Fire Magic",
     type: 'instant',
-    costLabel: "R",
+    costLabel: '{R}',
     text: "Tiered (Choose one additional cost.) \n" +
       "• Fire — {0} — Fire Magic deals 1 damage to each creature. \n" +
       "• Fira — {2} — Fire Magic deals 2 damage to each creature. \n" +
       "• Firaga — {5} — Fire Magic deals 3 damage to each creature.",
     imagePath: '/assets/cards/fire-magic.webp',
     tieredModes: [
-      { label: 'Fire — {0} — 1 damage to each creature', additionalCost: '0', effects: [{ type: 'damageEachCreature', amount: 1 }] },
-      { label: 'Fira — {2} — 2 damage to each creature', additionalCost: '2', effects: [{ type: 'damageEachCreature', amount: 2 }] },
-      { label: 'Firaga — {5} — 3 damage to each creature', additionalCost: '5', effects: [{ type: 'damageEachCreature', amount: 3 }] },
+      { label: 'Fire — {0} — 1 damage to each creature', additionalCost: '{0}', effects: [{ type: 'damageEachCreature', amount: 1 }] },
+      { label: 'Fira — {2} — 2 damage to each creature', additionalCost: '{2}', effects: [{ type: 'damageEachCreature', amount: 2 }] },
+      { label: 'Firaga — {5} — 3 damage to each creature', additionalCost: '{5}', effects: [{ type: 'damageEachCreature', amount: 3 }] },
     ],
   },
   {
@@ -1287,7 +1324,7 @@ export const CARD_POOL: CardDefinition[] = [
     name: "Firion, Wild Rose Warrior",
     type: 'creature',
     subtype: "Legendary Creature \u2014 Human Rebel Warrior",
-    costLabel: '2R',
+    costLabel: '{2}{R}',
     power: 3,
     toughness: 3,
     // Firion isn't unconditionally hasty himself (only while equipped) -
@@ -1316,7 +1353,7 @@ export const CARD_POOL: CardDefinition[] = [
     name: "Freya Crescent",
     type: "creature",
     subtype: 'Legendary Creature \u2014 Rat Knight',
-    costLabel: "R",
+    costLabel: '{R}',
     power: 1,
     toughness: 1,
     text: "Jump — During your turn, Freya Crescent has flying.\nT: Add R. Spend this mana only to cast an Equipment spell or activate an equip ability",
@@ -1326,17 +1363,17 @@ export const CARD_POOL: CardDefinition[] = [
     id: 'from-father-to-son',
     name: 'From Father to Son',
     type: 'sorcery',
-    costLabel: '1W',
+    costLabel: '{1}{W}',
     text: "Search your library for a Vehicle card, reveal it, and put it into your hand. If this spell was cast from a graveyard, put that card onto the battlefield instead. " +
       "Then shuffle. \nFlashback 4WWW",
     imagePath: '/assets/cards/from-father-to-son.webp',
     onCast: [{ type: 'searchLibraryForSubtype', subtype: 'Vehicle' }],
-    flashback: { cost: '4WWW', effects: [{ type: 'searchLibraryForSubtype', subtype: 'Vehicle', toBattlefieldUntapped: true }] },
+    flashback: { cost: '{4}{W}{W}{W}', effects: [{ type: 'searchLibraryForSubtype', subtype: 'Vehicle', toBattlefieldUntapped: true }] },
   }, {
     id: "gaelicat",
     name: 'Gaelicat',
     type: 'creature',
-    costLabel: '2W',
+    costLabel: '{2}{W}',
     power: 1,
     toughness: 3,
     text: "Flying, vigilance \nAs long as you control two or more artifacts, this creature gets +2/+0.",
@@ -1347,7 +1384,7 @@ export const CARD_POOL: CardDefinition[] = [
     name: "Gaius van Baelsar",
     type: 'creature',
     subtype: "Legendary Creature \u2014 Human Soldier",
-    costLabel: '2BB',
+    costLabel: '{2}{B}{B}',
     power: 3,
     toughness: 2,
     text: "When Gaius van Baelsar enters, choose one — " +
@@ -1369,7 +1406,7 @@ export const CARD_POOL: CardDefinition[] = [
     id: "galuf-s-final-act",
     name: "Galuf's Final Act",
     type: 'instant',
-    costLabel: '1G',
+    costLabel: '{1}{G}',
     text: 'Until end of turn, target creature gets +1/+0 and gains “When this creature dies, put a number of +1/+1 counters equal to its power on up to one target creature.”',
     imagePath: '/assets/cards/galuf-s-final-act.webp',
     onCast: [{ type: 'pumpTarget', power: 1, toughness: 0, grantsTemporaryOnDeathPutCountersEqualToPower: true }],
@@ -1378,7 +1415,7 @@ export const CARD_POOL: CardDefinition[] = [
     name: "Garland, Knight of Cornelia",
     type: "creature",
     subtype: 'Legendary Creature \u2014 Human Knight',
-    costLabel: 'BR',
+    costLabel: '{B}{R}',
     power: 3,
     toughness: 2,
     text: "Whenever you cast a noncreature spell, surveil 1. (Look at the top card of your library. You may put it into your graveyard.)" +
@@ -1388,7 +1425,7 @@ export const CARD_POOL: CardDefinition[] = [
       {
         id: 'garland-return-transformed',
         label: 'Return Transformed',
-        cost: { manaLabel: '3BBRR' },
+        cost: { manaLabel: '{3}{B}{B}{R}{R}' },
         returnFromGraveyardTransformed: true,
         onlyDuringOwnMainPhase: true,
         effectText: 'Return this card from your graveyard to the battlefield transformed.',
@@ -1413,7 +1450,7 @@ export const CARD_POOL: CardDefinition[] = [
     name: 'Garnet, Princess of Alexandria',
     type: 'creature',
     subtype: ' Legendary Creature \u2014 Human Noble Cleric',
-    costLabel: 'GW',
+    costLabel: '{G}{W}',
     power: 2,
     toughness: 2,
     // Lifelink works automatically (keyword text). The "remove a lore
@@ -1427,21 +1464,21 @@ export const CARD_POOL: CardDefinition[] = [
   }, {
     id: 'genji-glove',
     name: 'Genji Glove',
-    costLabel: '5',
+    costLabel: '{5}',
     type: 'artifact',
     subtype: 'equipment',
     text: "Equipped creature has double strike. \n" +
       "Whenever equipped creature attacks, if it\u2019s the first combat phase of the turn, untap it. After this phase, there is an additional combat phase. " +
       "Equip 3",
     attachesTo: 'creature',
-    equipCost: '3',
+    equipCost: '{3}',
     equipGrantsKeyword: 'double strike',
     equipGrantsOnAttack: [{ type: 'untapSelfIfFirstCombatPhaseOfTurn' }, { type: 'queueExtraCombatPhaseIfFirstCombatPhaseOfTurn' }],
     imagePath: '/assets/cards/genji-glove.webp'
   }, {
     id: 'gigantoad',
     name: "Gigantoad",
-    costLabel: '3G',
+    costLabel: '{3}{G}',
     type: 'creature',
     subtype: 'Frog',
     power: 4,
@@ -1452,7 +1489,7 @@ export const CARD_POOL: CardDefinition[] = [
   }, {
     id: "gilgamesh-master-at-arms",
     name: "Gilgamesh, Master-at-Arms",
-    costLabel: "4RR",
+    costLabel: '{4}{R}{R}',
     type: 'creature',
     power: 6,
     toughness: 6,
@@ -1467,7 +1504,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: "giott-king-of-the-dwarves",
     name: "Giott, King of the Dwarves",
-    costLabel: "RW",
+    costLabel: '{R}{W}',
     type: 'creature',
     subtype: 'Legendary Creature \u2014 Dwarf Noble',
     power: 1,
@@ -1480,7 +1517,7 @@ export const CARD_POOL: CardDefinition[] = [
   }, {
     id: 'gladiolus-amicitia',
     name: "Gladiolus Amicita",
-    costLabel: "4RG",
+    costLabel: '{4}{R}{G}',
     type: 'creature',
     subtype: 'Legendary Creature \u2014 Human Warrior',
     power: 6,
@@ -1501,7 +1538,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: "gogo-master-of-mimicry",
     name: "Gogo, Master of Mimicry",
-    costLabel: '2U',
+    costLabel: '{2}{U}',
     type: 'creature',
     subtype: 'Legendary Creature \u2014 Wizard',
     power: 2,
@@ -1527,7 +1564,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'golbez-crystal-collector',
     name: 'Golbez, Crystal Collector',
-    costLabel: 'UB',
+    costLabel: '{U}{B}',
     type: 'creature',
     subtype: 'Legendary Creature \u2014 Human Wizard',
     power: 1,
@@ -1551,7 +1588,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'goobbue-gardener',
     name: 'Goobbue Gardener',
-    costLabel: '1G',
+    costLabel: '{1}{G}',
     type: 'creature',
     power: 1,
     toughness: 3,
@@ -1562,7 +1599,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'g-raha-tia',
     name: "G'raha Tia",
-    costLabel: '4W',
+    costLabel: '{4}{W}',
     type: 'creature',
     subtype: 'Legendary Creature \u2014 Cat Archer',
     power: 3,
@@ -1574,7 +1611,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'gran-pulse-ochu',
     name: 'Gran Pulse Ochu',
-    costLabel: 'G',
+    costLabel: '{G}',
     type: 'creature',
     power: 1,
     toughness: 1,
@@ -1583,7 +1620,7 @@ export const CARD_POOL: CardDefinition[] = [
       {
         id: 'gran-pulse-ochu-pump',
         label: 'Pump',
-        cost: { manaLabel: '8' },
+        cost: { manaLabel: '{8}' },
         effects: [{ type: 'pumpSelfByGraveyardCount', powerPerUnit: 1, toughnessPerUnit: 1 }],
         effectText: 'Until end of turn, this creature gets +1/+1 for each permanent card in your graveyard.',
       },
@@ -1603,17 +1640,17 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'gysahl-greens',
     name: 'Gysahl Greens',
-    costLabel: '1G',
+    costLabel: '{1}{G}',
     type: 'sorcery',
     text: 'Create a 2/2 green Bird creature token with “Whenever a land you control enters, this token gets +1/+0 until end of turn.”' +
       "\nFlashback {6}",
     onCast: [{ type: 'createToken', tokenId: 'token-bird' }],
-    flashback: { cost: '6' },
+    flashback: { cost: '{6}' },
     imagePath: '/assets/cards/gysahl-greens.webp'
   }, {
     id: 'haste-magic',
     name: 'Haste Magic',
-    costLabel: '1R',
+    costLabel: '{1}{R}',
     type: 'instant',
     text: 'Target creature gets +3/+1 and gains haste until end of turn. Exile the top card of your library. You may play it until your next end step.',
     onCast: [{ type: 'pumpTarget', power: 3, toughness: 1, grantKeyword: 'haste' }],
@@ -1622,7 +1659,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'hecteyes',
     name: 'Hecteyes',
-    costLabel: '1B',
+    costLabel: '{1}{B}',
     type: 'creature',
     power: 1,
     toughness: 1,
@@ -1632,19 +1669,19 @@ export const CARD_POOL: CardDefinition[] = [
   }, {
     id: 'hill-gigas',
     name: 'Hill Gigas',
-    costLabel: '4RR',
+    costLabel: '{4}{R}{R}',
     type: 'creature',
     power: 5,
     toughness: 4,
     text: 'Trample, haste \n' +
       'Mountaincycling 2(2, Discard this card: Search your library for a Mountain card, reveal it, put it into your hand, then shuffle.)',
-    cycling: { cost: '2', searchLandName: 'Mountain' },
+    cycling: { cost: '{2}', searchLandName: 'Mountain' },
     imagePath: '/assets/cards/hill-gigas.webp'
   },
   {
     id: 'hope-estheim',
     name: 'Hope Estheim',
-    costLabel: "WU",
+    costLabel: '{W}{U}',
     type: 'creature',
     subtype: 'Legendary Creatue \u2014 Human Wizard',
     power: 2,
@@ -1657,7 +1694,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'ice-flan',
     name: 'Ice Flan',
-    costLabel: '4UU',
+    costLabel: '{4}{U}{U}',
     type: 'creature',
     power: 5,
     toughness: 4,
@@ -1665,19 +1702,19 @@ export const CARD_POOL: CardDefinition[] = [
       '(If a permanent with a stun counter would become untapped, remove one from it instead.)\n' +
       'Islandcycling 2 (2, Discard this card: Search your library for an Island card, reveal it, put it into your hand, then shuffle.)',
     onEnter: [{ type: 'tapAndStun', targetController: 'opponent', targetType: 'artifactOrCreature' }],
-    cycling: { cost: '2', searchLandName: 'Island' },
+    cycling: { cost: '{2}', searchLandName: 'Island' },
     imagePath: '/assets/cards/ice-flan.webp'
   }, {
     id: 'ice-magic',
     name: 'Ice Magic',
-    costLabel: '1U',
+    costLabel: '{1}{U}',
     type: 'instant',
     text: 'Tiered (Choose one additional cost.) \n' +
       '• Blizzard — {0} — Return target creature to its owner\u2019s hand. \n' +
       '• Blizzara — {2} — Target creature\u2019s owner puts it on their choice of the top or bottom of their library. \n' +
       '• Blizzaga — {5}{U} — Target creature\u2019s owner shuffles it into their library.',
     imagePath: '/assets/cards/ice-magic.webp',
-    tieredModes: [{ label: 'Blizzard — {0} — Return target creature to its owner’s hand', additionalCost: '0', effects: [{ type: 'bounceTarget', targetFilter: 'creature' }] }],
+    tieredModes: [{ label: 'Blizzard — {0} — Return target creature to its owner’s hand', additionalCost: '{0}', effects: [{ type: 'bounceTarget', targetFilter: 'creature' }] }],
     // Blizzara ("owner puts it on their choice of top or bottom of
     // library") and Blizzaga ("owner shuffles it into their library") are
     // still deferred - both need a target creature's OWNER (not the
@@ -1687,7 +1724,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'ignis-scientia',
     name: 'Ignis Scientia',
-    costLabel: '1GU',
+    costLabel: '{1}{G}{U}',
     type: 'creature',
     subtype: 'Legendary Creature \u2014 Human Advisor',
     power: 2,
@@ -1701,7 +1738,7 @@ export const CARD_POOL: CardDefinition[] = [
       {
         id: 'ignis-recipe',
         label: "I've Come Up with a New Recipe!",
-        cost: { manaLabel: '1GU', tap: true },
+        cost: { manaLabel: '{1}{G}{U}', tap: true },
         effects: [{ type: 'exileTargetGraveyardCard', createFoodTokenIfCreature: true }],
         effectText: 'Exile target card from a graveyard. If a creature card was exiled this way, create a Food token.',
       },
@@ -1710,7 +1747,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'il-mheg-pixie',
     name: 'Il Mheg Pixie',
-    costLabel: '1U',
+    costLabel: '{1}{U}',
     type: 'creature',
     power: 2,
     toughness: 1,
@@ -1731,7 +1768,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'instant-ramen',
     name: 'Instant Ramen',
-    costLabel: '2',
+    costLabel: '{2}',
     // The printed text describes an artifact ("this artifact enters" /
     // "Sacrifice this artifact") - 'instant' would resolve straight to the
     // graveyard and make all of it unreachable, so this is corrected to match
@@ -1744,7 +1781,7 @@ export const CARD_POOL: CardDefinition[] = [
       {
         id: 'instant-ramen-eat',
         label: 'Eat',
-        cost: { manaLabel: '2', tap: true, sacrificeSelf: true },
+        cost: { manaLabel: '{2}', tap: true, sacrificeSelf: true },
         effects: [{ type: 'gainLife', amount: 3 }],
         effectText: 'You gain 3 life.',
       },
@@ -1753,7 +1790,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'iron-giant',
     name: 'Iron Giant',
-    costLabel: '7',
+    costLabel: '{7}',
     type: 'creature',
     subtype: 'Artifact Demon',
     power: 6,
@@ -1785,7 +1822,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'item-shopkeep',
     name: 'Item Shopkeep',
-    costLabel: '1R',
+    costLabel: '{1}{R}',
     type: 'creature',
     power: 2,
     toughness: 2,
@@ -1803,7 +1840,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'jecht-reluctant-guardian',
     name: 'Jecht, Reluctant Guardian',
-    costLabel: '3B',
+    costLabel: '{3}{B}',
     type: 'creature',
     subtype: 'Legendary Creature \u2014 Human Warrior',
     power: 4,
@@ -1834,7 +1871,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'jenova-ancient-calamity',
     name: 'Jenova, Ancient Calamity',
-    costLabel: '2BG',
+    costLabel: '{2}{B}{G}',
     type: 'creature',
     subtype: 'Legendary Creature \u2014 Alien',
     power: 1,
@@ -1858,7 +1895,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'jill-shiva-s-dominant',
     name: "Jill, Shiva's Dominant",
-    costLabel: '2U',
+    costLabel: '{2}{U}',
     type: 'creature',
     subtype: 'Legendary Creature \u2014 Human Noble Warrior',
     power: 2,
@@ -1872,7 +1909,7 @@ export const CARD_POOL: CardDefinition[] = [
       {
         id: 'jill-transform',
         label: 'Transform',
-        cost: { manaLabel: '3UU', tap: true },
+        cost: { manaLabel: '{3}{U}{U}', tap: true },
         exileAndReturnTransformed: true,
         onlyDuringOwnMainPhase: true,
         effectText: "Exile Jill, then return it to the battlefield transformed under its owner's control.",
@@ -1900,7 +1937,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'joshua-phoenix-s-dominant',
     name: "Joshua, Phoenix's Dominant",
-    costLabel: '1RW',
+    costLabel: '{1}{R}{W}',
     type: 'creature',
     subtype: 'Legendary Creature \u2014 Human Noble Wizard',
     power: 3,
@@ -1914,7 +1951,7 @@ export const CARD_POOL: CardDefinition[] = [
       {
         id: 'joshua-transform',
         label: 'Transform',
-        cost: { manaLabel: '3RW', tap: true },
+        cost: { manaLabel: '{3}{R}{W}', tap: true },
         exileAndReturnTransformed: true,
         onlyDuringOwnMainPhase: true,
         effectText: "Exile Joshua, then return it to the battlefield transformed under its owner's control.",
@@ -1948,7 +1985,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'judge-magister-gabranth',
     name: 'Judge Magister Gabranth',
-    costLabel: 'WB',
+    costLabel: '{W}{B}',
     type: 'creature',
     subtype: 'Legendary Creature \u2014 Human Advisor Knight',
     power: 2,
@@ -1961,7 +1998,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'judgment-bolt',
     name: 'Judgment Bolt',
-    costLabel: '3R',
+    costLabel: '{3}{R}',
     type: 'instant',
     text: "Judgment Bolt deals 5 damage to target creature and X damage to that creature\u2019s controller, where X is the number of Equipment you control.",
     imagePath: '/assets/cards/judgment-bolt.webp',
@@ -1969,7 +2006,7 @@ export const CARD_POOL: CardDefinition[] = [
   }, {
     id: 'jumbo-cactuar',
     name: 'Jumbo Cactuar',
-    costLabel: '5GG',
+    costLabel: '{5}{G}{G}',
     type: 'creature',
     power: 1,
     toughness: 7,
@@ -1980,7 +2017,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'kain-traitorous-dragoon',
     name: 'Kain, Traitorous Dragoon',
-    costLabel: '2B',
+    costLabel: '{2}{B}',
     type: 'creature',
     subtype: 'Legendary Creature \u2014 Human Knight',
     power: 2,
@@ -1995,7 +2032,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'kefka-court-mage',
     name: 'Kefka, Court Mage',
-    costLabel: '2UBR',
+    costLabel: '{2}{U}{B}{R}',
     type: 'creature',
     subtype: 'Legendary Creature \u2014 Human Wizard',
     power: 4,
@@ -2011,7 +2048,7 @@ export const CARD_POOL: CardDefinition[] = [
       {
         id: 'kefka-transform',
         label: 'Transform',
-        cost: { manaLabel: '8' },
+        cost: { manaLabel: '{8}' },
         onlyDuringOwnMainPhase: true,
         effects: [{ type: 'sacrificeCreature', target: 'opponent', filter: 'anyPermanent' }],
         transformSelf: true,
@@ -2033,7 +2070,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'kuja-genome-sorcerer',
     name: 'Kuja, Genome Sorcerer',
-    costLabel: '2BR',
+    costLabel: '{2}{B}{R}',
     type: 'creature',
     subtype: 'Legendary Creature \u2014 Human Mutant Wizard',
     power: 3,
@@ -2061,7 +2098,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'laughing-mad',
     name: 'Laughing Mad',
-    costLabel: '2R',
+    costLabel: '{2}{R}',
     type: 'instant',
     text: 'As an additional cost to cast this spell, discard a card.\nDraw two cards.\nFlashback 3R',
     imagePath: '/assets/cards/laughing-mad.webp',
@@ -2071,12 +2108,12 @@ export const CARD_POOL: CardDefinition[] = [
     // sequencing), and this reuses the existing draw-then-discard plumbing
     // instead of needing a new pre-cast-cost/choice mechanism.
     onCast: [{ type: 'loot', drawCount: 2, discardCount: 1 }],
-    flashback: { cost: '3R' },
+    flashback: { cost: '{3}{R}' },
   },
   {
     id: 'lightning-army-of-one',
     name: 'Lightning, Army of One',
-    costLabel: '1RW',
+    costLabel: '{1}{R}{W}',
     type: 'creature',
     subtype: 'Legendary Creature \u2014 Human Soldier',
     power: 3,
@@ -2088,7 +2125,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'lightning-security-sergeant',
     name: 'Lightning, Security Sergeant',
-    costLabel: '2R',
+    costLabel: '{2}{R}',
     type: 'creature',
     subtype: 'Legendary Creature \u2014 Human Soldier',
     power: 2,
@@ -2101,7 +2138,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'light-of-judgment',
     name: 'Light of Judgment',
-    costLabel: '4R',
+    costLabel: '{4}{R}',
     type: 'instant',
     // The "destroy up to one Equipment attached to that creature" clause is
     // deferred - its target set depends on whatever the FIRST target was,
@@ -2125,21 +2162,21 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'lion-heart',
     name: 'Lion Heart',
-    costLabel: '4',
+    costLabel: '{4}',
     type: 'artifact',
     subtype: 'Equipment',
     // The ETB "deals 2 damage to any target" clause is deferred - no effect
     // here targets a creature OR a player interchangeably ("any target").
     text: 'When this Equipment enters, it deals 2 damage to any target.\n Equipped creature gets +2/+1.\n Equip 2',
     attachesTo: 'creature',
-    equipCost: '2',
+    equipCost: '{2}',
     equipBuff: { power: 2, toughness: 1 },
     imagePath: '/assets/cards/lion-heart.webp'
   },
   {
     id: 'locke-cole',
     name: 'Locke Cole',
-    costLabel: '1UB',
+    costLabel: '{1}{U}{B}',
     type: 'creature',
     subtype: 'Legendary Creature \u2014 Human Rogue',
     power: 2,
@@ -2151,7 +2188,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'loporrit-scout',
     name: 'Loporrit Scout',
-    costLabel: '2G',
+    costLabel: '{2}{G}',
     type: 'creature',
     power: 3,
     toughness: 2,
@@ -2162,15 +2199,38 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'louisoix-s-sacrifice',
     name: "Louisoix's Sacrifice",
-    costLabel: 'U',
+    costLabel: '{U}',
     type: 'instant',
     text: 'As an additional cost to cast this spell, sacrifice a legendary creature or pay 2. Counter target activated ability, triggered ability, or noncreature spell.',
     imagePath: '/assets/cards/louisoix-s-sacrifice.webp'
   },
   {
+    id: 'lulu-stern-guardian',
+    name: 'Lulu, Stern Guardian',
+    costLabel: '{2}{U}',
+    type: 'creature',
+    subtype: 'Legendary Creature Human Wizard',
+    power: 2,
+    toughness: 3,
+    text: 'Whenever an opponent attacks you, choose target creature attacking you. Put a stun counter on that creature.\n' +
+      '{3}{U}: Proliferate. (Choose any number of permanents and/or players, then give each another counter of each kind ' +
+      'already there.)',
+    imagePath: '/assets/cards/lulu-stern-guardian.webp',
+    onOpponentAttacksYou: [{ type: 'putStunCounterOnTargetAttacker' }],
+    abilities: [
+      {
+        id: 'lulu-proliferate',
+        label: 'Proliferate',
+        cost: { manaLabel: '{3}{U}' },
+        effects: [{ type: 'proliferate' }],
+        effectText: 'Proliferate.',
+      },
+    ],
+  },
+  {
     id: 'lunatic-pandora',
     name: 'Lunatic Pandora',
-    costLabel: '1',
+    costLabel: '{1}',
     type: 'artifact',
     text: "2, Tap: Surveil 1. (Look at the top card of your library. You may put it into your graveyard.) \n" +
       "6, Tap, Sacrifice Lunatic Pandora: Destroy target nonland permanent.",
@@ -2179,14 +2239,14 @@ export const CARD_POOL: CardDefinition[] = [
       {
         id: 'lunatic-pandora-surveil',
         label: 'Surveil',
-        cost: { manaLabel: '2', tap: true },
+        cost: { manaLabel: '{2}', tap: true },
         effects: [{ type: 'surveil', count: 1 }],
         effectText: 'Surveil 1.',
       },
       {
         id: 'lunatic-pandora-destroy',
         label: 'Destroy',
-        cost: { manaLabel: '6', tap: true, sacrificeSelf: true },
+        cost: { manaLabel: '{6}', tap: true, sacrificeSelf: true },
         effects: [{ type: 'destroyTarget', targetFilter: 'nonlandPermanent' }],
         effectText: 'Destroy target nonland permanent.',
       },
@@ -2195,7 +2255,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'machinist-s-arsenal',
     name: "Machinist's Arsenal",
-    costLabel: '4W',
+    costLabel: '{4}{W}',
     type: 'artifact',
     subtype: 'Equipment',
     text: "Job select (When this Equipment enters, create a 1/1 colorless Hero creature token, then attach this to it.)" +
@@ -2203,7 +2263,7 @@ export const CARD_POOL: CardDefinition[] = [
       "Machina — Equip 4 (4: Attach to target creature you control. Equip only as a sorcery.)",
     onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
     attachesTo: 'creature',
-    equipCost: '4',
+    equipCost: '{4}',
     equipBuffPerControlledType: { type: 'artifact', power: 2, toughness: 2 },
     equipGrantsSubtype: 'Artificer',
     imagePath: '/assets/cards/machinist-s-arsenal.webp'
@@ -2211,7 +2271,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'magic-damper',
     name: 'Magic Damper',
-    costLabel: 'U',
+    costLabel: '{U}',
     type: 'instant',
     text: 'Target creature you control gets +1/+1 and gains hexproof until end of turn. Untap it.',
     onCast: [{ type: 'pumpTarget', power: 1, toughness: 1, grantKeyword: 'hexproof', restrictToOwnCreature: true, alsoUntap: true }],
@@ -2220,7 +2280,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'magic-pot',
     name: 'Magic Pot',
-    costLabel: '3',
+    costLabel: '{3}',
     type: 'creature',
     subtype: 'artifact',
     power: 1,
@@ -2237,7 +2297,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'magitek-armor',
     name: 'Magitek Armor',
-    costLabel: '3W',
+    costLabel: '{3}{W}',
     type: 'artifact',
     power: 4,
     toughness: 4,
@@ -2251,7 +2311,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'magitek-infantry',
     name: 'Magitek Infantry',
-    costLabel: 'W',
+    costLabel: '{W}',
     type: 'creature',
     subtype: 'Artifact Robot Soldier',
     power: 1,
@@ -2264,7 +2324,7 @@ export const CARD_POOL: CardDefinition[] = [
       {
         id: 'magitek-infantry-search',
         label: 'Search',
-        cost: { manaLabel: '2W' },
+        cost: { manaLabel: '{2}{W}' },
         effects: [{ type: 'searchLibraryForNamedCard', cardName: 'Magitek Infantry' }],
         effectText: 'Search your library for a card named Magitek Infantry, put it onto the battlefield tapped, then shuffle.',
       },
@@ -2273,7 +2333,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'magitek-scythe',
     name: 'Magitek Scythe',
-    costLabel: '4',
+    costLabel: '{4}',
     type: 'artifact',
     subtype: 'Equipment',
     text: 'A Test of Your Reflexes! — When this Equipment enters, you may attach it to target creature you control. ' +
@@ -2286,27 +2346,27 @@ export const CARD_POOL: CardDefinition[] = [
     // more involved mechanic from the attach-and-first-strike above (see The
     // Masamune's identical, equally deferred clause).
     attachesTo: 'creature',
-    equipCost: '2',
+    equipCost: '{2}',
     equipBuff: { power: 2, toughness: 1 },
     imagePath: '/assets/cards/magitek-scythe.webp'
   },
   {
     id: 'malboro',
     name: 'Malboro',
-    costLabel: '4BB',
+    costLabel: '{4}{B}{B}',
     type: 'creature',
     power: 4,
     toughness: 4,
     text: "Bad Breath — When this creature enters, each opponent discards a card, loses 2 life, and exiles the top three cards of their library.\n" +
       "Swampcycling 2 (2, Discard this card: Search your library for a Swamp card, reveal it, put it into your hand, then shuffle.)",
-    cycling: { cost: '2', searchLandName: 'Swamp' },
+    cycling: { cost: '{2}', searchLandName: 'Swamp' },
     imagePath: '/assets/cards/malboro.webp',
     onEnter: [{ type: 'eachOpponentDiscards', count: 1 }, { type: 'dealDamageToEachOpponent', amount: 2 }, { type: 'exileTopOfEachOpponentLibrary', count: 3 }],
   },
   {
     id: 'matoya-archon-elder',
     name: 'Matoya, Archon Elder',
-    costLabel: '2U',
+    costLabel: '{2}{U}',
     type: 'creature',
     subtype: 'Legendary Creature \u2014 Human Warlock',
     power: 1,
@@ -2318,13 +2378,13 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'memories-returning',
     name: 'Memories Returning',
-    costLabel: '2UU',
+    costLabel: '{2}{U}{U}',
     type: 'sorcery',
     text: 'Reveal the top five cards of your library. Put one of them into your hand. Then choose an opponent. ' +
       "They put one on the bottom of your library. Then you put one into your hand. Then they put one on the bottom of your library. Put the other into your hand.\n" +
       "Flashback 7UU",
     onCast: [{ type: 'revealAndDivide', count: 5, steps: [{ chooser: 'you', destination: 'hand' }, { chooser: 'opponent', destination: 'bottomOfLibrary' }, { chooser: 'you', destination: 'hand' }, { chooser: 'opponent', destination: 'bottomOfLibrary' }], remainderDestination: 'hand' }],
-    flashback: { cost: '7UU' },
+    flashback: { cost: '{7}{U}{U}' },
     imagePath: '/assets/cards/memories-returning.webp'
   },
   {
@@ -2342,7 +2402,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'minwu-white-mage',
     name: 'Minwu, White Mage',
-    costLabel: '3WW',
+    costLabel: '{3}{W}{W}',
     type: 'creature',
     subtype: "Legendary Ceature \u2014 Human Cleric",
     power: 3,
@@ -2354,7 +2414,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'monk-s-fist',
     name: "Monk's Fist",
-    costLabel: '2',
+    costLabel: '{2}',
     type: 'artifact',
     subtype: 'Equipment',
     text: "Job select (When this Equipment enters, create a 1/1 colorless Hero creature token, then attach this to it.)\n" +
@@ -2362,7 +2422,7 @@ export const CARD_POOL: CardDefinition[] = [
       "Equip 2 (2: Attach to target creature you control. Equip only as a sorcery.)",
     onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
     attachesTo: 'creature',
-    equipCost: '2',
+    equipCost: '{2}',
     equipBuff: { power: 1, toughness: 0 },
     equipGrantsSubtype: 'Monk',
     imagePath: '/assets/cards/monk-s-fist.webp'
@@ -2370,7 +2430,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'moogles-valor',
     name: "Moogles' Valor",
-    costLabel: '3WW',
+    costLabel: '{3}{W}{W}',
     type: 'instant',
     text: 'For each creature you control, create a 1/2 white Moogle creature token with lifelink. Then creatures you control gain indestructible until end of turn.',
     onCast: [{ type: 'createToken', tokenId: 'token-moogle', count: 'perCreatureYouControl' }],
@@ -2388,7 +2448,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'mysidian-elder',
     name: 'Mysidian Elde',
-    costLabel: '2R',
+    costLabel: '{2}{R}',
     type: 'creature',
     power: 1,
     toughness: 3,
@@ -2399,7 +2459,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'namazu-trader',
     name: 'Namazu Trader',
-    costLabel: '3B',
+    costLabel: '{3}{B}',
     type: 'creature',
     power: 3,
     toughness: 4,
@@ -2414,13 +2474,13 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'nibelheim-aflame',
     name: 'Nibelheim Aflame',
-    costLabel: '2RR',
+    costLabel: '{2}{R}{R}',
     type: 'sorcery',
     text: 'Choose target creature you control. It deals damage equal to its power to each other creature. If this spell was cast from a graveyard, ' +
       'discard your hand and draw four cards. \n Flashback 5RR (You may cast this card from your graveyard for its flashback cost. Then exile it.)',
     imagePath: '/assets/cards/nibelheim-aflame.webp',
     onCast: [{ type: 'sweepDamageFromChosenCreature' }],
-    flashback: { cost: '5RR' },
+    flashback: { cost: '{5}{R}{R}' },
     // The "if cast from a graveyard, discard your hand and draw four cards"
     // flashback-conditional bonus is deferred - onCast has no way to know
     // whether it's resolving as a normal cast or a flashback cast.
@@ -2428,7 +2488,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'ninja-s-blades',
     name: "Ninja's Blades",
-    costLabel: '2B',
+    costLabel: '{2}{B}',
     type: 'artifact',
     subtype: 'Equipment',
     text: "Job select \n Equipped creature gets +1/+1, is a Ninja in addition to its other types, and has " +
@@ -2441,7 +2501,7 @@ export const CARD_POOL: CardDefinition[] = [
     // off an in-progress discard choice yet (see GameState.pendingDiscard).
     onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
     attachesTo: 'creature',
-    equipCost: '2',
+    equipCost: '{2}',
     equipBuff: { power: 1, toughness: 1 },
     equipGrantsSubtype: 'Ninja',
     imagePath: '/assets/cards/ninja-s-blades.webp'
@@ -2449,7 +2509,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'noctis-prince-of-lucis',
     name: 'Noctis, Prince of Lucis',
-    costLabel: '1WUB',
+    costLabel: '{1}{W}{U}{B}',
     type: 'creature',
     subtype: 'Legendary Creature \u2014 Human Noble',
     power: 4,
@@ -2462,7 +2522,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'omega-heartless-evolution',
     name: 'Omega, Heartless Evolution',
-    costLabel: '5GU',
+    costLabel: '{5}{G}{U}',
     type: 'creature',
     subtype: 'Legendary Artifact Creature \u2014  Robot',
     power: 8,
@@ -2479,7 +2539,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'opera-love-song',
     name: 'Opera Love Song',
-    costLabel: '1R',
+    costLabel: '{1}{R}',
     type: 'instant',
     text: "Choose one — \n• Exile the top two cards of your library. You may play those cards until your next end step.\n" +
       "• One or two target creatures each get +2/+0 until end of turn",
@@ -2497,7 +2557,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'overkill',
     name: 'Overkill',
-    costLabel: '2B',
+    costLabel: '{2}{B}',
     type: 'instant',
     text: 'Target creature gets -0/-9999 until end of turn.',
     imagePath: '/assets/cards/overkill.webp',
@@ -2506,7 +2566,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'paladin-s-arms',
     name: "Paladin's Arms",
-    costLabel: '2W',
+    costLabel: '{2}{W}',
     type: 'artifact',
     subtype: 'Equipment',
     text: "Job select (When this Equipment enters, create a 1/1 colorless Hero creature token, then attach this to it.) \n" +
@@ -2514,16 +2574,16 @@ export const CARD_POOL: CardDefinition[] = [
       "Lightbringer and Hero\u2019s Shield — Equip 4 (4: Attach to target creature you control. Equip only as a sorcery.)",
     onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
     attachesTo: 'creature',
-    equipCost: '4',
+    equipCost: '{4}',
     equipBuff: { power: 2, toughness: 1 },
-    equipGrantsWard: { mana: '1' },
+    equipGrantsWard: { mana: '{1}' },
     equipGrantsSubtype: 'Knight',
     imagePath: '/assets/cards/paladin-s-arms.webp'
   },
   {
     id: 'phantom-train',
     name: "Phantom Train",
-    costLabel: '3B',
+    costLabel: '{3}{B}',
     type: 'artifact',
     power: 4,
     toughness: 4,
@@ -2543,7 +2603,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'phoenix-down',
     name: 'Phoenix Down',
-    costLabel: 'W',
+    costLabel: '{W}',
     type: 'artifact',
     text: "1W, Tap, Exile this artifact: Choose one — \n" +
       "• Return target creature card with mana value 4 or less from your graveyard to the battlefield tapped. \n" +
@@ -2556,7 +2616,7 @@ export const CARD_POOL: CardDefinition[] = [
       {
         id: 'phoenix-down-reanimate',
         label: 'Reanimate',
-        cost: { manaLabel: '1W', tap: true, exileSelf: true },
+        cost: { manaLabel: '{1}{W}', tap: true, exileSelf: true },
         effects: [{ type: 'reanimateTargetFromGraveyard', maxManaValue: 4, forceEntersTapped: true }],
         effectText: 'Return target creature card with mana value 4 or less from your graveyard to the battlefield tapped.',
       },
@@ -2574,7 +2634,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'poison-the-waters',
     name: 'Poison the Waters',
-    costLabel: '1B',
+    costLabel: '{1}{B}',
     type: 'sorcery',
     text: "Choose one — \n• All creatures get -1/-1 until end of turn.\n " +
       "• Target player reveals their hand. You choose an artifact or creature card from it. That player discards that card.",
@@ -2588,7 +2648,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'prishe-s-wanderings',
     name: "Prishe's Wanderings",
-    costLabel: '2G',
+    costLabel: '{2}{G}',
     type: 'instant',
     text: 'Search your library for a basic land card or Town card, put it onto the battlefield tapped, then shuffle. ' +
       'When you search your library this way, put a +1/+1 counter on target creature you control.',
@@ -2602,7 +2662,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'prompto-argentum',
     name: 'Prompto Argentum',
-    costLabel: '1R',
+    costLabel: '{1}{R}',
     type: 'creature',
     subtype: 'Legendary Creature \u2014 Human Scout',
     power: 2,
@@ -2614,7 +2674,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'pupu-ufo',
     name: "PuPu UFO",
-    costLabel: '2',
+    costLabel: '{2}',
     type: 'creature',
     subtype: 'Artifact Construct Alien',
     power: 0,
@@ -2633,7 +2693,7 @@ export const CARD_POOL: CardDefinition[] = [
       {
         id: 'base-power-towns',
         label: 'Base power = Towns you control',
-        cost: { manaLabel: '3' },
+        cost: { manaLabel: '{3}' },
         effects: [{ type: 'setBasePowerUntilEndOfTurnToControlledSubtypeCount', subtype: 'Town' }],
         effectText: "Until end of turn, this creature\u2019s base power becomes equal to the number of Towns you control.",
       },
@@ -2642,7 +2702,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'qiqirn-merchant',
     name: 'Qiqirn Merchant',
-    costLabel: '2U',
+    costLabel: '{2}{U}',
     type: 'creature',
     power: 1,
     toughness: 4,
@@ -2653,14 +2713,14 @@ export const CARD_POOL: CardDefinition[] = [
       {
         id: 'qiqirn-merchant-loot',
         label: 'Loot',
-        cost: { manaLabel: '1', tap: true },
+        cost: { manaLabel: '{1}', tap: true },
         effects: [{ type: 'loot', drawCount: 1, discardCount: 1 }],
         effectText: 'Draw a card, then discard a card.',
       },
       {
         id: 'qiqirn-merchant-draw-three',
         label: 'Draw Three',
-        cost: { manaLabel: '7', tap: true, sacrificeSelf: true, reducePerControlledSubtype: { subtype: 'Town', amountPerUnit: 1 } },
+        cost: { manaLabel: '{7}', tap: true, sacrificeSelf: true, reducePerControlledSubtype: { subtype: 'Town', amountPerUnit: 1 } },
         effects: [{ type: 'loot', drawCount: 3, discardCount: 0 }],
         effectText: 'Draw three cards. This ability costs 1 less to activate for each Town you control.',
       },
@@ -2669,7 +2729,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'queen-brahne',
     name: 'Queen Brahne',
-    costLabel: '2R',
+    costLabel: '{2}{R}',
     type: 'creature',
     subtype: 'Legendary Creature Human Noble',
     power: 2,
@@ -2683,7 +2743,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'quina-qu-gourmet',
     name: 'Quina, Qu Gourmet',
-    costLabel: '2G',
+    costLabel: '{2}{G}',
     type: 'creature',
     subtype: 'Legendary Creature Qu',
     power: 2,
@@ -2700,7 +2760,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'quistis-trepe',
     name: 'Quistis Trepe',
-    costLabel: '2U',
+    costLabel: '{2}{U}',
     type: 'creature',
     subtype: 'Legendary Creature \u2014 Human Wizard',
     power: 2,
@@ -2713,7 +2773,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'qutrub-forayer',
     name: 'Qutrub Forayer',
-    costLabel: '2B',
+    costLabel: '{2}{B}',
     type: 'creature',
     power: 3,
     toughness: 2,
@@ -2752,19 +2812,19 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'random-encounter',
     name: 'Random Encounter',
-    costLabel: '4RR',
+    costLabel: '{4}{R}{R}',
     type: 'sorcery',
     text: 'Shuffle your library, then mill four cards. Put each creature card milled this way onto the battlefield. ' +
       'They gain haste. At the beginning of the next end step, return those creatures to their owner\u2019s hand.\n' +
       'Flashback 6RR',
     imagePath: '/assets/cards/random-encounter.webp',
-    flashback: { cost: '6RR' },
+    flashback: { cost: '{6}{R}{R}' },
     onCast: [{ type: 'millThenPutCreaturesOntoBattlefield', millCount: 4, grantsHaste: true, thenReturnToHandAtNextEndStep: true }],
   },
   {
     id: 'raubahn-bull-of-ala-mhigo',
     name: 'Raubahn, Bull of Ala Mhigo',
-    costLabel: '1R',
+    costLabel: '{1}{R}',
     type: 'creature',
     subtype: 'Legendary Creature \u2014 Human Warrior',
     power: 2,
@@ -2780,7 +2840,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'reach-the-horizon',
     name: 'Reach the Horizon',
-    costLabel: '3G',
+    costLabel: '{3}{G}',
     type: 'sorcery',
     text: 'Search your library for up to two basic land cards and/or Town cards with different names, put them onto the battlefield tapped, then shuffle.',
     imagePath: '/assets/cards/reach-the-horizon.webp',
@@ -2789,7 +2849,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'red-mage-s-rapier',
     name: "Red Mage's Rapier",
-    costLabel: '1R',
+    costLabel: '{1}{R}',
     type: 'artifact',
     subtype: 'Equipment',
     text: "Job select (When this Equipment enters, create a 1/1 colorless Hero creature token, then attach this to it.) \n" +
@@ -2797,7 +2857,7 @@ export const CARD_POOL: CardDefinition[] = [
       "Equip 3",
     onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
     attachesTo: 'creature',
-    equipCost: '3',
+    equipCost: '{3}',
     equipGrantsSubtype: 'Wizard',
     equipGrantsNoncreatureCastTrigger: { pumpSelf: { power: 2, toughness: 0 } },
     imagePath: '/assets/cards/red-mage-s-rapier.webp'
@@ -2805,7 +2865,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'relentless-x-atm092',
     name: 'Relentless X-ATM092',
-    costLabel: '6',
+    costLabel: '{6}',
     type: 'creature',
     subtype: 'Artifact Creature Robot Spider',
     power: 6,
@@ -2818,7 +2878,7 @@ export const CARD_POOL: CardDefinition[] = [
       {
         id: 'relentless-x-atm092-return',
         label: 'Return',
-        cost: { manaLabel: '8' },
+        cost: { manaLabel: '{8}' },
         effectText: 'Return this card from your graveyard to the battlefield tapped with a finality counter on it.',
         returnSelfFromGraveyard: { tapped: true, counterLabel: 'Finality', counterAmount: 1 },
       },
@@ -2830,7 +2890,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'relm-s-sketching',
     name: "Relm's Sketching",
-    costLabel: '2UU',
+    costLabel: '{2}{U}{U}',
     type: 'sorcery',
     text: "Create a token that\u2019s a copy of target artifact, creature, or land.",
     imagePath: '/assets/cards/relm-s-sketching.webp',
@@ -2839,7 +2899,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'reno-and-rude',
     name: 'Reno and Rude',
-    costLabel: '1B',
+    costLabel: '{1}{B}',
     type: 'creature',
     subtype: 'Legendary Creature \u2014 Human Assassin',
     power: 2,
@@ -2852,33 +2912,33 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'resentful-revelation',
     name: 'Resentful Revelation',
-    costLabel: '1B',
+    costLabel: '{1}{B}',
     type: 'sorcery',
     text: 'Look at the top three cards of your library. Put one of them into your hand and the rest into your graveyard. \n' +
       'Flashback 6B',
     imagePath: '/assets/cards/resentful-revelation.webp',
     onCast: [{ type: 'revealFiltered', count: 3, filterType: ['creature', 'instant', 'sorcery', 'land', 'artifact', 'enchantment'], restDestination: 'graveyard' }],
-    flashback: { cost: '6B' },
+    flashback: { cost: '{6}{B}' },
   },
   {
     id: 'restoration-magic',
     name: 'Restoration Magic',
-    costLabel: 'W',
+    costLabel: '{W}',
     type: 'instant',
     text: 'Tiered (Choose one additional cost.) \n• Cure — 0 — Target permanent gains hexproof and indestructible until end of turn.\n' +
       "• Cura — 1 — Target permanent gains hexproof and indestructible until end of turn. You gain 3 life.\n" +
       "• Curaga — 3W — Permanents you control gain hexproof and indestructible until end of turn. You gain 6 life.",
     imagePath: '/assets/cards/restoration-magic.webp',
     tieredModes: [
-      { label: 'Cure — {0} — Target permanent gains hexproof and indestructible', additionalCost: '0', effects: [{ type: 'grantKeywordsToTargetPermanent', keywords: ['hexproof', 'indestructible'] }] },
+      { label: 'Cure — {0} — Target permanent gains hexproof and indestructible', additionalCost: '{0}', effects: [{ type: 'grantKeywordsToTargetPermanent', keywords: ['hexproof', 'indestructible'] }] },
       {
         label: 'Cura — {1} — Target permanent gains hexproof and indestructible, gain 3 life',
-        additionalCost: '1',
+        additionalCost: '{1}',
         effects: [{ type: 'grantKeywordsToTargetPermanent', keywords: ['hexproof', 'indestructible'] }, { type: 'gainLife', amount: 3 }],
       },
       {
         label: 'Curaga — {3}{W} — Permanents you control gain hexproof and indestructible, gain 6 life',
-        additionalCost: '3W',
+        additionalCost: '{3}{W}',
         effects: [{ type: 'grantKeywordsToControlledPermanents', keywords: ['hexproof', 'indestructible'] }, { type: 'gainLife', amount: 6 }],
       },
     ],
@@ -2886,12 +2946,12 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'retrieve-the-esper',
     name: 'Retrieve the Esper',
-    costLabel: '3U',
+    costLabel: '{3}{U}',
     type: 'sorcery',
     text: 'Create a 3/3 blue Robot Warrior artifact creature token. Then if this spell was cast from a graveyard, put two +1/+1 counters on that token. \nFlashback 5U',
     imagePath: '/assets/cards/retrieve-the-esper.webp',
     onCast: [{ type: 'createToken', tokenId: 'token-robot-warrior' }],
-    flashback: { cost: '5U' },
+    flashback: { cost: '{5}{U}' },
     // The flashback-conditional "+2 counters if cast from a graveyard" bonus
     // is deferred - onCast has no way to know whether it's resolving as a
     // normal cast or a flashback cast (same gap as Nibelheim Aflame).
@@ -2899,7 +2959,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'ride-the-shoopuf',
     name: 'Ride the Shoopuf',
-    costLabel: '1G',
+    costLabel: '{1}{G}',
     type: 'enchantment',
     text: 'Landfall — Whenever a land you control enters, put a +1/+1 counter on target creature you control. \n' +
       "5GG: This enchantment becomes a 7/7 Beast creature in addition to its other types.",
@@ -2912,7 +2972,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'ring-of-the-lucii',
     name: 'Ring of the Lucii',
-    costLabel: '4',
+    costLabel: '{4}',
     type: 'artifact',
     text: 'T: Add MM. \n2, Tap, Pay 1 life: Tap target nonland permanent.',
     imagePath: '/assets/cards/ring-of-the-lucii.webp',
@@ -2922,7 +2982,7 @@ export const CARD_POOL: CardDefinition[] = [
       {
         id: 'ring-of-the-lucii-tap',
         label: 'Tap',
-        cost: { manaLabel: '2', tap: true, payLife: 1 },
+        cost: { manaLabel: '{2}', tap: true, payLife: 1 },
         effects: [{ type: 'tapTarget', targetFilter: 'nonlandPermanent' }],
         effectText: 'Tap target nonland permanent.',
       },
@@ -2931,7 +2991,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'rinoa-heartilly',
     name: 'Rinoa Heartilly',
-    costLabel: '3GW',
+    costLabel: '{3}{G}{W}',
     type: 'creature',
     subtype: 'Legendary Creature \u2014 Human Rebel Warlock',
     power: 4,
@@ -2948,7 +3008,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'rook-turret',
     name: 'Rook Turret',
-    costLabel: '3U',
+    costLabel: '{3}{U}',
     type: 'creature',
     subtype: 'Artifact',
     power: 3,
@@ -2964,7 +3024,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'rosa-resolute-white-mage',
     name: 'Rosa, Resolute White Mage',
-    costLabel: '3W',
+    costLabel: '{3}{W}',
     type: 'creature',
     subtype: 'Legendary Creature \u2014 Human Noble Cleric',
     power: 2,
@@ -2977,7 +3037,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'rufus-shinra',
     name: 'Rufus Shinra',
-    costLabel: '1WB',
+    costLabel: '{1}{W}{B}',
     type: 'creature',
     subtype: 'Legendary Creature \u2014 Human Noble',
     power: 2,
@@ -2989,7 +3049,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'rydia-s-return',
     name: 'Rydia\u2019s Return',
-    costLabel: '3GG',
+    costLabel: '{3}{G}{G}',
     type: 'sorcery',
     text: 'Choose one — \n• Creatures you control get +3/+3 until end of turn.\n• Return up to two target permanent cards from your graveyard to your hand.',
     imagePath: '/assets/cards/rydia-s-return.webp',
@@ -3006,7 +3066,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'rydia-summoner-of-mist',
     name: 'Rydia, Summoner of Mist',
-    costLabel: 'RG',
+    costLabel: '{R}{G}',
     type: 'creature',
     subtype: 'Legendary Creature \u2014 Human Shaman',
     power: 1,
@@ -3024,7 +3084,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'sabotender',
     name: 'Sabotender',
-    costLabel: '1R',
+    costLabel: '{1}{R}',
     type: 'creature',
     power: 2,
     toughness: 1,
@@ -3035,7 +3095,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'sage-s-nouliths',
     name: 'Sage\u2019s Nouliths',
-    costLabel: '1U',
+    costLabel: '{1}{U}',
     type: 'artifact',
     subtype: 'Equipment',
     text: 'Job select (When this Equipment enters, create a 1/1 colorless Hero creature token, then attach this to it.) \n' +
@@ -3043,7 +3103,7 @@ export const CARD_POOL: CardDefinition[] = [
       'Hagneia — Equip 3',
     onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
     attachesTo: 'creature',
-    equipCost: '3',
+    equipCost: '{3}',
     equipBuff: { power: 1, toughness: 0 },
     equipGrantsSubtype: 'Cleric',
     equipGrantsOnAttack: [{ type: 'untapTargetAttacker' }],
@@ -3052,7 +3112,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'sahagin',
     name: 'Sahagin',
-    costLabel: '1U',
+    costLabel: '{1}{U}',
     type: 'creature',
     power: 1,
     toughness: 3,
@@ -3063,7 +3123,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'samurai-s-katana',
     name: 'Samurai\u2019s Katana',
-    costLabel: '2R',
+    costLabel: '{2}{R}',
     type: 'artifact',
     subtype: 'Equipment',
     text: 'Job select (When this Equipment enters, create a 1/1 colorless Hero creature token, then attach this to it.)\n' +
@@ -3071,7 +3131,7 @@ export const CARD_POOL: CardDefinition[] = [
       'Murasame — Equip 5',
     onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
     attachesTo: 'creature',
-    equipCost: '5',
+    equipCost: '{5}',
     equipBuff: { power: 2, toughness: 2 },
     equipGrantsKeyword: ['trample', 'haste'],
     equipGrantsSubtype: 'Samurai',
@@ -3080,7 +3140,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'sandworm',
     name: 'Sandworm',
-    costLabel: '4R',
+    costLabel: '{4}{R}',
     type: 'creature',
     power: 5,
     toughness: 4,
@@ -3095,7 +3155,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'sazh-katzroy',
     name: 'Sazh Katzro',
-    costLabel: '3G',
+    costLabel: '{3}{G}',
     type: 'creature',
     subtype: 'Legendary Creature \u2014 Human Pilot',
     power: 3,
@@ -3113,7 +3173,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'sazh-s-chocobo',
     name: 'Sazh\u2019s Chocobo',
-    costLabel: 'G',
+    costLabel: '{G}',
     type: 'creature',
     subtype: 'Bird',
     power: 0,
@@ -3125,7 +3185,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'scorpion-sentinel',
     name: 'Scorpion Sentinel',
-    costLabel: '1U',
+    costLabel: '{1}{U}',
     type: 'creature',
     subtype: 'artifact Robot Scorpion',
     power: 1,
@@ -3137,7 +3197,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'seifer-almasy',
     name: 'Seifer Almasy',
-    costLabel: '3R',
+    costLabel: '{3}{R}',
     type: 'creature',
     subtype: 'Legendary Creature Human Knight',
     power: 3,
@@ -3160,7 +3220,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'self-destruct',
     name: 'Self-Destruct',
-    costLabel: '1R',
+    costLabel: '{1}{R}',
     type: 'instant',
     text: 'Target creature you control deals X damage to any other target and X damage to itself, where X is its power.',
     imagePath: '/assets/cards/self-destruct.webp',
@@ -3169,7 +3229,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'sephiroth-fabled-soldier',
     name: 'Sephiroth, Fabled SOLDIER',
-    costLabel: '2B',
+    costLabel: '{2}{B}',
     type: 'creature',
     subtype: 'Legendary Creature Human Avatar Soldier',
     power: 3,
@@ -3202,7 +3262,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'sephiroth-planet-s-heir',
     name: 'Sephiroth, Planet\u2019s Heir',
-    costLabel: '4UB',
+    costLabel: '{4}{U}{B}',
     type: 'creature',
     subtype: 'Legendary Creature Human Avatar Soldier',
     power: 4,
@@ -3219,7 +3279,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'sephiroth-s-intervention',
     name: 'Sephiroth\u2019s Intervention',
-    costLabel: '3B',
+    costLabel: '{3}{B}',
     type: 'instant',
     text: 'Destroy target creature. You gain 2 life.',
     imagePath: '/assets/cards/sephiroth-s-intervention.webp',
@@ -3228,7 +3288,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'serah-farron',
     name: 'Serah Farron',
-    costLabel: '1GW',
+    costLabel: '{1}{G}{W}',
     type: 'creature',
     subtype: 'Legendary Creature Human Citizen',
     power: 2,
@@ -3259,7 +3319,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'seymour-flux',
     name: 'Seymour Flux',
-    costLabel: '4B',
+    costLabel: '{4}{B}',
     type: 'creature',
     subtype: 'Legendary Creature Spirit Avatar',
     power: 5,
@@ -3277,7 +3337,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'shambling-cie-th',
     name: 'Shambling Cie\u2019th',
-    costLabel: '2B',
+    costLabel: '{2}{B}',
     type: 'creature',
     power: 3,
     toughness: 3,
@@ -3291,7 +3351,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'shantotto-tactician-magician',
     name: 'Shantotto, Tactician Magician',
-    costLabel: '1UR',
+    costLabel: '{1}{U}{R}',
     type: 'creature',
     subtype: 'Legendary Creature Dwarf Wizard',
     power: 0,
@@ -3313,7 +3373,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'shinra-reinforcements',
     name: 'Shinra Reinforcement',
-    costLabel: '2B',
+    costLabel: '{2}{B}',
     type: 'creature',
     power: 2,
     toughness: 3,
@@ -3324,7 +3384,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'sidequest-card-collection',
     name: 'Sidequest: Card Collection',
-    costLabel: '3U',
+    costLabel: '{3}{U}',
     type: 'enchantment',
     text: 'When this enchantment enters, draw three cards, then discard two cards. \n' +
       'At the beginning of your end step, if eight or more cards are in your graveyard, transform this enchantment.',
@@ -3337,7 +3397,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'sidequest-catch-a-fish',
     name: 'Sidequest: Catch a Fish',
-    costLabel: '2W',
+    costLabel: '{2}{W}',
     type: 'enchantment',
     text: 'At the beginning of your upkeep, look at the top card of your library. If it\u2019s an artifact or creature card, ' +
       'you may reveal it and put it into your hand. If you put a card into your hand this way, create a Food token and transform this enchantment.',
@@ -3365,7 +3425,7 @@ export const CARD_POOL: CardDefinition[] = [
       {
         id: 'cooking-campsite-counters',
         label: 'Cook',
-        cost: { manaLabel: '3', tap: true, sacrificeAnother: 'artifact' },
+        cost: { manaLabel: '{3}', tap: true, sacrificeAnother: 'artifact' },
         onlyDuringOwnMainPhase: true,
         effects: [{ type: 'buffOtherCreaturesYouControl', counterLabel: '+1/+1', counterAmount: 1 }],
         effectText: 'Put a +1/+1 counter on each creature you control.',
@@ -3375,7 +3435,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'sidequest-hunt-the-mark',
     name: 'Sidequest: Hunt the Mark',
-    costLabel: '3BB',
+    costLabel: '{3}{B}{B}',
     type: 'enchantment',
     text: 'When this enchantment enters, destroy up to one target creature.\n' +
       'At the beginning of your end step, if a creature died under an opponent\u2019s control this turn, ' +
@@ -3403,7 +3463,7 @@ export const CARD_POOL: CardDefinition[] = [
       {
         id: 'yiazmat-ultimate-mark-activate',
         label: 'Activate',
-        cost: { manaLabel: '1B', sacrificeAnother: 'artifactOrCreature' },
+        cost: { manaLabel: '{1}{B}', sacrificeAnother: 'artifactOrCreature' },
         effects: [{ type: 'pumpSelf', power: 0, toughness: 0, grantKeyword: 'indestructible', tapSelf: true }],
         effectText: 'Yiazmat gains indestructible until end of turn. Tap it.',
       },
@@ -3412,7 +3472,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'sidequest-play-blitzball',
     name: 'Sidequest: Play Blitzbal',
-    costLabel: '2R',
+    costLabel: '{2}{R}',
     type: 'enchantment',
     text: 'At the beginning of combat on your turn, target creature you control gets +2/+0 until end of turn.\n' +
       'At the end of combat on your turn, if a player was dealt 6 or more combat damage this turn, transform this enchantment, then attach it to a creature you control.',
@@ -3436,7 +3496,7 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'Double Overdrive — Equipped creature gets +2/+0 and has double strike. \n' +
       'Equip 3 (3: Attach to target creature you control. Equip only as a sorcery.)',
     attachesTo: 'creature',
-    equipCost: '3',
+    equipCost: '{3}',
     equipBuff: { power: 2, toughness: 0 },
     equipGrantsKeyword: 'double strike',
     imagePath: '/assets/cards/world-champion-celestial-weapon.webp'
@@ -3444,7 +3504,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'sidequest-raise-a-chocobo',
     name: 'Sidequest: Raise a Chocobo',
-    costLabel: '1G',
+    costLabel: '{1}{G}',
     type: 'enchantment',
     text: 'When this enchantment enters, create a 2/2 green Bird creature token with “Whenever a land you control enters, this token gets +1/+0 until end of turn.”\n' +
       'At the beginning of your first main phase, if you control four or more Birds, transform this enchantment.',
@@ -3472,7 +3532,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'sin-spira-s-punishment',
     name: 'Sin, Spira\u2019s Punishment',
-    costLabel: '4BGU',
+    costLabel: '{4}{B}{G}{U}',
     type: 'creature',
     subtype: 'Legendary Creature Leviathan Avatar',
     power: 7,
@@ -3487,7 +3547,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'slash-of-light',
     name: 'Slash of Light',
-    costLabel: '1W',
+    costLabel: '{1}{W}',
     type: 'instant',
     text: 'Slash of Light deals damage equal to the number of creatures you control plus the number of Equipment you control to target creature.',
     imagePath: '/assets/cards/slash-of-light.webp',
@@ -3496,7 +3556,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'sleep-magic',
     name: 'Sleep Magic',
-    costLabel: 'U',
+    costLabel: '{U}',
     type: 'enchantment',
     text: 'Enchant creature \n ' +
       'When this Aura enters, tap enchanted creature. \n' +
@@ -3515,7 +3575,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'snow-villiers',
     name: 'Snow Villiers',
-    costLabel: '2W',
+    costLabel: '{2}{W}',
     type: 'creature',
     subtype: 'Legendary Creature Human Rebel Monk',
     toughness: 3,
@@ -3526,7 +3586,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
     id: 'sorceress-s-schemes',
     name: 'Sorceress\u2019s Schemes',
-    costLabel: '3R',
+    costLabel: '{3}{R}',
     type: 'sorcery',
     text: 'Return target instant or sorcery card from your graveyard or exiled card with flashback you own to your hand. Add R. \n' +
       'Flashback 4R',
@@ -3535,12 +3595,12 @@ export const CARD_POOL: CardDefinition[] = [
     // alternate source - this engine doesn't track "cards exiled
     // specifically because they had flashback" as a distinct pool.
     onCast: [{ type: 'returnInstantOrSorceryFromGraveyardToHand' }, { type: 'addMana', colors: { R: 1 } }],
-    flashback: { cost: '4R' },
+    flashback: { cost: '{4}{R}' },
   },
   {
     id: 'squall-seed-mercenary',
     name: 'Squall, SeeD Mercenary',
-    costLabel: '2WB',
+    costLabel: '{2}{W}{B}',
     type: 'creature',
     subtype: 'Legendary Creature Human Knight Mercenary',
     power: 3,
@@ -3577,7 +3637,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'stiltzkin-moogle-merchant',
   name: 'Stiltzkin, Moogle Merchant',
-  costLabel: 'W',
+  costLabel: '{W}',
   type: 'creature',
   subtype: 'Legendary Creature Moogle',
   power: 1,
@@ -3589,7 +3649,7 @@ export const CARD_POOL: CardDefinition[] = [
     {
       id: 'stiltzkin-moogle-merchant-giveaway',
       label: 'Give Away',
-      cost: { manaLabel: '2', tap: true },
+      cost: { manaLabel: '{2}', tap: true },
       effectText: 'Target opponent gains control of another target permanent you control. If they do, you draw a card.',
       effects: [{ type: 'giveControlOfAnotherOwnPermanentToOpponent', drawCard: true }],
     },
@@ -3598,7 +3658,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'stolen-uniform',
   name: 'Stolen Uniform',
-  costLabel: 'U',
+  costLabel: '{U}',
   type: 'instant',
   text: 'Choose target creature you control and target Equipment. Gain control of that Equipment until end of turn. ' +
   'Attach it to the chosen creature. When you lose control of that Equipment this turn, if it\u2019s attached to a creature you control, unattach it.',
@@ -3613,7 +3673,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'stuck-in-summoner-s-sanctum',
   name: 'Stuck in Summoner\u2019s Sanctum',
-  costLabel: '2U',
+  costLabel: '{2}{U}',
   type: 'enchantment',
   subtype: 'Aura',
   text: 'Flash \n' +
@@ -3631,7 +3691,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'summon-anima',
   name: 'Summon: Anima',
-  costLabel: '4BB',
+  costLabel: '{4}{B}{B}',
   type: 'creature',
   subtype: 'Enchantment Creature Saga Horror',
   power: 4,
@@ -3652,7 +3712,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'summon-bahamut',
   name: 'Summon: Bahamut',
-  costLabel: '9',
+  costLabel: '{9}',
   type: 'creature',
   subtype: 'Enchantment Creature Saga Dragon',
   power: 9,
@@ -3680,7 +3740,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'summon-brynhildr',
   name: 'Summon: Brynhildr',
-  costLabel: '1R',
+  costLabel: '{1}{R}',
   type: 'creature',
   subtype: 'Enchantment Creature Saga Knight',
   power: 2,
@@ -3704,7 +3764,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'summon-choco-mog',
   name: 'Summon: Choco/Mog',
-  costLabel: '2W',
+  costLabel: '{2}{W}',
   type: 'creature',
   subtype: 'Enchantment Creature Saga Bird Moogle',
   power: 3,
@@ -3720,7 +3780,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'summoner-s-grimoire',
   name: 'Summoner\u2019s Grimoire',
-  costLabel: '3G',
+  costLabel: '{3}{G}',
   type: 'artifact',
   subtype: 'Artifact Equipment',
   text: 'Job select \n' +
@@ -3734,13 +3794,13 @@ export const CARD_POOL: CardDefinition[] = [
   onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
   equipGrantsSubtype: 'Shaman',
   attachesTo: 'creature',
-  equipCost: '3',
+  equipCost: '{3}',
   imagePath:'/assets/cards/summoner-s-grimoire.webp'
   },
   {
   id: 'summon-esper-ramuh',
   name: 'Summon: Esper Ramuh',
-  costLabel: '2RR',
+  costLabel: '{2}{R}{R}',
   type: 'creature',
   subtype: 'Enhancement Creature Saga Wizard',
   power: 3,
@@ -3763,7 +3823,7 @@ export const CARD_POOL: CardDefinition[] = [
   // naming convention every other Summon: X card uses.
   id: 'summon-fat-chocobo',
   name: 'Summon: Fat Chocobo',
-  costLabel: '4G',
+  costLabel: '{4}{G}',
   type: 'creature',
   subtype: 'Enchantment Creature Saga Bird',
   power: 4,
@@ -3786,7 +3846,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'summon-fenrir',
   name: 'Summon: Fenrir',
-  costLabel: '2G',
+  costLabel: '{2}{G}',
   type: 'creature',
   subtype: 'Enchanment Creature Saga Wolf',
   power: 3,
@@ -3813,7 +3873,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'summon-g-f-cerberus',
   name: 'Summon: G.F. Cerberus',
-  costLabel: '2RR',
+  costLabel: '{2}{R}{R}',
   type: 'creature',
   subtype: 'Enchantment Creature Saga Dog',
   power: 3,
@@ -3839,7 +3899,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'summon-g-f-ifrit',
   name: 'Summon: G.F. Ifrit',
-  costLabel: '2R',
+  costLabel: '{2}{R}',
   type: 'creature',
   subtype: 'Enchantment Creature Saga Demon',
   power: 3,
@@ -3859,7 +3919,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'summon-knights-of-round',
   name: 'Summon: Knights of Round',
-  costLabel: '6WW',
+  costLabel: '{6}{W}{W}',
   type: 'creature',
   subtype: 'Enchantment Creature Saga Knight',
   power: 3,
@@ -3886,7 +3946,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'summon-leviathan',
   name: 'Summon: Leviathan',
-  costLabel: '4UU',
+  costLabel: '{4}{U}{U}',
   type: 'creature',
   subtype: 'Enchantment Creature Saga Leviathan',
   power: 6,
@@ -3896,7 +3956,7 @@ export const CARD_POOL: CardDefinition[] = [
   'II, III — Until end of turn, whenever a Kraken, Leviathan, Merfolk, Octopus, or Serpent attacks, draw a card. \n' +
   'Ward 2',
   imagePath:'/assets/cards/summon-leviathan.webp',
-  wardCost: { mana: '2' },
+  wardCost: { mana: '{2}' },
   // Both chapters' own effects are still deferred: chapter I needs a
   // conditional "return every creature EXCEPT [subtype list]" mass bounce,
   // and chapters II/III need a delayed "until end of turn, whenever a
@@ -3911,7 +3971,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'summon-primal-garuda',
   name: 'Summon: Primal Garuda',
-  costLabel: '3W',
+  costLabel: '{3}{W}',
   type: 'creature',
   subtype: 'Enchantment Creature Saga Harpy',
   power: 3,
@@ -3937,7 +3997,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'summon-primal-odin',
   name: 'Summon: Primal Odin',
-  costLabel: '4BB',
+  costLabel: '{4}{B}{B}',
   type: 'creature',
   subtype: 'Enchantment Creature Saga Knight',
   power: 5,
@@ -3959,7 +4019,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'summon-shiva',
   name: 'Summon: Shiva',
-  costLabel: '3UU',
+  costLabel: '{3}{U}{U}',
   type: 'creature',
   subtype: 'Enchantment Creature Saga Elemental',
   power: 4,
@@ -3980,7 +4040,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'summon-titan',
   name: 'Summon: Titan',
-  costLabel: '3GG',
+  costLabel: '{3}{G}{G}',
   type: 'creature',
   subtype: 'Enchantment Creature Saga Giant',
   power: 7,
@@ -4008,7 +4068,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'suplex',
   name: 'Suplex',
-  costLabel: '1R',
+  costLabel: '{1}{R}',
   type: 'sorcery',
   text: 'Choose one — \n' +
   '• Suplex deals 3 damage to target creature. If that creature would die this turn, exile it instead. \n' +
@@ -4027,7 +4087,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'swallowed-by-leviathan',
   name: 'Swallowed by Leviathan',
-  costLabel: '2U',
+  costLabel: '{2}{U}',
   type: 'instant',
   text: 'Choose target spell. Surveil 2, then counter the chosen spell unless its controller pays 1 for each card in your graveyard. ' +
   '(To surveil 2, look at the top two cards of your library, then put any number of them into your graveyard and the rest on top of your library in any order.)',
@@ -4049,7 +4109,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'syncopate',
   name: 'Syncopate',
-  costLabel: 'XU',
+  costLabel: '{X}{U}',
   type: 'instant',
   text: 'Counter target spell unless its controller pays {X}. If that spell is countered this way, exile it instead of putting it into its owner\u2019s graveyard.',
   imagePath: '/assets/cards/syncopate.webp',
@@ -4063,7 +4123,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'tellah-great-sage',
   name: 'Tellah, Great Sage',
-  costLabel: '3UR',
+  costLabel: '{3}{U}{R}',
   type: 'creature',
   subtype: 'Legendary Creature Human Wizard',
   power: 3,
@@ -4080,7 +4140,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'terra-magical-adept',
   name: 'Terra, Magical Adept',
-  costLabel: '1RG',
+  costLabel: '{1}{R}{G}',
   type: 'creature',
   subtype: 'Legendary Creature Human Wizard Warrior',
   power: 4,
@@ -4099,7 +4159,7 @@ export const CARD_POOL: CardDefinition[] = [
     {
       id: 'terra-trance',
       label: 'Trance',
-      cost: { manaLabel: '4RG', tap: true },
+      cost: { manaLabel: '{4}{R}{G}', tap: true },
       onlyDuringOwnMainPhase: true,
       exileAndReturnTransformed: true,
       effectText: 'Exile Terra, then return it to the battlefield transformed under its owner’s control.',
@@ -4140,7 +4200,7 @@ export const CARD_POOL: CardDefinition[] = [
    {
   id: 'the-crystal-s-chosen',
   name: 'The Crystal\u2019s Chosen',
-  costLabel: '5WW',
+  costLabel: '{5}{W}{W}',
   type: 'sorcery',
   text: 'Create four 1/1 colorless Hero creature tokens. Then put a +1/+1 counter on each creature you control.',
   imagePath: '/assets/cards/the-crystal-s-chosen.webp',
@@ -4152,7 +4212,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'the-darkness-crystal', 
   name: 'The Darkness Crystal',
-  costLabel: '2BB',
+  costLabel: '{2}{B}{B}',
   type: 'artifact',
   subtype: 'Legendary Artifact',
   text: 'Black spells you cast cost {1} less to cast. \n' +
@@ -4170,7 +4230,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'the-earth-crystal',
   name: 'The Earth Crystal',
-  costLabel: '2GG',
+  costLabel: '{2}{G}{G}',
   type: 'artifact',
   subtype: 'Legendary Artifact',
   text: 'Green spells you cast cost {1} less to cast. \n' +
@@ -4188,7 +4248,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'the-emperor-of-palamecia',
   name: 'The Emperor of Palamecia',
-  costLabel: 'UR',
+  costLabel: '{U}{R}',
   type: 'creature',
   subtype: 'Legendary Creature Human Noble Warrior',
   power: 2,
@@ -4214,21 +4274,21 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'the-final-days',
   name: 'The Final Days', 
-  costLabel: '2BB',
+  costLabel: '{2}{B}{B}',
   type: 'sorcery',
   text: 'Create two tapped 2/2 black Horror creature tokens. If this spell was cast from a graveyard, instead create X of those tokens, ' +
   'where X is the number of creature cards in your graveyard. \nFlashback {4}{B}{B}',
   imagePath: '/assets/cards/the-final-days.webp',
   onCast: [{ type: 'createToken', tokenId: 'token-horror', count: 2, tapped: true }],
   flashback: {
-    cost: '4BB',
+    cost: '{4}{B}{B}',
     effects: [{ type: 'createToken', tokenId: 'token-horror', count: 'perCreatureCardInYourGraveyard', tapped: true }],
   },
   },
    {
   id: 'the-fire-crystal',
   name: 'The Fire Crystal',
-  costLabel: '2RR',
+  costLabel: '{2}{R}{R}',
   type: 'artifact',
   subtype: 'Legendary Artifact',
   text: 'Red spells you cast cost {1} less to cast. \n' +
@@ -4256,14 +4316,14 @@ export const CARD_POOL: CardDefinition[] = [
     {
       id: 'the-gold-saucer-flip',
       label: 'Flip a Coin',
-      cost: { manaLabel: '2', tap: true },
+      cost: { manaLabel: '{2}', tap: true },
       effects: [{ type: 'coinFlip', ifWinEffects: [{ type: 'createToken', tokenId: 'token-treasure' }] }],
       effectText: 'Flip a coin. If you win the flip, create a Treasure token.',
     },
     {
       id: 'the-gold-saucer-draw',
       label: 'Draw a Card',
-      cost: { manaLabel: '3', tap: true, sacrificeAnother: 'artifact', sacrificeAnotherCount: 2 },
+      cost: { manaLabel: '{3}', tap: true, sacrificeAnother: 'artifact', sacrificeAnotherCount: 2 },
       effects: [{ type: 'drawCards', amount: 1 }],
       effectText: 'Sacrifice two artifacts: Draw a card.',
     },
@@ -4272,7 +4332,7 @@ export const CARD_POOL: CardDefinition[] = [
    {
   id: 'the-lunar-whale',
   name: 'The Lunar Whale',
-  costLabel: '3U',
+  costLabel: '{3}{U}',
   type: 'artifact',
   subtype: 'Legendary Artifact Vehicle',
   text: 'Flying \n' +
@@ -4287,7 +4347,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'the-masamune',
   name: 'The Masamune',
-  costLabel: '3',
+  costLabel: '{3}',
   type: 'artifact',
   subtype: 'Legendary Artifact Equipment',
   text: 'As long as equipped creature is attacking, it has first strike and must be blocked if able.\n' +
@@ -4296,13 +4356,13 @@ export const CARD_POOL: CardDefinition[] = [
   // The conditional "while attacking" first-strike grant and the granted
   // death-trigger-doubling ability are deferred.
   attachesTo: 'creature',
-  equipCost: '2',
+  equipCost: '{2}',
   imagePath: '/assets/cards/the-masamune.webp'
   },
   {
   id: 'the-prima-vista',
   name: 'The Prima Vista',
-  costLabel: '4U',
+  costLabel: '{4}{U}',
   type: 'artifact',
   subtype: 'Legendary Artifact Vehicle',
   power: 5,
@@ -4318,7 +4378,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'the-regalia',
   name: 'The Regalia',
-  costLabel: '4',
+  costLabel: '{4}',
   type: 'artifact',
   subtype: 'Legendary Artifact — Vehicle',
   power: 4,
@@ -4336,7 +4396,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'the-wandering-minstrel',
   name: 'The Wandering Minstrel',
-  costLabel: 'GU',
+  costLabel: '{G}{U}',
   type: 'creature',
   subtype: 'Legendary Creature Human Bird',
   power: 1,
@@ -4352,7 +4412,7 @@ export const CARD_POOL: CardDefinition[] = [
     {
       id: 'the-wandering-minstrel-ballad',
       label: 'Ballad',
-      cost: { manaLabel: '3WUBRG' },
+      cost: { manaLabel: '{3}{W}{U}{B}{R}{G}' },
       effects: [{ type: 'buffOtherCreaturesYouControlByControlledSubtypeCount', subtype: 'Town' }],
       effectText: 'Other creatures you control get +X/+X until end of turn, where X is the number of Towns you control.',
     },
@@ -4361,7 +4421,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'the-water-crystal',
   name: 'The Water Crystal',
-  costLabel: '2UU',
+  costLabel: '{2}{U}{U}',
   type: 'artifact',
   subtype: 'Legendary Artifact',
   text: 'Blue spells you cast cost {1} less to cast. \n' +
@@ -4378,7 +4438,7 @@ export const CARD_POOL: CardDefinition[] = [
     {
       id: 'the-water-crystal-mill',
       label: 'Mill',
-      cost: { manaLabel: '4UU', tap: true },
+      cost: { manaLabel: '{4}{U}{U}', tap: true },
       effects: [{ type: 'millEachOpponentByYourHandSize' }],
       effectText: 'Each opponent mills cards equal to the number of cards in your hand.',
     },
@@ -4387,7 +4447,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'the-wind-crystal',
   name: 'The Wind Crystal',
-  costLabel: '2WW',
+  costLabel: '{2}{W}{W}',
   type: 'artifact',
   subtype: 'Legendary Artifact',
   text: 'White spells you cast cost {1} less to cast. \n' +
@@ -4402,7 +4462,7 @@ export const CARD_POOL: CardDefinition[] = [
     {
       id: 'the-wind-crystal-empower',
       label: 'Empower',
-      cost: { manaLabel: '4WW', tap: true },
+      cost: { manaLabel: '{4}{W}{W}', tap: true },
       effects: [
         { type: 'buffOtherCreaturesYouControl', grantKeyword: 'flying' },
         { type: 'buffOtherCreaturesYouControl', grantKeyword: 'lifelink' },
@@ -4414,7 +4474,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'thief-s-knife',
   name: 'Thief\u2019s Knife',
-  costLabel: '2U',
+  costLabel: '{2}{U}',
   type: 'artifact',
   subtype: 'Equipment',
   text: 'Job select (When this Equipment enters, create a 1/1 colorless Hero creature token, then attach this to it.)\n' +
@@ -4422,7 +4482,7 @@ export const CARD_POOL: CardDefinition[] = [
   'Equip {4}',
   onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
   attachesTo: 'creature',
-  equipCost: '4',
+  equipCost: '{4}',
   equipBuff: { power: 1, toughness: 1 },
   equipGrantsSubtype: 'Rogue',
   equipGrantsOnCombatDamageToPlayer: [{ type: 'drawCards', amount: 1 }],
@@ -4431,7 +4491,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'thunder-magic', 
   name: 'Thunder Magic',
-  costLabel: 'F',
+  costLabel: '-',
   type: 'instant',
   text: 'Tiered (Choose one additional cost.) \n' +
   '• Thunder — {0} — Thunder Magic deals 2 damage to target creature. \n' +
@@ -4439,15 +4499,15 @@ export const CARD_POOL: CardDefinition[] = [
   '• Thundaga — {5}{R} — Thunder Magic deals 8 damage to target creature.',
   imagePath: '/assets/cards/thunder-magic.webp',
   tieredModes: [
-    { label: 'Thunder — {0} — 2 damage to target creature', additionalCost: '0', effects: [{ type: 'damageTargetCreature', amount: 2 }] },
-    { label: 'Thundara — {3} — 4 damage to target creature', additionalCost: '3', effects: [{ type: 'damageTargetCreature', amount: 4 }] },
-    { label: 'Thundaga — {5}{R} — 8 damage to target creature', additionalCost: '5R', effects: [{ type: 'damageTargetCreature', amount: 8 }] },
+    { label: 'Thunder — {0} — 2 damage to target creature', additionalCost: '{0}', effects: [{ type: 'damageTargetCreature', amount: 2 }] },
+    { label: 'Thundara — {3} — 4 damage to target creature', additionalCost: '{3}', effects: [{ type: 'damageTargetCreature', amount: 4 }] },
+    { label: 'Thundaga — {5}{R} — 8 damage to target creature', additionalCost: '{5}{R}', effects: [{ type: 'damageTargetCreature', amount: 8 }] },
   ],
   },
   {
   id: 'tidus-blitzball-star',
   name: 'Tidus, Blitzball Star',
-  costLabel: '1WU',
+  costLabel: '{1}{W}{U}',
   type: 'creature',
   subtype: 'Legendary Creature Human Warrior',
   power: 2,
@@ -4461,7 +4521,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'tifa-lockhart',
   name: 'Tifa Lockhart',
-  costLabel: '1G',
+  costLabel: '{1}{G}',
   type: 'creature',
   // Was missing power/toughness entirely.
   power: 2,
@@ -4474,14 +4534,14 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'tifa-s-limit-break',
   name: 'Tifa\u2019s Limit Break',
-  costLabel: 'G',
+  costLabel: '{G}',
   type: 'instant',
   text: 'Tiered (Choose one additional cost.) \n' +
   '• Somersault — {0} — Target creature gets +2/+2 until end of turn. \n' +
   '• Meteor Strikes — {2} — Double target creature’s power and toughness until end of turn. \n' +
   '• Final Heaven — {6}{G} — Triple target creature’s power and toughness until end of turn.',
   imagePath: '/assets/cards/tifa-s-limit-break.webp',
-  tieredModes: [{ label: 'Somersault — {0} — Target creature gets +2/+2 until end of turn', additionalCost: '0', effects: [{ type: 'pumpTarget', power: 2, toughness: 2 }] }],
+  tieredModes: [{ label: 'Somersault — {0} — Target creature gets +2/+2 until end of turn', additionalCost: '{0}', effects: [{ type: 'pumpTarget', power: 2, toughness: 2 }] }],
   // Meteor Strikes and Final Heaven ("double"/"triple target creature's
   // power and toughness") are still deferred - no effect here can scale a
   // TARGET's stats by a multiplier (only doubleSelfPowerUntilEndOfTurn
@@ -4491,7 +4551,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'tonberry',
   name: 'Tonberry',
-  costLabel: 'B',
+  costLabel: '{B}',
   type: 'creature',
   subtype: 'Creature Salamander Horror',
   // Was missing power/toughness entirely.
@@ -4507,7 +4567,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'torgal-a-fine-hound',
   name: 'Torgal, A Fine Hound',
-  costLabel: '1G',
+  costLabel: '{1}{G}',
   type: 'creature',
   subtype: 'Legendary Creature Wolf',
   power: 2,
@@ -4524,7 +4584,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'town-greeter',
   name: 'Town Greeter',
-  costLabel: '1G',
+  costLabel: '{1}{G}',
   type: 'creature',
   subtype: 'Creature Human Citizen',
   power: 1,
@@ -4536,7 +4596,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'traveling-chocobo',
   name: 'Traveling Chocobo',
-  costLabel: '2G',
+  costLabel: '{2}{G}',
   type: 'creature',
   subtype: 'Bird Creature',
   power: 3,
@@ -4552,7 +4612,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'travel-the-overworld',
   name: 'Travel the Overworld',
-  costLabel: '5UU',
+  costLabel: '{5}{U}{U}',
   type: 'sorcery',
   text: 'Affinity for Towns (This spell costs {1} less to cast for each Town you control.) \n' +
   'Draw four cards.',
@@ -4574,7 +4634,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'triple-triad',
   name: 'Triple Triad',
-  costLabel: '3RRR',
+  costLabel: '{3}{R}{R}{R}',
   type: 'enchantment',
   text: 'At the beginning of your upkeep, each player exiles the top card of their library. Until end of turn, \n' +
   'you may play the card you own exiled this way and each other card exiled this way with lesser mana value than it without paying their mana costs.',
@@ -4588,7 +4648,7 @@ export const CARD_POOL: CardDefinition[] = [
     id: 'ultima',
     name: 'Ultima',
     type: 'sorcery',
-    costLabel: '3WW',
+    costLabel: '{3}{W}{W}',
     text: 'Destroy all artifacts and creatures. End the turn. (Exile all spells and abilities from the stack, including this card. The player whose turn it is discards down to their maximum hand size. Damage wears off, and “this turn” and “until end of turn” effects end.) “Such devastation … this was not my intention!” —Gaius van Baelsar',
     imagePath: '/assets/cards/ultima.webp',
     onCast: [{ type: 'destroyAll', targetFilter: 'artifactAndCreature' }],
@@ -4599,7 +4659,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'ultima-origin-of-oblivion',
   name: 'Ultima, Origin of Oblivion',
-  costLabel: '5',
+  costLabel: '{5}',
   type: 'creature',
   subtype:'Legendary Creature God',
   power: 4,
@@ -4620,7 +4680,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'ultima-weapon',
   name: 'Ultima Weapon',
-  costLabel: '7',
+  costLabel: '{7}',
   type: 'artifact',
   subtype: 'Legendary Artifact Equipment',
   text: 'Whenever equipped creature attacks, destroy target creature an opponent controls. \n' +
@@ -4629,14 +4689,14 @@ export const CARD_POOL: CardDefinition[] = [
   // The "whenever equipped creature attacks, destroy target creature an
   // opponent controls" granted trigger is deferred.
   attachesTo: 'creature',
-  equipCost: '7',
+  equipCost: '{7}',
   equipBuff: { power: 7, toughness: 7 },
   imagePath: '/assets/cards/ultima-weapon.webp'
   },
   {
   id: 'ultimecia-temporal-threat',
   name: 'Ultimecia, Temporal Threat',
-  costLabel: '4UU',
+  costLabel: '{4}{U}{U}',
   type: 'creature',
   subtype: 'Legendary Creature Human Warlock',
   power: 4,
@@ -4650,7 +4710,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'ultimecia-time-sorceress',
   name: 'Ultimecia, Time Sorceress',
-  costLabel: '3UB',
+  costLabel: '{3}{U}{B}',
   type: 'creature',
   subtype: 'Legendary Creature Human Warlock',
   power: 4,
@@ -4666,7 +4726,7 @@ export const CARD_POOL: CardDefinition[] = [
     {
       id: 'transform',
       label: 'Transform',
-      cost: { manaLabel: '4UUBB', exileFromGraveyard: 8 },
+      cost: { manaLabel: '{4}{U}{U}{B}{B}', exileFromGraveyard: 8 },
       onlyDuringOwnEndStep: true,
       transformSelf: true,
       effectText: 'Exile eight cards from your graveyard. If you do, transform Ultimecia.',
@@ -4689,7 +4749,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'ultros-obnoxious-octopus',
   name: 'Ultros, Obnoxious Octopus',
-  costLabel: '1U',
+  costLabel: '{1}{U}',
   type: 'creature',
   subtype: 'Legendary Creature Octopus',
   power: 2,
@@ -4706,7 +4766,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'undercity-dire-rat',
   name: 'Undercity Dire Rat',
-  costLabel: '1B',
+  costLabel: '{1}{B}',
   type: 'creature',
   subtype: 'Creature Rat',
   power: 2,
@@ -4718,7 +4778,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'unexpected-request',
   name: 'Unexpected Request',
-  costLabel: '2R',
+  costLabel: '{2}{R}',
   type: 'sorcery',
   text: 'Gain control of target creature until end of turn. Untap that creature. It gains haste until end of turn. ' +
   'You may attach an Equipment you control to that creature. If you do, unattach it at the beginning of the next end step.',
@@ -4733,7 +4793,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'vaan-street-thief',
   name: 'Vaan, Street Thief',
-  costLabel: '2R',
+  costLabel: '{2}{R}',
   type: 'creature',
   subtype: 'Legendary Creature Human Scout',
   power: 2,
@@ -4752,7 +4812,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'valkyrie-aerial-unit',
   name: 'Valkyrie Aerial Unit',
-  costLabel: '5UU',
+  costLabel: '{5}{U}{U}',
   type: 'creature',
   subtype: 'Artifact Creature Construct',
   power: 5,
@@ -4767,7 +4827,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'vanille-cheerful-l-cie',
   name: 'Vanille, Cheerful l\u2019Cie',
-  costLabel: '3G',
+  costLabel: '{3}{G}',
   type: 'creature',
   subtype: 'Legendary Creature Human Cleric',
   power: 3,
@@ -4781,7 +4841,7 @@ export const CARD_POOL: CardDefinition[] = [
     {
       id: 'meld',
       label: 'Meld into Ragnarok',
-      cost: { manaLabel: '3BG' },
+      cost: { manaLabel: '{3}{B}{G}' },
       onlyDuringOwnFirstMainPhase: true,
       meldsWith: { partnerDefId: 'fang-fearless-l-cie', resultDefId: 'ragnarok-divine-deliverance' },
       effectText: "If you own and control Fang, Fearless l’Cie, exile them both and meld into Ragnarok, Divine Deliverance.",
@@ -4791,7 +4851,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'vayne-s-treachery',
   name: 'Vayne\u2019s Treachery',
-  costLabel: '1B',
+  costLabel: '{1}{B}',
   type: 'instant',
   text: 'Kicker—Sacrifice an artifact or creature. (You may sacrifice an artifact or creature in addition to any other costs as you cast this spell.) \n' +
   'Target creature gets -2/-2 until end of turn. If this spell was kicked, that creature gets -6/-6 until end of turn instead.',
@@ -4819,7 +4879,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'venat-heart-of-hydaelyn',
   name: 'Venat, Heart of Hydaelyn',
-  costLabel: '1WW',
+  costLabel: '{1}{W}{W}',
   type: 'creature',
   subtype: 'Legendary Creature Elder Wizard',
   power: 3,
@@ -4846,7 +4906,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'vincent-s-limit-break',
   name: 'Vincent\u2019s Limit Break',
-  costLabel: '1B',
+  costLabel: '{1}{B}',
   type: 'instant',
   text: 'Tiered (Choose one additional cost.) \n ' +
   'Until end of turn, target creature you control gains “When this creature dies, ' +
@@ -4856,15 +4916,15 @@ export const CARD_POOL: CardDefinition[] = [
   '• Hellmasker — {3} — 7/2.',
   imagePath: '/assets/cards/vincent-s-limit-break.webp',
   tieredModes: [
-    { label: 'Galian Beast — {0} — 3/2', additionalCost: '0', effects: [{ type: 'grantTemporaryBaseStatsAndDeathReturn', power: 3, toughness: 2 }] },
-    { label: 'Death Gigas — {1} — 5/2', additionalCost: '1', effects: [{ type: 'grantTemporaryBaseStatsAndDeathReturn', power: 5, toughness: 2 }] },
-    { label: 'Hellmasker — {3} — 7/2', additionalCost: '3', effects: [{ type: 'grantTemporaryBaseStatsAndDeathReturn', power: 7, toughness: 2 }] }
+    { label: 'Galian Beast — {0} — 3/2', additionalCost: '{0}', effects: [{ type: 'grantTemporaryBaseStatsAndDeathReturn', power: 3, toughness: 2 }] },
+    { label: 'Death Gigas — {1} — 5/2', additionalCost: '{1}', effects: [{ type: 'grantTemporaryBaseStatsAndDeathReturn', power: 5, toughness: 2 }] },
+    { label: 'Hellmasker — {3} — 7/2', additionalCost: '{3}', effects: [{ type: 'grantTemporaryBaseStatsAndDeathReturn', power: 7, toughness: 2 }] }
   ]
   },
   {
   id: 'vincent-valentine',
   name: 'Vincent Valentine',
-  costLabel: '2BB',
+  costLabel: '{2}{B}{B}',
   type: 'creature',
   subtype: 'Legendary Creature Assassin',
   power: 2,
@@ -4892,7 +4952,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'vivi-ornitier',
   name: 'Vivi Ornitier',
-  costLabel: '1UR',
+  costLabel: '{1}{U}{R}',
   type: 'creature',
   subtype: 'Legendary Creature Wizard',
   power: 0,
@@ -4904,7 +4964,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'warrior-s-sword',
   name: 'Warrior\u2019s Sword',
-  costLabel: '3R',
+  costLabel: '{3}{R}',
   type: 'artifact',
   subtype: 'Equipment',
   text: 'Job select (When this Equipment enters, create a 1/1 colorless Hero creature token, then attach this to it.) \n' +
@@ -4912,7 +4972,7 @@ export const CARD_POOL: CardDefinition[] = [
   'Equip {5} ({5}: Attach to target creature you control. Equip only as a sorcery.)',
   onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
   attachesTo: 'creature',
-  equipCost: '5',
+  equipCost: '{5}',
   equipBuff: { power: 3, toughness: 2 },
   equipGrantsSubtype: 'Warrior',
   imagePath: '/assets/cards/warrior-s-sword.webp'
@@ -4929,7 +4989,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'weapons-vendor',
   name: 'Weapons Vendor',
-  costLabel: '3W',
+  costLabel: '{3}{W}',
   type: 'creature',
   subtype: 'Creature Human Artificer',
   power: 2,
@@ -4945,7 +5005,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'white-auracite',
   name: 'White Auracite',
-  costLabel: '2WW',
+  costLabel: '{2}{W}{W}',
   type: 'artifact',
   text: 'When this artifact enters, exile target nonland permanent an opponent controls until this artifact leaves the battlefield. \n' +
   '{T}: Add {W}.',
@@ -4958,7 +5018,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'white-mage-s-staff',
   name: 'White Mage\u2019s Staff',
-  costLabel: '1W',
+  costLabel: '{1}{W}',
   type: 'artifact',
   subtype: 'Equipment',
   text: 'Job select (When this Equipment enters, create a 1/1 colorless Hero creature token, then attach this to it.) \n ' +
@@ -4966,7 +5026,7 @@ export const CARD_POOL: CardDefinition[] = [
   'Equip {3} ({3}: Attach to target creature you control. Equip only as a sorcery.)',
   onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
   attachesTo: 'creature',
-  equipCost: '3',
+  equipCost: '{3}',
   equipBuff: { power: 1, toughness: 1 },
   equipGrantsSubtype: 'Cleric',
   equipGrantsOnAttack: [{ type: 'gainLife', amount: 1 }],
@@ -4986,7 +5046,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'world-map',
   name: 'World Map',
-  costLabel: '1',
+  costLabel: '{1}',
   type: 'artifact',
   text: '{1}, {T}, Sacrifice this artifact: Search your library for a basic land card, reveal it, put it into your hand, then shuffle. \n' +
   '{3}, {T}, Sacrifice this artifact: Search your library for a land card, reveal it, put it into your hand, then shuffle.',
@@ -4994,14 +5054,14 @@ export const CARD_POOL: CardDefinition[] = [
     {
       id: 'world-map-basic',
       label: 'Search for a basic land',
-      cost: { manaLabel: '1', tap: true, sacrificeSelf: true },
+      cost: { manaLabel: '{1}', tap: true, sacrificeSelf: true },
       effects: [{ type: 'searchLibraryForBasicLand' }],
       effectText: 'Search your library for a basic land card, reveal it, put it into your hand, then shuffle.',
     },
     {
       id: 'world-map-any',
       label: 'Search for any land',
-      cost: { manaLabel: '3', tap: true, sacrificeSelf: true },
+      cost: { manaLabel: '{3}', tap: true, sacrificeSelf: true },
       effects: [{ type: 'searchLibraryForAnyLand' }],
       effectText: 'Search your library for a land card, reveal it, put it into your hand, then shuffle.',
     },
@@ -5011,7 +5071,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'xande-dark-mage',
   name: 'Xande, Dark Mage',
-  costLabel: '2UB',
+  costLabel: '{2}{U}{B}',
   type: 'creature',
   subtype: 'Legendary Creature Human Wizard',
   power: 3,
@@ -5024,7 +5084,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'you-re-not-alone',
   name: 'You\u2019re Not Alone',
-  costLabel: 'W',
+  costLabel: '{W}',
   type: 'instant',
   text: 'Target creature gets +2/+2 until end of turn. If you control three or more creatures, it gets +4/+4 until end of turn instead.',
   imagePath: '/assets/cards/you-re-not-alone.webp',
@@ -5040,7 +5100,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'y-shtola-rhul',
   name: 'Y\u2019shtola Rhul',
-  costLabel: '4UU',
+  costLabel: '{4}{U}{U}',
   type: 'creature',
   subtype: 'Legendary Creature Cat Druid',
   power: 3,
@@ -5053,7 +5113,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'yuna-hope-of-spira',
   name: 'Yuna, Hope of Spira',
-  costLabel: '3GW',
+  costLabel: '{3}{G}{W}',
   type: 'creature',
   subtype: 'Legendary Creature Human Cleric',
   power: 3,
@@ -5061,7 +5121,7 @@ export const CARD_POOL: CardDefinition[] = [
   text: 'During your turn, Yuna and enchantment creatures you control have trample, lifelink, and ward {2}.\n' +
   'At the beginning of your end step, return up to one target enchantment card from your graveyard to the battlefield with a finality counter on it.',
   imagePath: '/assets/cards/yuna-hope-of-spira.webp',
-  grantsControlledGroupKeywordsDuringOwnTurn: { subtypeMatch: 'enchantment', includeSelf: true, keywords: ['trample', 'lifelink'], ward: { mana: '2' } },
+  grantsControlledGroupKeywordsDuringOwnTurn: { subtypeMatch: 'enchantment', includeSelf: true, keywords: ['trample', 'lifelink'], ward: { mana: '{2}' } },
   // The end-step "return target enchantment card from your graveyard to
   // the battlefield with a finality counter" is deferred - the existing
   // reanimateTargetFromGraveyard effect defaults to a creature-card filter
@@ -5073,7 +5133,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'zack-fair',
   name: 'Zack Fair',
-  costLabel: 'W',
+  costLabel: '{W}',
   type: 'creature',
   subtype: 'Legendary Creature Human Soldier',
   power: 0,
@@ -5093,7 +5153,7 @@ export const CARD_POOL: CardDefinition[] = [
     {
       id: 'zack-fair-sacrifice',
       label: 'Sacrifice',
-      cost: { manaLabel: '1', sacrificeSelf: true },
+      cost: { manaLabel: '{1}', sacrificeSelf: true },
       effects: [{ type: 'pumpTarget', power: 0, toughness: 0, grantKeyword: 'indestructible' }],
       effectText: 'Target creature you control gains indestructible until end of turn.',
       // "Put Zack Fair's counters on that creature and attach an Equipment
@@ -5121,7 +5181,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'zell-dincht',
   name: 'Zell Dincht',
-  costLabel: '2R',
+  costLabel: '{2}{R}',
   type: 'creature',
   subtype: 'Legendary Creature Human Monk',
   power: 0,
@@ -5137,7 +5197,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'zenos-yae-galvus',
   name: 'Zenos yae Galvus',
-  costLabel: '3BB',
+  costLabel: '{3}{B}{B}',
   type: 'creature',
   subtype: 'Legendary Creature Human Noble Soldier Warrior',
   power: 4,
@@ -5167,7 +5227,7 @@ export const CARD_POOL: CardDefinition[] = [
   {
   id: 'zidane-tantalus-thief',
   name: 'Zidane, Tantalus Thief',
-  costLabel: '3RW',
+  costLabel: '{3}{R}{W}',
   type: 'creature',
   subtype: 'Legendary Creature Human Mutant Scout',
   power: 3,
@@ -5181,7 +5241,7 @@ export const CARD_POOL: CardDefinition[] = [
  {
   id: 'zodiark-umbral-god',
   name: 'Zodiark, Umbral God',
-  costLabel: 'BBBBB',
+  costLabel: '{B}{B}{B}{B}{B}',
   type: 'creature',
   subtype: 'Legendary Creature God',
   power: 5,
@@ -5244,7 +5304,7 @@ export const TOKEN_POOL: CardDefinition[] = [
       {
         id: 'token-food-eat',
         label: 'Eat',
-        cost: { manaLabel: '2', tap: true, sacrificeSelf: true },
+        cost: { manaLabel: '{2}', tap: true, sacrificeSelf: true },
         effects: [{ type: 'gainLife', amount: 3 }],
         effectText: 'You gain 3 life.',
       },

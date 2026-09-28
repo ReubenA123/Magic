@@ -94,6 +94,7 @@ export function createInitialState(player1Name: string, player2Name: string, pla
     pendingReturnCreaturesFromGraveyard: null,
     pendingOptionalTransform: null,
     pendingOptionalPayLife: null,
+    pendingCommanderZoneChoice: null,
     pendingWardPayment: null,
     pendingFreeCastFromHand: null,
     pendingNextCreatureSpellBonus: null,
@@ -106,6 +107,7 @@ export function createInitialState(player1Name: string, player2Name: string, pla
     lastCoinFlip: null,
     pendingHideaway: null,
     battlefieldLeaveWatchers: [],
+    exileUntilSourceLeaves: [],
   };
 }
 

@@ -130,6 +130,21 @@ interface CardActionsPanelProps {
    * (appending any granted subtype, e.g. "Knight") and the "Modifiers"
    * breakdown below the card text. */
   equipmentContributions?: EquipmentContribution[];
+  /** Board-wide static cost reducers currently discounting THIS card's cast
+   * cost (The Darkness Crystal and its four siblings - see
+   * CardDefinition.reducesCastCostForColor, computed by GameBoard.tsx:
+   * costReductionSourcesFor). Rendered in the same "Modifiers" breakdown as
+   * equipmentContributions, just listing a cost effect instead of a stat/
+   * keyword one. Empty/undefined whenever nothing on the board discounts
+   * this card right now. */
+  costReductionSources?: { sourceName: string; text: string }[];
+  /** The creature + everything attached to it (or, if this panel is open on
+   * an attached Equipment/Aura itself, its host + siblings) - in a fixed
+   * order, computed by GameBoard.tsx: openCardCycleGroup. Null/undefined (or
+   * length <= 1) whenever there's nothing to cycle between, which hides the
+   * arrows entirely. */
+  cycleGroup?: { instanceId: string; name: string }[] | null;
+  onCycleTo?: (instanceId: string) => void;
   /** Someone else's card, viewed outside Mutual Adjustment - the image and
    * text still show, but every action button (tap, cast, abilities, attach,
    * cycle, flashback) is hidden rather than offering something that isn't yours to do. */
@@ -193,6 +208,9 @@ export default function CardActionsPanel({
   attachedToName,
   revealedCards,
   equipmentContributions,
+  costReductionSources,
+  cycleGroup,
+  onCycleTo,
   readOnly,
   manaOptions,
   tapDisabledReason,
@@ -212,6 +230,14 @@ export default function CardActionsPanel({
   onClose,
 }: CardActionsPanelProps) {
   const [showManaChoice, setShowManaChoice] = useState(false);
+
+  // Cycle arrows for a creature + its attached Equipment/Auras (see
+  // GameBoard.tsx: openCardCycleGroup) - only shown when there's actually
+  // more than one card to switch between.
+  const cycleIndex = cycleGroup ? cycleGroup.findIndex((c) => c.instanceId === instance.instanceId) : -1;
+  const canCycleGroup = !!cycleGroup && cycleGroup.length > 1 && cycleIndex !== -1;
+  const cyclePrev = canCycleGroup ? cycleGroup![(cycleIndex - 1 + cycleGroup!.length) % cycleGroup!.length] : null;
+  const cycleNext = canCycleGroup ? cycleGroup![(cycleIndex + 1) % cycleGroup!.length] : null;
 
   const commanderTax = currentZone === 'commander' ? instance.counters.find((c) => c.label === 'Commander Tax')?.amount ?? 0 : 0;
   const printedCost = parseCostLabel(definition.costLabel);
@@ -262,7 +288,19 @@ export default function CardActionsPanel({
 
       <div className="card-actions-panel" onClick={(e) => e.stopPropagation()}>
         <div className="card-actions-header">
-          <strong>{definition.name}</strong>
+          <div className="card-actions-header-title">
+            {canCycleGroup && (
+              <button className="card-cycle-arrow" onClick={() => onCycleTo?.(cyclePrev!.instanceId)} title={`View ${cyclePrev!.name}`} aria-label={`View ${cyclePrev!.name}`}>
+                {'\u2039'}
+              </button>
+            )}
+            <strong>{definition.name}</strong>
+            {canCycleGroup && (
+              <button className="card-cycle-arrow" onClick={() => onCycleTo?.(cycleNext!.instanceId)} title={`View ${cycleNext!.name}`} aria-label={`View ${cycleNext!.name}`}>
+                {'\u203a'}
+              </button>
+            )}
+          </div>
           <button className="close-button" onClick={onClose}>
             {'\u2715'}
           </button>
@@ -284,11 +322,11 @@ export default function CardActionsPanel({
 
         <p className="card-actions-text">{definition.text}</p>
 
-        {equipmentContributions && equipmentContributions.length > 0 && (
+        {((equipmentContributions && equipmentContributions.length > 0) || (costReductionSources && costReductionSources.length > 0)) && (
           <div className="card-actions-section">
             <div className="card-actions-label">Modifiers</div>
             <ul className="equipment-contributions-list">
-              {equipmentContributions.map((c) => (
+              {equipmentContributions?.map((c) => (
                 <li key={c.sourceInstanceId} className="modifier-entry">
                   <strong>{c.sourceName}:</strong>
                   {(c.power !== 0 || c.toughness !== 0) && (
@@ -304,6 +342,12 @@ export default function CardActionsPanel({
                       Additional type: {c.subtype}
                     </div>
                   )}
+                </li>
+              ))}
+              {costReductionSources?.map((c) => (
+                <li key={c.sourceName} className="modifier-entry">
+                  <strong>{c.sourceName}:</strong>
+                  <div className="modifier-entry-line">{c.text}</div>
                 </li>
               ))}
             </ul>
@@ -560,7 +604,17 @@ export default function CardActionsPanel({
           >
             {isLand
               ? `Play ${definition.name}`
-              : `Cast (${definition.costLabel}${cappedCostReduction > 0 ? ` −${cappedCostReduction}` : ''}${commanderTax > 0 ? ` +${commanderTax} tax` : ''})`}
+              : (() => {
+                  // "Cast {4}{B}{B} (-1)" - the printed cost stays as-is and
+                  // any discount/tax reads as its own trailing note, same
+                  // convention as the Modifiers breakdown below (base stats
+                  // untouched, adjustments called out separately) rather than
+                  // folding the reduction into the pips themselves.
+                  const notes = [cappedCostReduction > 0 ? `-${cappedCostReduction}` : null, commanderTax > 0 ? `+${commanderTax} tax` : null].filter(
+                    (n): n is string => n !== null
+                  );
+                  return `Cast ${definition.costLabel}${notes.length > 0 ? ` (${notes.join(', ')})` : ''}`;
+                })()}
           </button>
         )}
 

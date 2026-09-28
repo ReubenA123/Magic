@@ -1,8 +1,9 @@
 // ============================================================================
 // engine/mana.ts
 //
-// Parses costLabel strings (the shorthand you've been writing, like '2R' or
-// '4BB') into something the engine can actually check and pay against.
+// Parses costLabel strings (real Magic-style symbol notation, like '{2}{R}'
+// or '{4}{B}{B}') into something the engine can actually check and pay
+// against.
 // ============================================================================
 
 import { CardDefinition, ManaColor, ManaPool, PlayerState } from '../types';
@@ -18,26 +19,34 @@ export interface ParsedCost {
   hasX: boolean;
 }
 
-/** '-' or '' = free (used by lands). Leading digits = generic. Each
- * following letter is one pip of that colour (repeat a letter for more than
- * one pip); 'X' marks a variable cost, resolved via CAST_CARD's chosenX. */
+/** '-' or '' = free (used by lands and back faces with no cast cost).
+ * Otherwise a sequence of brace-delimited symbols, e.g. '{2}{X}{G}{U}' -
+ * order never matters (each symbol is self-contained), unlike the old plain
+ * '2XGU'-style shorthand this replaced, which silently dropped a generic
+ * number that didn't come first (see Altered Ego's original '2XGU'... cost,
+ * which is what surfaced the bug). A numeric symbol is generic mana (summed
+ * if more than one appears, though that's not expected in practice); 'X'
+ * marks a variable cost, resolved via CAST_CARD's chosenX; W/U/B/R/G is one
+ * pip of that colour each (repeat the symbol for more than one pip). Any
+ * symbol this doesn't recognize (a kicker's non-mana cost enum like
+ * 'returnLandToHand', which never goes through this parser to begin with)
+ * is simply ignored rather than erroring. */
 export function parseCostLabel(costLabel: string): ParsedCost {
   const trimmed = costLabel.trim();
   if (trimmed === '-' || trimmed === '') return { generic: 0, colors: {}, hasX: false };
 
-  const genericMatch = trimmed.match(/^\d+/);
-  const generic = genericMatch ? parseInt(genericMatch[0], 10) : 0;
-  const rest = trimmed.slice(genericMatch ? genericMatch[0].length : 0);
+  const symbols = [...trimmed.matchAll(/\{([^}]+)\}/g)].map((m) => m[1]);
 
-  const colors: Partial<Record<Exclude<ManaColor, 'C'>, number>> = {};
+  let generic = 0;
   let hasX = false;
-  for (const ch of rest) {
-    if (ch === 'X' || ch === 'x') {
+  const colors: Partial<Record<Exclude<ManaColor, 'C'>, number>> = {};
+  for (const symbol of symbols) {
+    if (/^\d+$/.test(symbol)) {
+      generic += parseInt(symbol, 10);
+    } else if (symbol === 'X' || symbol === 'x') {
       hasX = true;
-      continue;
-    }
-    if (ch === 'W' || ch === 'U' || ch === 'B' || ch === 'R' || ch === 'G') {
-      colors[ch] = (colors[ch] ?? 0) + 1;
+    } else if (symbol === 'W' || symbol === 'U' || symbol === 'B' || symbol === 'R' || symbol === 'G') {
+      colors[symbol] = (colors[symbol] ?? 0) + 1;
     }
   }
   return { generic, colors, hasX };

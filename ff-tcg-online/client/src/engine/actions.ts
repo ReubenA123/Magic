@@ -3,7 +3,7 @@
 // ============================================================================
 
 import { ActionResult, CardDefinition, CardInstance, CombatAssignment, GameAction, GameState, ManaColor, Phase, ZoneName } from '../types';
-import { findCardAnywhere, getOpponent, getPlayer, updatePlayer, detachEverythingFrom, nextInstanceId, shuffle } from './state'; import { getCardDefinition } from '../data/cards';
+import { findCardAnywhere, getOpponent, getPlayer, updatePlayer, detachEverythingFrom, nextInstanceId, shuffle } from './state'; import { getCardDefinition, frontFaceDefId } from '../data/cards';
 import { canPay, payCost, parseCostLabel, emptyManaPool, manaValue, effectiveCastCost } from './mana';
 import { hasKeyword, hasKeywordEffective } from './keywords';
 import {
@@ -21,6 +21,7 @@ import {
   damageMultiplierFor,
   effectiveWardCost,
   hasBoardGrantedKeyword,
+  beginCommanderZoneChoice,
 } from './combat';
 import {
   resolveCardEffects,
@@ -55,6 +56,16 @@ function isMutualActive(state: GameState): boolean {
   return state.mutualAdjustment.status === 'active';
 }
 
+/** Whether `card` (still owned by `ownerId`, still actually on a
+ * battlefield at the moment this is checked) is that player's chosen
+ * commander - the gate every bounce/exile site below checks before
+ * intercepting a departure into engine/combat.ts: beginCommanderZoneChoice
+ * instead of moving it directly. */
+function isPlayersCommander(state: GameState, ownerId: string, card: CardInstance): boolean {
+  const owner = getPlayer(state, ownerId);
+  return !!owner.commanderDefId && frontFaceDefId(card.defId) === owner.commanderDefId;
+}
+
 /** Every action goes through this single entry point, so it's also the one
  * place that can reliably notice "did a watched permanent leave the
  * battlefield" (see GameState.battlefieldLeaveWatchers) no matter which of
@@ -67,9 +78,11 @@ export function applyAction(state: GameState, action: GameAction, playerId: stri
   const result = applyActionInner(state, action, playerId);
   if (!result.ok) return result;
   const watched = checkBattlefieldLeaveWatchers(state, result.state);
-  const cleaned = stripStaleRevealMarkers(watched.state);
-  if (watched.logLines.length === 0) return { ok: true, state: cleaned };
-  return { ok: true, state: { ...cleaned, log: [...cleaned.log, ...watched.logLines] } };
+  const unexiled = checkExileUntilSourceLeaves(state, watched.state);
+  const cleaned = stripStaleRevealMarkers(unexiled.state);
+  const logLines = [...watched.logLines, ...unexiled.logLines];
+  if (logLines.length === 0) return { ok: true, state: cleaned };
+  return { ok: true, state: { ...cleaned, log: [...cleaned.log, ...logLines] } };
 }
 
 function checkBattlefieldLeaveWatchers(prevState: GameState, nextState: GameState): { state: GameState; logLines: string[] } {
@@ -91,6 +104,56 @@ function checkBattlefieldLeaveWatchers(prevState: GameState, nextState: GameStat
     const resolved = resolveCardEffects(next, watcher.controllerId, watcher.effects, watcher.watcherInstanceId);
     next = resolved.state;
     logLines.push(...resolved.logLines);
+  }
+  return { state: next, logLines };
+}
+
+/** "Exile target creature ... until [this] leaves the battlefield" (Auron,
+ * Venerated Guardian's Shooting Star) - a real "O-Ring" style linked exile.
+ * Deliberately a SEPARATE list from battlefieldLeaveWatchers above rather
+ * than reusing it: that mechanism skips its own effects entirely if the
+ * WATCHER also left the battlefield in the same instant ("nothing left to
+ * run the effects on") - exactly the case here, since the watched permanent
+ * and the exiling source are the SAME card. Same "diff before/after, one-shot"
+ * shape as checkBattlefieldLeaveWatchers, just unconditional on the source's
+ * own continued presence, since returning the exiled card doesn't need
+ * anything from the source itself (see engine/effects.ts:
+ * exileTargetCreatureWithLessPowerUntilSourceLeaves, the only effect that
+ * populates this list right now - a card like White Auracite wanting the
+ * same "until this leaves" pattern would populate it the same way). */
+function checkExileUntilSourceLeaves(prevState: GameState, nextState: GameState): { state: GameState; logLines: string[] } {
+  if (nextState.exileUntilSourceLeaves.length === 0) return { state: nextState, logLines: [] };
+
+  const isOnAnyBattlefield = (state: GameState, instanceId: string) => state.players.some((p) => p.zones.battlefield.some((c) => c.instanceId === instanceId));
+
+  const departed = nextState.exileUntilSourceLeaves.filter(
+    (w) => isOnAnyBattlefield(prevState, w.sourceInstanceId) && !isOnAnyBattlefield(nextState, w.sourceInstanceId)
+  );
+  if (departed.length === 0) return { state: nextState, logLines: [] };
+
+  let next: GameState = { ...nextState, exileUntilSourceLeaves: nextState.exileUntilSourceLeaves.filter((w) => !departed.includes(w)) };
+  const logLines: string[] = [];
+  for (const watcher of departed) {
+    for (const p of next.players) {
+      const exiledCard = p.zones.exile.find((c) => c.instanceId === watcher.exiledInstanceId);
+      if (!exiledCard) continue;
+      const def = getCardDefinition(exiledCard.defId);
+      const newCard: CardInstance = {
+        instanceId: nextInstanceId(),
+        defId: exiledCard.defId,
+        ownerId: p.id,
+        tapped: false,
+        counters: [],
+        damageMarked: 0,
+        summoningSick: !hasKeyword(def, 'haste'),
+      };
+      next = updatePlayer(next, p.id, (pl) => ({
+        ...pl,
+        zones: { ...pl.zones, exile: pl.zones.exile.filter((c) => c.instanceId !== watcher.exiledInstanceId), battlefield: [...pl.zones.battlefield, newCard] },
+      }));
+      logLines.push(`${def.name} returns to the battlefield.`);
+      break;
+    }
   }
   return { state: next, logLines };
 }
@@ -207,6 +270,8 @@ function applyActionInner(state: GameState, action: GameAction, playerId: string
       return resolveOptionalTransform(state, playerId, action.accept);
     case 'RESOLVE_OPTIONAL_PAY_LIFE':
       return resolveOptionalPayLife(state, playerId, action.accept);
+    case 'RESOLVE_COMMANDER_ZONE_CHOICE':
+      return resolveCommanderZoneChoice(state, playerId, action.toCommandZone);
     case 'RESOLVE_WARD_PAYMENT':
       return resolveWardPayment(state, playerId, action.pay);
     case 'RESOLVE_FREE_CAST_FROM_HAND':
@@ -714,7 +779,7 @@ function castCard(
         ? def.onEnter
         : def.onCast;
   if (autoEffects && autoEffects.length > 0) {
-    const resolved = resolveCardEffects(next, playerId, autoEffects, movedCard.instanceId, wasKicked);
+    const resolved = resolveCardEffects(next, playerId, autoEffects, movedCard.instanceId, wasKicked, chosenX);
     next = resolved.state;
     effectLogLines = resolved.logLines;
   }
@@ -1600,6 +1665,23 @@ function declareAttackers(state: GameState, playerId: string, instanceIds: strin
     }
   }
 
+  // "Whenever an opponent attacks you, ..." (Lulu, Stern Guardian) - fires
+  // once per DEFENDING permanent that has it (not once per attacker), and
+  // only when at least one attacker was actually declared - unlike onAttack
+  // above, this belongs to the player being attacked, so it's checked
+  // against the DEFENDER's battlefield, keyed off `defender.id` as the
+  // controller/source for resolveCardEffects even though `playerId` (the
+  // attacker) is who triggered it.
+  if (instanceIds.length > 0) {
+    const defender = getOpponent(next, playerId);
+    for (const c of defender.zones.battlefield) {
+      const def = getCardDefinition(c.defId);
+      if (!def.onOpponentAttacksYou || def.onOpponentAttacksYou.length === 0) continue;
+      const resolved = resolveCardEffects(next, defender.id, def.onOpponentAttacksYou, c.instanceId);
+      next = { ...resolved.state, log: [...resolved.state.log, ...resolved.logLines] };
+    }
+  }
+
   return { ok: true, state: next };
 }
 
@@ -1761,6 +1843,49 @@ function chooseTarget(state: GameState, playerId: string, targetInstanceId: stri
     return { ok: true, state: { ...next, log: [...next.log, ...logLines] } };
   }
 
+  // "You may have this creature enter as a copy of any creature on the
+  // battlefield, except it enters with X additional +1/+1 counters on it"
+  // (Altered Ego) - a top-level special case, not part of the generic
+  // isOptional list below, because declining still has to add the counters
+  // (the generic list's decline path just clears pendingTarget and does
+  // nothing else). Also deliberately ahead of the hexproof/Ward checks
+  // further down - copying isn't a real "target" in Magic rules terms (a
+  // hexproof creature can still be copied), so this shouldn't be gated by
+  // either.
+  if (pending.effect.type === 'becomeCopyOfAnyCreatureThenAddCounters') {
+    const counterAmount = pending.effect.counterAmount ?? 0;
+    const addCounters = (c: CardInstance): CardInstance => {
+      if (counterAmount <= 0) return c;
+      const existing = c.counters.find((ctr) => ctr.label === '+1/+1')?.amount ?? 0;
+      return { ...c, counters: [...c.counters.filter((ctr) => ctr.label !== '+1/+1'), { label: '+1/+1', amount: existing + counterAmount }] };
+    };
+    const actor = getPlayer(state, playerId);
+    const sourceDef = getCardDefinition(findCardAnywhere(state, pending.sourceInstanceId)!.card.defId);
+
+    if (targetInstanceId === null) {
+      let next = updatePlayer(state, playerId, (p) => ({
+        ...p,
+        zones: { ...p.zones, battlefield: p.zones.battlefield.map((c) => (c.instanceId === pending.sourceInstanceId ? addCounters(c) : c)) },
+      }));
+      next = { ...next, pendingTarget: null };
+      const note = counterAmount > 0 ? ` It enters with ${counterAmount} +1/+1 counter(s).` : '';
+      return { ok: true, state: { ...next, log: [...next.log, `${actor.name} declines to copy a creature with ${sourceDef.name}.${note}`] } };
+    }
+
+    const target = findCardAnywhere(state, targetInstanceId);
+    if (!target || target.zone !== 'battlefield') return { ok: false, error: "That's not a legal target - it must be a creature on the battlefield." };
+    const targetDef = getCardDefinition(target.card.defId);
+    if (targetDef.type !== 'creature') return { ok: false, error: `${targetDef.name} is not a legal target - it must be a creature.` };
+
+    let next = updatePlayer(state, playerId, (p) => ({
+      ...p,
+      zones: { ...p.zones, battlefield: p.zones.battlefield.map((c) => (c.instanceId === pending.sourceInstanceId ? addCounters({ ...c, defId: targetDef.id }) : c)) },
+    }));
+    next = { ...next, pendingTarget: null };
+    const note = counterAmount > 0 ? `, entering with ${counterAmount} +1/+1 counter(s)` : '';
+    return { ok: true, state: { ...next, log: [...next.log, `${sourceDef.name} enters as a copy of ${targetDef.name}${note}.`] } };
+  }
+
   if (targetInstanceId === null) {
     // Only "up to one" targeting - SelfFightTargetEffect.optional, or
     // PutCounterOnUpToOneOwnCreatureEffect (always optional, per its name) -
@@ -1774,13 +1899,15 @@ function chooseTarget(state: GameState, playerId: string, targetInstanceId: stri
       pending.effect.type === 'putCounterOnUpToOneOtherCreatureEqualToOwnPower' ||
       pending.effect.type === 'tapStunAndGainLifeForNonbasicLands' ||
       (pending.effect.type === 'pumpUpToTwoTargets' && !!pending.firstInstanceId) ||
-      pending.effect.type === 'attachAllControlledEquipmentToTargetCreature';
+      pending.effect.type === 'attachAllControlledEquipmentToTargetCreature' ||
+      pending.effect.type === 'proliferate';
     if (!isOptional) {
       return { ok: false, error: 'This ability requires a target.' };
     }
     const source = findCardAnywhere(state, pending.sourceInstanceId);
     const sourceName = source ? getCardDefinition(source.card.defId).name : 'This ability';
-    return { ok: true, state: { ...state, pendingTarget: null, log: [...state.log, `${sourceName}'s optional target was declined.`] } };
+    const declineNote = pending.effect.type === 'proliferate' ? `${sourceName} finishes proliferating.` : `${sourceName}'s optional target was declined.`;
+    return { ok: true, state: { ...state, pendingTarget: null, log: [...state.log, declineNote] } };
   }
 
   // "Hexproof" - can't be targeted by an opponent's spells or abilities at
@@ -1859,6 +1986,59 @@ function chooseTarget(state: GameState, playerId: string, targetInstanceId: stri
     next = { ...next, pendingTarget: null };
     const actor = getPlayer(next, playerId);
     return { ok: true, state: { ...next, log: [...next.log, `${actor.name} untaps ${targetDef.name}.`] } };
+  }
+
+  if (pending.effect.type === 'putStunCounterOnTargetAttacker') {
+    const found = findCardAnywhere(state, targetInstanceId);
+    if (!found || found.zone !== 'battlefield' || !state.declaredAttackers.includes(targetInstanceId)) {
+      return { ok: false, error: "That's not a legal target - it must be a creature attacking you." };
+    }
+    const targetDef = getCardDefinition(found.card.defId);
+    const existingStun = found.card.counters.find((c) => c.label === 'Stun')?.amount ?? 0;
+    let next = updatePlayer(state, found.ownerPlayerId, (p) => ({
+      ...p,
+      zones: {
+        ...p.zones,
+        battlefield: p.zones.battlefield.map((c) =>
+          c.instanceId === targetInstanceId ? { ...c, counters: [...c.counters.filter((ctr) => ctr.label !== 'Stun'), { label: 'Stun', amount: existingStun + 1 }] } : c
+        ),
+      },
+    }));
+    next = { ...next, pendingTarget: null };
+    const actor = getPlayer(next, playerId);
+    return { ok: true, state: { ...next, log: [...next.log, `${actor.name} puts a Stun counter on ${targetDef.name}.`] } };
+  }
+
+  if (pending.effect.type === 'proliferate') {
+    // targetInstanceId === null (declining to proliferate anything else) is
+    // already handled generically above (see the isOptional whitelist) -
+    // this only ever runs here with a real target chosen.
+    const alreadyChosen = pending.effect.alreadyChosen ?? [];
+    if (alreadyChosen.includes(targetInstanceId)) {
+      return { ok: false, error: 'You already proliferated that permanent this time.' };
+    }
+    const found = findCardAnywhere(state, targetInstanceId);
+    if (!found || found.zone !== 'battlefield' || found.card.counters.length === 0) {
+      return { ok: false, error: "That's not a legal target - it must be a permanent with at least one counter on it." };
+    }
+    const targetDef = getCardDefinition(found.card.defId);
+    let next = updatePlayer(state, found.ownerPlayerId, (p) => ({
+      ...p,
+      zones: {
+        ...p.zones,
+        battlefield: p.zones.battlefield.map((c) => (c.instanceId === targetInstanceId ? { ...c, counters: c.counters.map((ctr) => ({ ...ctr, amount: ctr.amount + 1 })) } : c)),
+      },
+    }));
+    const newAlreadyChosen = [...alreadyChosen, targetInstanceId];
+    const hasMoreLegalTargets = [...next.players[0].zones.battlefield, ...next.players[1].zones.battlefield].some(
+      (c) => c.counters.length > 0 && !newAlreadyChosen.includes(c.instanceId)
+    );
+    next = {
+      ...next,
+      pendingTarget: hasMoreLegalTargets ? { ...pending, effect: { type: 'proliferate', alreadyChosen: newAlreadyChosen } } : null,
+    };
+    const actor = getPlayer(next, playerId);
+    return { ok: true, state: { ...next, log: [...next.log, `${actor.name} proliferates ${targetDef.name}, adding another counter of each kind already there.`] } };
   }
 
   if (pending.effect.type === 'tapStunAndGainLifeForNonbasicLands') {
@@ -2357,14 +2537,14 @@ function chooseTarget(state: GameState, playerId: string, targetInstanceId: stri
     if (targetInstanceId === pending.sourceInstanceId) return { ok: false, error: 'You must choose a permanent other than the source.' };
     const bounceOwner = getPlayer(state, found.ownerPlayerId);
     let next = detachEverythingFrom(state, targetInstanceId);
-    next = updatePlayer(next, found.ownerPlayerId, (p) => ({
-      ...p,
-      zones: {
-        ...p.zones,
-        battlefield: p.zones.battlefield.filter((c) => c.instanceId !== targetInstanceId),
-        hand: [...p.zones.hand, { ...found.card, tapped: false, attachedToInstanceId: undefined, damageMarked: 0 }],
-      },
-    }));
+    const bouncedCard = { ...found.card, tapped: false, attachedToInstanceId: undefined, damageMarked: 0 };
+    next = updatePlayer(next, found.ownerPlayerId, (p) => ({ ...p, zones: { ...p.zones, battlefield: p.zones.battlefield.filter((c) => c.instanceId !== targetInstanceId) } }));
+    if (isPlayersCommander(next, found.ownerPlayerId, found.card)) {
+      next = beginCommanderZoneChoice(next, found.ownerPlayerId, 'hand', bouncedCard);
+      next = { ...next, pendingTarget: null, log: [...next.log, `${targetDef.name} would return to ${bounceOwner.name}'s hand - ${bounceOwner.name} chooses whether it goes there or to the command zone instead.`] };
+      return { ok: true, state: next };
+    }
+    next = updatePlayer(next, found.ownerPlayerId, (p) => ({ ...p, zones: { ...p.zones, hand: [...p.zones.hand, bouncedCard] } }));
     next = { ...next, pendingTarget: null, log: [...next.log, `${targetDef.name} is returned to ${bounceOwner.name}'s hand.`] };
     return { ok: true, state: next };
   }
@@ -2518,6 +2698,30 @@ function chooseTarget(state: GameState, playerId: string, targetInstanceId: stri
     return { ok: true, state: { ...next, log: [...next.log, `${actor.name} attaches all Equipment they control to ${targetDef.name}.`] } };
   }
 
+  if (pending.effect.type === 'exileTargetCreatureWithLessPowerUntilSourceLeaves') {
+    const sourceFound = findCardAnywhere(state, pending.sourceInstanceId);
+    if (!sourceFound) return { ok: false, error: 'The source creature is no longer available.' };
+    const sourceDef = getCardDefinition(sourceFound.card.defId);
+    const sourcePower = effectivePower(sourceDef, sourceFound.card, state, sourceFound.ownerPlayerId);
+
+    if (targetDef.type !== 'creature') return { ok: false, error: `${targetDef.name} is not a legal target - it must be a creature.` };
+    if (found.ownerPlayerId === playerId) return { ok: false, error: `${targetDef.name} is not a legal target - it must be a creature the defending player controls.` };
+    const targetPower = effectivePower(targetDef, found.card, state, found.ownerPlayerId);
+    if (targetPower >= sourcePower) return { ok: false, error: `${targetDef.name} is not a legal target - its power isn't less than ${sourceDef.name}'s.` };
+
+    let next = detachEverythingFrom(state, targetInstanceId);
+    next = updatePlayer(next, found.ownerPlayerId, (p) => ({
+      ...p,
+      zones: { ...p.zones, battlefield: p.zones.battlefield.filter((c) => c.instanceId !== targetInstanceId), exile: [...p.zones.exile, found.card] },
+    }));
+    next = {
+      ...next,
+      pendingTarget: null,
+      exileUntilSourceLeaves: [...next.exileUntilSourceLeaves, { sourceInstanceId: pending.sourceInstanceId, exiledInstanceId: targetInstanceId }],
+    };
+    return { ok: true, state: { ...next, log: [...next.log, `${sourceDef.name} exiles ${targetDef.name} until it leaves the battlefield.`] } };
+  }
+
   if (pending.effect.type === 'damageTargetCreature') {
     if (targetDef.type !== 'creature') return { ok: false, error: `${targetDef.name} is not a legal target - it must be a creature.` };
     const { amount } = pending.effect;
@@ -2563,10 +2767,14 @@ function chooseTarget(state: GameState, playerId: string, targetInstanceId: stri
     if (!isLegal) return { ok: false, error: `${targetDef.name} is not a legal target.` };
     const actor = getPlayer(state, playerId);
     let next = detachEverythingFrom(state, targetInstanceId);
-    next = updatePlayer(next, found.ownerPlayerId, (p) => ({
-      ...p,
-      zones: { ...p.zones, battlefield: p.zones.battlefield.filter((c) => c.instanceId !== targetInstanceId), exile: [...p.zones.exile, found.card] },
-    }));
+    next = updatePlayer(next, found.ownerPlayerId, (p) => ({ ...p, zones: { ...p.zones, battlefield: p.zones.battlefield.filter((c) => c.instanceId !== targetInstanceId) } }));
+    if (isPlayersCommander(next, found.ownerPlayerId, found.card)) {
+      const cardOwner = getPlayer(next, found.ownerPlayerId);
+      next = beginCommanderZoneChoice(next, found.ownerPlayerId, 'exile', found.card);
+      next = { ...next, pendingTarget: null, log: [...next.log, `${actor.name} would exile ${targetDef.name} - ${cardOwner.name} chooses whether it goes there or to the command zone instead.`] };
+      return { ok: true, state: next };
+    }
+    next = updatePlayer(next, found.ownerPlayerId, (p) => ({ ...p, zones: { ...p.zones, exile: [...p.zones.exile, found.card] } }));
     next = { ...next, pendingTarget: null, log: [...next.log, `${actor.name} exiles ${targetDef.name}.`] };
     return { ok: true, state: next };
   }
@@ -2629,14 +2837,14 @@ function chooseTarget(state: GameState, playerId: string, targetInstanceId: stri
   }
   const bounceOwner = getPlayer(state, found.ownerPlayerId);
   let next = detachEverythingFrom(state, targetInstanceId);
-  next = updatePlayer(next, found.ownerPlayerId, (p) => ({
-    ...p,
-    zones: {
-      ...p.zones,
-      battlefield: p.zones.battlefield.filter((c) => c.instanceId !== targetInstanceId),
-      hand: [...p.zones.hand, { ...found.card, tapped: false, attachedToInstanceId: undefined, damageMarked: 0 }],
-    },
-  }));
+  const bouncedCard = { ...found.card, tapped: false, attachedToInstanceId: undefined, damageMarked: 0 };
+  next = updatePlayer(next, found.ownerPlayerId, (p) => ({ ...p, zones: { ...p.zones, battlefield: p.zones.battlefield.filter((c) => c.instanceId !== targetInstanceId) } }));
+  if (isPlayersCommander(next, found.ownerPlayerId, found.card)) {
+    next = beginCommanderZoneChoice(next, found.ownerPlayerId, 'hand', bouncedCard);
+    next = { ...next, pendingTarget: null, log: [...next.log, `${targetDef.name} would return to ${bounceOwner.name}'s hand - ${bounceOwner.name} chooses whether it goes there or to the command zone instead.`] };
+    return { ok: true, state: next };
+  }
+  next = updatePlayer(next, found.ownerPlayerId, (p) => ({ ...p, zones: { ...p.zones, hand: [...p.zones.hand, bouncedCard] } }));
   next = { ...next, pendingTarget: null, log: [...next.log, `${targetDef.name} is returned to ${bounceOwner.name}'s hand.`] };
   return { ok: true, state: next };
 }
@@ -2865,11 +3073,14 @@ function resolveOptionalBounce(state: GameState, playerId: string, instanceId: s
   const def = getCardDefinition(card.defId);
 
   let next = detachEverythingFrom(state, instanceId);
-  next = updatePlayer(next, playerId, (p) => ({
-    ...p,
-    zones: { ...p.zones, battlefield: p.zones.battlefield.filter((c) => c.instanceId !== instanceId), hand: [...p.zones.hand, { ...card, tapped: false, attachedToInstanceId: undefined }] },
-  }));
+  const bouncedCard = { ...card, tapped: false, attachedToInstanceId: undefined, damageMarked: 0 };
+  next = updatePlayer(next, playerId, (p) => ({ ...p, zones: { ...p.zones, battlefield: p.zones.battlefield.filter((c) => c.instanceId !== instanceId) } }));
   next = { ...next, pendingOptionalBounce: null };
+  if (isPlayersCommander(next, playerId, card)) {
+    next = beginCommanderZoneChoice(next, playerId, 'hand', bouncedCard);
+    return { ok: true, state: { ...next, log: [...next.log, `${def.name} would return to ${player.name}'s hand - ${player.name} chooses whether it goes there or to the command zone instead.`] } };
+  }
+  next = updatePlayer(next, playerId, (p) => ({ ...p, zones: { ...p.zones, hand: [...p.zones.hand, bouncedCard] } }));
 
   return { ok: true, state: { ...next, log: [...next.log, `${player.name} returns ${def.name} to their hand.`] } };
 }
@@ -3305,6 +3516,32 @@ function resolveOptionalPayLife(state: GameState, playerId: string, accept: bool
   next = { ...next, log: [...next.log, `${getPlayer(next, playerId).name} pays ${pending.lifeCost} life for ${sourceName}.`] };
   const resolved = resolveCardEffects(next, playerId, pending.effects, pending.sourceInstanceId);
   next = { ...resolved.state, pendingOptionalPayLife: null, log: [...resolved.state.log, ...resolved.logLines] };
+  return { ok: true, state: next };
+}
+
+/** The real "commander replacement effect" - the owner chooses between the
+ * command zone and wherever their commander was actually headed (see
+ * GameState.pendingCommanderZoneChoice/engine/combat.ts:
+ * beginCommanderZoneChoice). Both outcomes were already precomputed at the
+ * moment of departure, so this just places whichever one was chosen into
+ * its zone and, if another commander's choice was queued behind this one
+ * (a board wipe killing both at once), promotes it to the new pending one. */
+function resolveCommanderZoneChoice(state: GameState, playerId: string, toCommandZone: boolean): ActionResult {
+  const pending = state.pendingCommanderZoneChoice;
+  if (!pending) return { ok: false, error: 'Nothing is waiting on a commander zone choice right now.' };
+  if (pending.ownerId !== playerId) return { ok: false, error: "It's not your commander." };
+
+  const chosenCard = toCommandZone ? pending.commandZoneCard : pending.destinationCard;
+  const def = getCardDefinition(chosenCard.defId);
+  let next = updatePlayer(state, playerId, (p) => ({
+    ...p,
+    zones: { ...p.zones, [toCommandZone ? 'commander' : pending.destinationZone]: [...p.zones[toCommandZone ? 'commander' : pending.destinationZone], chosenCard] },
+  }));
+  const destinationLabel = toCommandZone ? 'command zone' : pending.destinationZone;
+  next = { ...next, log: [...next.log, `${getPlayer(next, playerId).name} sends ${def.name} to the ${destinationLabel}.`] };
+
+  const [nextPending, ...restQueue] = pending.queued;
+  next = { ...next, pendingCommanderZoneChoice: nextPending ? { ...nextPending, queued: restQueue } : null };
   return { ok: true, state: next };
 }
 
@@ -3970,14 +4207,14 @@ function applyEndStepTriggers(state: GameState): GameState {
     const cDef = getCardDefinition(c.defId);
     if (!cDef.bounceSelfAtEndStepIfNotSummoningSick || c.summoningSick) continue;
     next = detachEverythingFrom(next, c.instanceId);
-    next = updatePlayer(next, next.activePlayerId, (p) => ({
-      ...p,
-      zones: {
-        ...p.zones,
-        battlefield: p.zones.battlefield.filter((x) => x.instanceId !== c.instanceId),
-        hand: [...p.zones.hand, { ...c, tapped: false, attachedToInstanceId: undefined, damageMarked: 0 }],
-      },
-    }));
+    const bouncedCard = { ...c, tapped: false, attachedToInstanceId: undefined, damageMarked: 0 };
+    next = updatePlayer(next, next.activePlayerId, (p) => ({ ...p, zones: { ...p.zones, battlefield: p.zones.battlefield.filter((x) => x.instanceId !== c.instanceId) } }));
+    if (isPlayersCommander(next, next.activePlayerId, c)) {
+      next = beginCommanderZoneChoice(next, next.activePlayerId, 'hand', bouncedCard);
+      next = { ...next, log: [...next.log, `${cDef.name} would return to ${active.name}'s hand - ${active.name} chooses whether it goes there or to the command zone instead.`] };
+      continue;
+    }
+    next = updatePlayer(next, next.activePlayerId, (p) => ({ ...p, zones: { ...p.zones, hand: [...p.zones.hand, bouncedCard] } }));
     next = { ...next, log: [...next.log, `${cDef.name} returns to ${active.name}'s hand.`] };
   }
   for (const c of active.zones.battlefield) {

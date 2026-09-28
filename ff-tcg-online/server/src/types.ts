@@ -176,6 +176,16 @@ export interface UntapTargetAttackerEffect {
   type: 'untapTargetAttacker';
 }
 
+/** "Choose target creature attacking you. Put a stun counter on that
+ * creature." (Lulu, Stern Guardian's onOpponentAttacksYou) - restricted to
+ * GameState.declaredAttackers, same "must currently be attacking" gate as
+ * UntapTargetAttackerEffect above, but stuns instead of untapping, and
+ * (unlike TapAndStunEffect) never taps - it's already attacking, so tapped
+ * is a given. */
+export interface PutStunCounterOnTargetAttackerEffect {
+  type: 'putStunCounterOnTargetAttacker';
+}
+
 export interface TapAndStunEffect {
   type: 'tapAndStun';
   targetController: 'opponent';
@@ -267,6 +277,22 @@ export interface DamageTargetCreatureEffect {
 export interface ExileTargetPermanentEffect {
   type: 'exileTargetPermanent';
   targetFilter: 'artifact' | 'creature' | 'anyPermanent' | 'nonlandPermanent';
+}
+
+/** "Exile target creature defending player controls with power less than
+ * [this]'s power until [this] leaves the battlefield" (Auron, Venerated
+ * Guardian's Shooting Star, fired via onAttack alongside a plain
+ * putCounterOnSelf - see cards.ts; the printed "When you do" doesn't need
+ * separate reflexive-trigger plumbing, since both effects just run together
+ * whenever Auron attacks). Unlike ExileTargetPermanentEffect above (a fixed
+ * filter, permanent exile), this compares against the SOURCE's own current
+ * effectivePower at resolution time rather than a stored threshold, and the
+ * exile isn't permanent - see GameState.exileUntilSourceLeaves, populated
+ * when this resolves in engine/actions.ts: chooseTarget. "Defending player"
+ * is just the attacker's one opponent, same shortcut this 2-player engine
+ * already takes everywhere else. */
+export interface ExileTargetCreatureWithLessPowerUntilSourceLeavesEffect {
+  type: 'exileTargetCreatureWithLessPowerUntilSourceLeaves';
 }
 
 /** "Choose target creature you control. It deals damage equal to its power
@@ -405,6 +431,26 @@ export interface DamageTargetCreatureEqualToOtherControlledSubtypePowerEffect {
  * token enters the battlefield under the CASTER's control, untapped. */
 export interface CreateTokenCopyOfTargetEffect {
   type: 'createTokenCopyOfTarget';
+}
+
+/** "You may have this creature enter as a copy of any creature on the
+ * battlefield, except it enters with X additional +1/+1 counters on it"
+ * (Altered Ego) - unlike CreateTokenCopyOfTargetEffect above (spawns a NEW
+ * token alongside the source), this rewrites the SOURCE's own defId in
+ * place, same "in-place defId swap" as CardAbility/CardEffect transformSelf,
+ * just target-driven instead of pointing at a fixed transformsInto. Declining
+ * the copy (see engine/actions.ts: chooseTarget's top-level special case for
+ * this effect, not the generic isOptional list - it still has to add the
+ * counters on decline, which the generic "just clear pendingTarget" path
+ * doesn't do) still adds the counters; only whether it becomes a copy is
+ * optional. counterAmount is left undefined on the card's own onEnter list -
+ * X isn't known until cast - and filled in when this gets armed into
+ * GameState.pendingTarget (engine/effects.ts: resolveCardEffects's chosenX
+ * parameter, threaded from engine/actions.ts: castCard for exactly this
+ * effect). */
+export interface BecomeCopyOfAnyCreatureThenAddCountersEffect {
+  type: 'becomeCopyOfAnyCreatureThenAddCounters';
+  counterAmount?: number;
 }
 
 /**
@@ -849,6 +895,25 @@ export interface PutCounterOnTargetEffect {
    * Mage's "It gains lifelink until end of turn") - applied to the SAME
    * target as the counter, same shot. */
   grantKeyword?: string;
+}
+
+/** "Choose any number of permanents and/or players, then give each another
+ * counter of each kind already there." (Lulu, Stern Guardian's {3}{U}
+ * activated ability, real Magic's Proliferate) - "any number" is modeled as
+ * repeat-until-decline over the EXISTING single-target pendingTarget/
+ * CHOOSE_TARGET flow (see engine/actions.ts: chooseTarget's top-level
+ * special case for this effect) rather than new multi-select plumbing:
+ * choosing a permanent bumps every counter already on it by one and
+ * re-arms this same effect for another pick, declining (a null target)
+ * ends it. `alreadyChosen` tracks which instances were already picked THIS
+ * resolution, so the same permanent can't be double-dipped in one
+ * Proliferate. Scope note: this engine has no player-level counters of any
+ * kind (no poison/energy/experience tracking on PlayerState), so unlike the
+ * real card, only permanents are eligible targets - the "or players" half
+ * of the printed text is a known, unimplemented gap. */
+export interface ProliferateEffect {
+  type: 'proliferate';
+  alreadyChosen?: string[];
 }
 
 /** "Put a [counterLabel] counter on target land" (Ultima, Origin of
@@ -1733,6 +1798,7 @@ export type CardEffect =
   | CreateTokenEffect
   | TapAndStunEffect
   | UntapTargetAttackerEffect
+  | PutStunCounterOnTargetAttackerEffect
   | TapStunAndGainLifeForNonbasicLandsEffect
   | DestroyTargetEffect
   | RevealAndDivideEffect
@@ -1758,6 +1824,7 @@ export type CardEffect =
   | EachPlayerLosesLifeEffect
   | PumpControlledSubtypeEffect
   | PutCounterOnTargetEffect
+  | ProliferateEffect
   | DebuffTargetByGraveyardEffect
   | SelfFightTargetEffect
   | ChooseCreaturesFightEffect
@@ -1799,6 +1866,7 @@ export type CardEffect =
   | ReturnSpecificInstancesToOwnersHandEffect
   | QueueEffectsAtNextEndStepEffect
   | ExileTargetPermanentEffect
+  | ExileTargetCreatureWithLessPowerUntilSourceLeavesEffect
   | ExileTopOfLibraryPlayableUntilCleanupEffect
   | PumpUpToTwoTargetsEffect
   | ReturnInstantOrSorceryFromGraveyardToHandEffect
@@ -1840,6 +1908,7 @@ export type CardEffect =
   | BuffAllCreaturesEffect
   | BecomeCreatureUntilEndOfTurnEffect
   | CreateTokenCopyOfTargetEffect
+  | BecomeCopyOfAnyCreatureThenAddCountersEffect
   | CreateTokenIfNotControllingNamedEffect
   | DebuffOpponentCreaturesEffect
   | MillSelfEffect
@@ -2156,6 +2225,12 @@ export interface CardDefinition {
   /** Fires once, automatically, whenever this creature is declared as an
    * attacker. See engine/actions.ts: declareAttackers. */
   onAttack?: CardEffect[];
+  /** "Whenever an opponent attacks you, ..." (Lulu, Stern Guardian) - the
+   * DEFENDER's counterpart to onAttack above: fires once per permanent that
+   * has it (not once per attacker), whenever the opponent declares one or
+   * more attackers, regardless of who/how many. See engine/actions.ts:
+   * declareAttackers, checked against the DEFENDING player's battlefield. */
+  onOpponentAttacksYou?: CardEffect[];
   /** "Cycling" family - activated from hand, see engine/actions.ts: cycleCard. */
   cycling?: CyclingAbility;
   /** See LandCountBuff - a static, always-on-condition-met power/toughness buff. */
@@ -2980,6 +3055,7 @@ export interface GameState {
       | DestroyTargetEffect
       | PumpTargetEffect
       | PutCounterOnTargetEffect
+      | ProliferateEffect
       | DebuffTargetByGraveyardEffect
       | SelfFightTargetEffect
       | ChooseCreaturesFightEffect
@@ -2996,13 +3072,16 @@ export interface GameState {
       | DamageTargetCreatureEffect
       | SweepDamageFromChosenCreatureEffect
       | CreateTokenCopyOfTargetEffect
+      | BecomeCopyOfAnyCreatureThenAddCountersEffect
       | UntapTargetAttackerEffect
+      | PutStunCounterOnTargetAttackerEffect
       | GrantKeywordsToTargetPermanentEffect
       | GainControlOfTargetCreatureEffect
       | GiveControlOfAnotherOwnPermanentToOpponentEffect
       | GainControlOfTargetEquipmentAndAttachEffect
       | ChooseCreatureDealsDamageToOpponentCreatureEffect
       | ExileTargetPermanentEffect
+      | ExileTargetCreatureWithLessPowerUntilSourceLeavesEffect
       | PumpUpToTwoTargetsEffect
       | PutCounterOnAnotherCreatureGrantsIndestructibleUntilNextTurnEffect
       | ExileThenReturnTargetOwnCreatureEffect
@@ -3164,6 +3243,27 @@ export interface GameState {
    * GameBoard.tsx for the purple "awaiting this choice" outline on the
    * source permanent while set. */
   pendingOptionalPayLife: { sourceInstanceId: string; controllerId: string; lifeCost: number; effects: CardEffect[] } | null;
+  /** Set whenever a commander is about to leave the battlefield for
+   * anywhere other than the battlefield itself (destroyed, sacrificed,
+   * bounced, exiled) - the real "commander replacement effect": its OWNER
+   * gets to choose whether it goes to the command zone instead of wherever
+   * it was headed, rather than that happening automatically. Both possible
+   * outcomes are precomputed at the moment of departure (destinationCard
+   * already has whatever reset that specific path normally applies -
+   * damage/tapped cleared, etc; commandZoneCard already has the front face
+   * reverted and Commander Tax bumped, matching the old automatic-reroute
+   * shape) so RESOLVE_COMMANDER_ZONE_CHOICE just has to place one of the
+   * two rather than recompute anything. `queued` covers the rare case of
+   * more than one commander leaving in the same instant (a board wipe
+   * killing both), resolved one at a time in order. See
+   * engine/combat.ts: moveCreaturesToGraveyard/beginCommanderZoneChoice. */
+  pendingCommanderZoneChoice: {
+    ownerId: string;
+    destinationZone: 'graveyard' | 'exile' | 'hand';
+    destinationCard: CardInstance;
+    commandZoneCard: CardInstance;
+    queued: { ownerId: string; destinationZone: 'graveyard' | 'exile' | 'hand'; destinationCard: CardInstance; commandZoneCard: CardInstance }[];
+  } | null;
   /** Set when CHOOSE_TARGET is about to target a permanent with Ward that
    * its controller doesn't already control (see CardDefinition.wardCost/
    * equipGrantsWard/grantsControlledGroupKeywordsDuringOwnTurn.ward) -
@@ -3288,6 +3388,20 @@ export interface GameState {
    * regardless of destination (leaving and later re-entering does NOT
    * re-arm it - something would have to set up a fresh watch). */
   battlefieldLeaveWatchers: { watcherInstanceId: string; watchedInstanceId: string; controllerId: string; effects: CardEffect[] }[];
+  /** "Exile target creature ... until [this] leaves the battlefield" (Auron,
+   * Venerated Guardian's Shooting Star) - a real "O-Ring" style linked
+   * exile. Deliberately separate from battlefieldLeaveWatchers above: that
+   * mechanism skips its own effects entirely if the WATCHER also left the
+   * battlefield in the same instant, which is exactly what happens here
+   * (the watched permanent and the exiling source are the SAME card, so by
+   * definition the "watcher" is always gone by the time this would fire).
+   * Checked after every action the same before/after-diff way (see
+   * engine/actions.ts: checkExileUntilSourceLeaves), just unconditional on
+   * the source's own presence - returning the exiled card doesn't need
+   * anything from the source. Reusable by any future "until this leaves the
+   * battlefield" exile card (e.g. White Auracite, not yet wired up to
+   * this). */
+  exileUntilSourceLeaves: { sourceInstanceId: string; exiledInstanceId: string }[];
 }
 
 export type GameAction =
@@ -3342,6 +3456,7 @@ export type GameAction =
   | { type: 'RESOLVE_RETURN_CREATURE_FROM_GRAVEYARD'; instanceId: string | null }
   | { type: 'RESOLVE_OPTIONAL_TRANSFORM'; accept: boolean }
   | { type: 'RESOLVE_OPTIONAL_PAY_LIFE'; accept: boolean }
+  | { type: 'RESOLVE_COMMANDER_ZONE_CHOICE'; toCommandZone: boolean }
   | { type: 'RESOLVE_WARD_PAYMENT'; pay: boolean }
   | { type: 'RESOLVE_FREE_CAST_FROM_HAND'; instanceId: string | null }
   | { type: 'RESOLVE_LIBRARY_SEARCH'; instanceId: string | null }

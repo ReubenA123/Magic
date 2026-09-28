@@ -233,7 +233,32 @@ export function resolveOnDeathTriggers(state: GameState, candidateInstanceIds: s
   const logLines: string[] = [];
   for (const id of candidateInstanceIds) {
     const found = findCardAnywhere(next, id);
-    if (!found || (found.zone !== 'graveyard' && found.zone !== 'commander')) continue;
+    if (!found || (found.zone !== 'graveyard' && found.zone !== 'commander')) {
+      // A dying commander doesn't land in a real zone right away - its
+      // owner's command-zone-or-graveyard choice is still pending (see
+      // engine/combat.ts: beginCommanderZoneChoice), so findCardAnywhere
+      // can't see it yet. Its printed onDeath (if any) still fires now,
+      // same as any other death - only the two rarer INSTANCE-level onDeath
+      // grants below (temporaryOnDeathReturnTapped/
+      // temporaryOnDeathPutCountersEqualToPower) are skipped for it: both
+      // need the card to actually be sitting in a graveyard array to react
+      // to, which isn't true yet and won't necessarily ever be true (the
+      // owner might choose the command zone instead) - a known gap for the
+      // rare case of a commander carrying one of those grants when it dies.
+      const pendingChoice = next.pendingCommanderZoneChoice;
+      const pendingEntry =
+        pendingChoice?.destinationCard.instanceId === id ? pendingChoice : pendingChoice?.queued.find((q) => q.destinationCard.instanceId === id);
+      const pendingSelf = pendingEntry ? { card: pendingEntry.destinationCard, ownerId: pendingEntry.ownerId } : null;
+      if (pendingSelf) {
+        const pendingDef = getCardDefinition(pendingSelf.card.defId);
+        if (pendingDef.onDeath && pendingDef.onDeath.length > 0) {
+          const resolved = resolveCardEffects(next, pendingSelf.ownerId, pendingDef.onDeath, id);
+          next = resolved.state;
+          logLines.push(...resolved.logLines);
+        }
+      }
+      continue;
+    }
     const def = getCardDefinition(found.card.defId);
     if (def.onDeath && def.onDeath.length > 0) {
       const resolved = resolveCardEffects(next, found.ownerPlayerId, def.onDeath, id);
@@ -322,7 +347,13 @@ export function resolveCardEffects(
   // Whether the spell's Kicker cost was paid (see CardDefinition.kicker) -
   // only ever read by IfKickedEffect below; every other effect ignores it,
   // so ordinary (non-kicker) callers just omit it.
-  wasKicked: boolean = false
+  wasKicked: boolean = false,
+  // The chosen X value for a spell with {X} in its cost (Altered Ego) -
+  // only ever read by becomeCopyOfAnyCreatureThenAddCounters below, to bake
+  // the counter count into the pendingTarget it arms (see
+  // engine/actions.ts: castCard, the only caller that ever has a real X to
+  // pass here). Every other effect/caller ignores it.
+  chosenX?: number
 ): { state: GameState; logLines: string[] } {
   let next = state;
   const logLines: string[] = [];
@@ -384,6 +415,22 @@ export function resolveCardEffects(
         logLines.push(`${sourceName}'s ability has no legal target.`);
       } else {
         next = { ...next, pendingTarget: { sourceInstanceId, controllerId: playerId, effect } };
+      }
+    } else if (effect.type === 'putStunCounterOnTargetAttacker') {
+      const hasLegalTarget = next.declaredAttackers.some((id) => findCardAnywhere(next, id)?.zone === 'battlefield');
+      const sourceName = getCardDefinition(findCardAnywhere(next, sourceInstanceId)!.card.defId).name;
+      if (!hasLegalTarget) {
+        logLines.push(`${sourceName}'s ability has no legal target.`);
+      } else {
+        next = { ...next, pendingTarget: { sourceInstanceId, controllerId: playerId, effect } };
+      }
+    } else if (effect.type === 'proliferate') {
+      const hasLegalTarget = [...next.players[0].zones.battlefield, ...next.players[1].zones.battlefield].some((c) => c.counters.length > 0);
+      const sourceName = getCardDefinition(findCardAnywhere(next, sourceInstanceId)!.card.defId).name;
+      if (!hasLegalTarget) {
+        logLines.push(`${sourceName}'s Proliferate has no legal target.`);
+      } else {
+        next = { ...next, pendingTarget: { sourceInstanceId, controllerId: playerId, effect: { ...effect, alreadyChosen: [] } } };
       }
     } else if (effect.type === 'tapStunAndGainLifeForNonbasicLands') {
       // The life gain is unconditional - it isn't "for each permanent tapped
@@ -1115,6 +1162,20 @@ export function resolveCardEffects(
       } else {
         next = { ...next, pendingTarget: { sourceInstanceId, controllerId: playerId, effect } };
       }
+    } else if (effect.type === 'exileTargetCreatureWithLessPowerUntilSourceLeaves') {
+      const sourceFound = findCardAnywhere(next, sourceInstanceId);
+      const sourceDef = sourceFound ? getCardDefinition(sourceFound.card.defId) : null;
+      const sourcePower = sourceFound && sourceDef ? effectivePower(sourceDef, sourceFound.card, next, sourceFound.ownerPlayerId) : 0;
+      const opponent = getOpponent(next, playerId);
+      const hasLegalTarget = opponent.zones.battlefield.some((c) => {
+        const d = getCardDefinition(c.defId);
+        return d.type === 'creature' && effectivePower(d, c, next, opponent.id) < sourcePower;
+      });
+      if (!hasLegalTarget) {
+        logLines.push(`${sourceDef?.name ?? 'This creature'}'s ability has no legal target.`);
+      } else {
+        next = { ...next, pendingTarget: { sourceInstanceId, controllerId: playerId, effect } };
+      }
     } else if (effect.type === 'modifySagaLoreCounter') {
       const player = getPlayer(next, playerId);
       const sourceName = getCardDefinition(findCardAnywhere(next, sourceInstanceId)!.card.defId).name;
@@ -1609,6 +1670,13 @@ export function resolveCardEffects(
       } else {
         next = { ...next, pendingTarget: { sourceInstanceId, controllerId: playerId, effect } };
       }
+    } else if (effect.type === 'becomeCopyOfAnyCreatureThenAddCounters') {
+      // Always has at least one legal target by the time this runs - the
+      // source itself is already sitting on the battlefield (castCard pushes
+      // it there before resolving onEnter), and it's a creature. No "no
+      // legal target" fallback needed the way createTokenCopyOfTarget above
+      // has one.
+      next = { ...next, pendingTarget: { sourceInstanceId, controllerId: playerId, effect: { ...effect, counterAmount: chosenX ?? 0 } } };
     } else if (effect.type === 'debuffOpponentCreatures') {
       const opponent = getOpponent(next, playerId);
       for (const c of opponent.zones.battlefield) {

@@ -455,17 +455,17 @@ button {
 
 .full-board-grid {
   display: grid;
-  /* Matches the 25% smaller full-board card (see the .full-board-grid .card
-     override below) - rails sized for the normal 200px card would leave the
-     commander/graveyard cards floating short of the true edge, with the gap
-     coming out of the center track's width instead of nowhere. */
-  grid-template-columns: 150px 1fr 150px;
+  /* auto side tracks (not a fixed 220px) so collapsing either corner (see
+     GameBoard.tsx: collapsedCorners) actually reclaims the freed width for
+     the center track instead of leaving an empty 220px-wide gap behind a
+     32px-wide collapsed strip. */
+  grid-template-columns: auto 1fr auto;
   column-gap: 16px;
   align-items: stretch;
 }
 
 .full-board-grid .corner-column {
-  width: 150px;
+  width: 220px;
 }
 
 .full-board-side-rail {
@@ -474,15 +474,12 @@ button {
   min-height: 100%;
 }
 
-.full-board-side-rail > .corner-column:first-child {
+/* Each rail holds exactly one corner now that library/graveyard/exile share
+   a single spot instead of two separate columns (see GameBoard.tsx:
+   activeCornerZone) - just keep it in view while the middle scrolls. */
+.full-board-side-rail > .corner-column {
   position: sticky;
   top: 16px;
-}
-
-.full-board-side-rail > .corner-column:last-child {
-  position: sticky;
-  bottom: 16px;
-  margin-top: auto;
 }
 
 .zone-counts {
@@ -836,6 +833,32 @@ button {
   border: none;
   color: var(--text-dim);
   font-size: 16px;
+}
+
+.card-actions-header-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* Switches the open panel between a creature and its attached Equipment/
+   Aura (see CardActionsPanel.tsx: cycleGroup) without closing the panel. */
+.card-cycle-arrow {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--accent);
+  font-size: 16px;
+  line-height: 1;
+  width: 22px;
+  height: 22px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.card-cycle-arrow:hover {
+  background: rgba(216, 201, 143, 0.15);
 }
 
 .card-actions-text {
@@ -2177,6 +2200,15 @@ button {
   animation: none;
 }
 
+/* Currently watching Opponent View via this button - solid fill instead of
+   the pulsing outline, so a second click reading as "turn it off" is visually
+   obvious rather than looking identical to the "click to watch" state. */
+.opponent-turn-eye-active {
+  background: var(--danger);
+  color: var(--panel);
+  animation: none;
+}
+
 @keyframes opponent-turn-eye-pulse {
   0%,
   100% {
@@ -2459,6 +2491,45 @@ button {
   flex-direction: column;
   gap: 6px;
   align-items: flex-end;
+}
+
+.turn-box-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Sits to the left of the turn box - toggles turn-extras-panel (Mutual
+   Adjustment/Concede, moved out of the Board View panel so they're right
+   next to Next Phase/End Turn instead of across the screen). */
+.turn-extras-toggle {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.turn-extras-toggle:hover {
+  background: var(--panel-raised);
+  color: var(--accent);
+}
+
+.turn-extras-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 220px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
 }
 
 .phase-bar-compact {
@@ -2747,12 +2818,51 @@ button {
   opacity: 1;
 }
 
-.zone-pile-label {
-  display: block;
+/* Library/graveyard/exile sharing one corner spot (see GameBoard.tsx:
+   activeCornerZone) - the active one renders full-size above (library-stack
+   or zone-pile, unchanged), the other two shrink to small buttons below that
+   switch which one is active. */
+.corner-pile-cycler {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.corner-pile-active-label {
   font-size: 11px;
   color: var(--text-dim);
-  margin-top: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
+
+.corner-pile-others {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+  justify-content: center;
+}
+
+.corner-pile-other-button {
+  flex: 1;
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-dim);
+  font-size: 11px;
+  padding: 3px 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.corner-pile-other-button:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
 .hand-fan {
   display: flex;
   justify-content: center;
@@ -2830,11 +2940,6 @@ button {
   gap: 12px;
   flex-wrap: wrap;
   min-height: 100px;
-}
-
-.combat-blockers-row .card {
-  width: 60px;
-  height: 80px;
 }
 
 .commander-damage-badge {
@@ -2951,17 +3056,26 @@ button {
 
 .combat-attacker-cell {
   cursor: grab;
+  position: relative;
 }
 
 .combat-blocker-slot {
   border: 2px dashed var(--water);
   border-radius: 8px;
-  min-width: 220px;
-  min-height: 288px;
+  min-width: 240px;
+  min-height: 315px;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 4px;
+  position: relative;
+}
+
+/* Menace needs the slot itself to double in width - each half below is a
+   full card-size box, not two halves squeezed into one card's worth of
+   space. */
+.combat-blocker-slot:has(.combat-blocker-slot-menace-pair) {
+  min-width: 492px;
 }
 
 .combat-blocker-slot-empty {
@@ -2969,6 +3083,168 @@ button {
   font-size: 11px;
   opacity: 0.7;
   text-align: center;
+}
+
+/* Menace: needs two-or-more blockers, shown as two empty halves instead of
+   one so the requirement reads visually, not just as a rules check when you
+   try to assign just one. Both halves sit inside the same .combat-blocker-slot
+   drop target - purely a display split, not two separate drop zones. Each
+   half is sized like a full card slot (matching .combat-blocker-slot's own
+   min-width/min-height above), not compacted to share one card's space. */
+.combat-blocker-slot-menace-pair {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+  height: 100%;
+}
+
+.combat-blocker-slot-empty-half {
+  flex: 1;
+  min-width: 240px;
+  min-height: 315px;
+  border: 2px dashed var(--water);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  opacity: 0.7;
+}
+
+/* "Whenever this creature deals combat damage to a player, that player
+   loses the game" (Summon: Primal Odin's Zantetsuken, lore counter 2 - see
+   GameBoard.tsx: hasLoseGameOnDamage) - purple instead of the usual blue, on
+   the outer slot AND (when empty) the inner placeholder boxes, since either
+   could be what's actually showing depending on menace. */
+.combat-blocker-slot-lethal {
+  border-color: var(--shadow);
+}
+
+.combat-blocker-slot-lethal .combat-blocker-slot-empty,
+.combat-blocker-slot-lethal .combat-blocker-slot-empty-half {
+  color: var(--shadow);
+  border-color: var(--shadow);
+  opacity: 1;
+}
+
+/* Deathtouch: a skull badge sits in the attacker's blocker slot as a warning
+   that whatever blocks it is about to die, regardless of toughness. */
+.combat-fx-deathtouch-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  font-size: 20px;
+  filter: drop-shadow(0 0 4px rgba(0, 0, 0, 0.8));
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* First strike / double strike: a lightning bolt badge on the attacker
+   itself - double strike's is bigger, brighter, and doubled up (a second
+   bolt peeking out behind the first) so it visibly reads as "more" than
+   plain first strike. */
+.combat-fx-strike-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  font-size: 22px;
+  z-index: 3;
+  pointer-events: none;
+  filter: drop-shadow(0 0 4px rgba(244, 211, 94, 0.9));
+}
+
+.combat-fx-strike-badge-double {
+  font-size: 30px;
+  animation: combat-fx-strike-pulse 1s ease-in-out infinite;
+  filter: drop-shadow(0 0 8px rgba(244, 211, 94, 1)) drop-shadow(0 0 14px rgba(244, 211, 94, 0.7));
+}
+
+.combat-fx-strike-badge-echo {
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  font-size: 22px;
+  opacity: 0.55;
+  transform: rotate(-12deg);
+  animation: none;
+}
+
+@keyframes combat-fx-strike-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+}
+
+/* Flying: a gentle up-and-down hover, with the card's own drop shadow (see
+   .card's existing box model) doing the rest of the "lifted off the ground"
+   read - no separate shadow element needed. */
+@keyframes combat-fx-hover {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+.combat-fx-flying .card {
+  animation: combat-fx-hover 2.4s ease-in-out infinite;
+}
+
+/* Trample: a fast, tiny jitter - reads as "vibrating" without the card
+   actually moving far enough to disturb the layout around it. */
+@keyframes combat-fx-vibrate {
+  0%, 100% { transform: translate(0, 0); }
+  20% { transform: translate(-1px, 1px); }
+  40% { transform: translate(1px, -1px); }
+  60% { transform: translate(-1px, -1px); }
+  80% { transform: translate(1px, 1px); }
+}
+
+.combat-fx-trample .card {
+  animation: combat-fx-vibrate 0.22s linear infinite;
+}
+
+/* Lifelink: a few translucent green plus signs drifting up and fading out,
+   staggered so they don't all pulse in lockstep. */
+.combat-fx-lifelink {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.combat-fx-lifelink-plus {
+  position: absolute;
+  bottom: 10%;
+  color: rgba(94, 214, 130, 0.75);
+  font-size: 20px;
+  font-weight: 700;
+  animation: combat-fx-lifelink-float 2.4s ease-in infinite;
+}
+
+.combat-fx-lifelink-plus-0 {
+  left: 20%;
+  animation-delay: 0s;
+}
+
+.combat-fx-lifelink-plus-1 {
+  left: 50%;
+  animation-delay: 0.8s;
+}
+
+.combat-fx-lifelink-plus-2 {
+  left: 75%;
+  animation-delay: 1.6s;
+}
+
+@keyframes combat-fx-lifelink-float {
+  0% {
+    transform: translateY(0) scale(0.8);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-70px) scale(1.2);
+    opacity: 0;
+  }
 }
 
 .combat-blocker-stacked {
@@ -3027,11 +3303,6 @@ button {
   flex-shrink: 0;
 }
 
-.block-order-attacker .card {
-  width: 160px;
-  height: 214px;
-}
-
 .block-order-attacker-power {
   font-size: 13px;
   color: var(--accent);
@@ -3058,8 +3329,6 @@ button {
 }
 
 .block-order-row .card {
-  width: 60px;
-  height: 80px;
   flex-shrink: 0;
 }
 
@@ -3255,48 +3524,81 @@ button {
   opacity: 0.6;
 }
 
-/* ===== Final override: one consistent card size everywhere on the board ===== */
+/* ===== Final override: one consistent card size everywhere on the board -
+   the same size a card in hand renders at, in every zone, in every view
+   (including Full Board - it used to render 25% smaller here, which broke
+   the "always the same size" rule; Full Board's own zoom slider is still
+   there for players who want to shrink everything uniformly to fit more on
+   screen, but there's no separate fixed smaller size baked in anymore). ===== */
 .battlefield-row .card,
 .hand-row .card,
 .hand-fan .card,
 .corner-column .card,
 .combat-attacker-cell .card,
 .combat-blocker-stacked .card,
-.zone-modal-grid .card {
-  width: 200px;
-  height: 268px;
-}
-
-/* Full Board only - 25% smaller (on top of whatever zoom is applied to the
-   center content), so more of the field reflows to actually fill the width
-   between the side rails instead of wrapping into extra rows. */
-.full-board-grid .battlefield-row .card,
-.full-board-grid .hand-row .card,
-.full-board-grid .hand-fan .card,
-.full-board-grid .corner-column .card,
-.full-board-grid .combat-attacker-cell .card,
-.full-board-grid .combat-blocker-stacked .card {
-  width: 150px;
-  height: 201px;
-}
-
-/* Declaring attackers/blockers forces Full Board no matter what view you'd
-   picked, and legibility matters most exactly there - a creature shouldn't
-   visibly shrink the moment you drag it in to block just because combat
-   happens to be shown at Full Board's smaller card size. Same specificity as
-   the rule above (three class selectors), so source order is what makes
-   this win while combat's on. */
-.full-board-grid.full-board-combat .battlefield-row .card,
-.full-board-grid.full-board-combat .hand-row .card,
-.full-board-grid.full-board-combat .hand-fan .card,
-.full-board-grid.full-board-combat .combat-attacker-cell .card,
-.full-board-grid.full-board-combat .combat-blocker-stacked .card {
-  width: 200px;
-  height: 268px;
+.zone-modal-grid .card,
+.block-order-attacker .card,
+.block-order-row .card {
+  width: 220px;
+  height: 295px;
 }
 
 .corner-column {
-  width: 200px;
+  width: 220px;
+  position: relative;
+}
+
+/* Collapsed to a thin strip (see GameBoard.tsx: collapsedCorners) - only
+   your own corner ever offers this, to reclaim board space at will without
+   having to leave the current view. width overrides the 220px rule above
+   AND the Full Board 220px rail rule (same specificity, later source wins)
+   since this only ever needs room for one small arrow button. */
+.corner-column-collapsed,
+.full-board-grid .corner-column-collapsed {
+  width: 32px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.corner-column-toggle-arrow {
+  width: 100%;
+  height: 22px;
+  padding: 0;
+  margin-bottom: 4px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: rgba(10, 10, 16, 0.75);
+  color: var(--text);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.corner-column-toggle-arrow:hover {
+  background: rgba(10, 10, 16, 0.92);
+  color: var(--accent);
+}
+
+.corner-column-collapsed .corner-column-toggle-arrow {
+  width: 24px;
+  height: 32px;
+}
+
+/* Pointing out (deck is hidden) gets a loud yellow/black treatment instead
+   of the plain dark button - it's the one that matters most to notice, since
+   it's the only visual sign that entire corner is currently hidden. Same
+   lighter yellow as the ready-to-cast button (.card-action-button-ready),
+   not a separate one-off shade. */
+.corner-column-toggle-arrow-hidden {
+  background: #f4d35e;
+  border-color: #f4d35e;
+  color: #14151d;
+}
+
+.corner-column-toggle-arrow-hidden:hover {
+  background: #f7dd7c;
+  color: #14151d;
 }
 
 /* ============================================================================
