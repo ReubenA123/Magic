@@ -452,6 +452,11 @@ export function isLegalPendingTarget(state: GameState, pendingTarget: NonNullabl
   if (effect.type === 'putCounterOnTargetLand') {
     return def.type === 'land';
   }
+  if (effect.type === 'putCounterOnTargetCommanderEnteredThisTurn') {
+    const owner = state.players.find((p) => p.id === ownerId);
+    const isCommander = !!owner?.commanderDefId && frontFaceDefId(card.defId) === owner.commanderDefId;
+    return isCommander && card.summoningSick;
+  }
   if (effect.type === 'debuffTargetByGraveyard') {
     if (ownerId === pendingTarget.controllerId) return false;
     return def.type === 'creature';
@@ -515,13 +520,16 @@ export function isLegalPendingTarget(state: GameState, pendingTarget: NonNullabl
     return def.type === 'creature';
   }
   if (effect.type === 'exileTargetPermanent') {
+    if (effect.opponentControlledOnly && ownerId === pendingTarget.controllerId) return false;
     return effect.targetFilter === 'artifact'
       ? def.type === 'artifact'
       : effect.targetFilter === 'creature'
         ? def.type === 'creature'
         : effect.targetFilter === 'nonlandPermanent'
           ? def.type !== 'land'
-          : true;
+          : effect.targetFilter === 'artifactEnchantmentOrTappedCreature'
+            ? def.type === 'artifact' || def.type === 'enchantment' || (def.type === 'creature' && card.tapped)
+            : true;
   }
   if (effect.type === 'exileTargetCreatureWithLessPowerUntilSourceLeaves') {
     if (def.type !== 'creature' || ownerId === pendingTarget.controllerId) return false;
@@ -536,6 +544,29 @@ export function isLegalPendingTarget(state: GameState, pendingTarget: NonNullabl
   }
   if (effect.type === 'proliferate') {
     return card.counters.length > 0 && !(effect.alreadyChosen ?? []).includes(card.instanceId);
+  }
+  if (effect.type === 'exileTargetOpponentCreatureUntilSourceLeaves') {
+    return def.type === 'creature' && ownerId !== pendingTarget.controllerId;
+  }
+  if (effect.type === 'tapUpToOneTargetCreatureAndStun') {
+    return def.type === 'creature';
+  }
+  if (effect.type === 'putCounterOnUpToTwoOwnCreatures') {
+    return def.type === 'creature' && ownerId === pendingTarget.controllerId && card.instanceId !== pendingTarget.firstInstanceId;
+  }
+  if (effect.type === 'sacrificeOwnCreatureThenDraw') {
+    return def.type === 'creature' && ownerId === pendingTarget.controllerId;
+  }
+  if (effect.type === 'revealUntilCreatureThenPutCountersEqualToManaValue') {
+    return def.type === 'creature' && ownerId === pendingTarget.controllerId;
+  }
+  // Targets a graveyard card, never a battlefield permanent - this function
+  // only ever checks battlefield-click legality (see engine/actions.ts:
+  // chooseTarget's own top-level special case for the actual graveyard
+  // legality check), so nothing on the battlefield is ever a legal target
+  // for it.
+  if (effect.type === 'returnUpToTwoTargetPermanentsFromGraveyardToHand') {
+    return false;
   }
   if (effect.type === 'sweepDamageFromChosenCreature') {
     return def.type === 'creature' && ownerId === pendingTarget.controllerId;
@@ -593,6 +624,42 @@ function markDamage(state: GameState, instanceId: string, amount: number, isDeat
       ),
     },
   }));
+}
+
+/** Shield counter - "If a permanent with a shield counter on it would be
+ * dealt damage or destroyed, remove a shield counter from it instead."
+ * There's no single choke point for lethal-damage/destroy checks the way
+ * markDamage is for combat damage (several targeted spell/ability effects
+ * in engine/actions.ts mark damageMarked directly and immediately check
+ * for death themselves) - every one of those spots already computes an
+ * `isIndestructible` check right before killing/destroying something, so
+ * this is called alongside that check as the second line of defense that
+ * actually consumes a counter instead of being a free, repeatable
+ * protection. Returns `survives: false` (do nothing further) if there's
+ * neither indestructible nor a Shield counter to fall back on. */
+export function checkIndestructibleOrShielded(
+  state: GameState,
+  instanceId: string,
+  def: CardDefinition,
+  instance: CardInstance,
+  controllerId: string
+): { survives: boolean; via: 'indestructible' | 'shield' | null; state: GameState } {
+  const isIndestructible = hasKeywordEffective(def, instance, 'indestructible') || hasBoardGrantedKeyword(state, controllerId, instance, def, 'indestructible');
+  if (isIndestructible) return { survives: true, via: 'indestructible', state };
+  const hasShield = instance.counters.some((c) => c.label === 'Shield' && c.amount > 0);
+  if (!hasShield) return { survives: false, via: null, state };
+  const next = updatePlayer(state, controllerId, (p) => ({
+    ...p,
+    zones: {
+      ...p.zones,
+      battlefield: p.zones.battlefield.map((c) => {
+        if (c.instanceId !== instanceId) return c;
+        const counters = c.counters.map((ctr) => (ctr.label === 'Shield' ? { ...ctr, amount: ctr.amount - 1 } : ctr)).filter((ctr) => ctr.amount > 0);
+        return { ...c, counters };
+      }),
+    },
+  }));
+  return { survives: true, via: 'shield', state: next };
 }
 
 function dealDirectDamageToDefender(
@@ -760,22 +827,27 @@ function dealDamagePass(state: GameState, pass: 1 | 2): GameState {
  * to the graveyard - they stay visible, greyed out, until the End Combat
  * step ends. See engine/actions.ts: nextPhase -> resolvePendingDeaths. */
 function markPendingDeaths(state: GameState): GameState {
+  let working = state;
   const newlyDead: string[] = [];
   for (const player of state.players) {
     for (const c of player.zones.battlefield) {
       if (state.pendingDeaths.includes(c.instanceId)) continue;
       const def = getCardDefinition(c.defId);
       if (!isEffectivelyCreature(def, c)) continue;
-      const isIndestructible = hasKeywordEffective(def, c, 'indestructible') || hasBoardGrantedKeyword(state, player.id, c, def, 'indestructible');
       const toughness = effectiveToughness(def, c, state, player.id);
       // Deathtouch: any nonzero combat damage from that source is lethal
-      // regardless of how much toughness is left, unless indestructible.
-      if (!isIndestructible && toughness > 0 && (c.damageMarked >= toughness || c.tookDeathtouchDamage)) newlyDead.push(c.instanceId);
+      // regardless of how much toughness is left, unless indestructible or
+      // a Shield counter saves it instead (see checkIndestructibleOrShielded).
+      const isLethal = toughness > 0 && (c.damageMarked >= toughness || c.tookDeathtouchDamage);
+      if (!isLethal) continue;
+      const survives = checkIndestructibleOrShielded(working, c.instanceId, def, c, player.id);
+      working = survives.state;
+      if (!survives.survives) newlyDead.push(c.instanceId);
     }
   }
-  if (newlyDead.length === 0) return state;
+  if (newlyDead.length === 0) return working;
 
-  let next = state;
+  let next = working;
   for (const id of newlyDead) {
     const found = findInstance(next, id);
     if (found) {
@@ -1173,6 +1245,32 @@ export function moveCreaturesToGraveyard(state: GameState, deadIds: string[], ve
       }));
       next = { ...next, log: [...next.log, `${def.name}'s death puts ${x} ${counterLabel} counter(s) on each legendary creature ${player.name} controls.`] };
     }
+
+    // "Whenever another permanent you control is put into a graveyard from
+    // the battlefield, if it had one or more counters on it, you may put
+    // that number of +1/+1 counters on target creature" (Yuna, Grand
+    // Summoner) - unlike every watcher above, this needs a target choice,
+    // so it can't just apply itself inline here; it's queued onto
+    // pendingCounterTransferQueue instead (see that field's own comment for
+    // why this can't just set pendingTarget directly). Applies to ANY
+    // permanent reaching the graveyard (not creatures only), fires once per
+    // qualifying death (not summed), and X is the TOTAL counter count
+    // across every label, not just +1/+1.
+    const transferWatchers = player.zones.battlefield.filter((c) => getCardDefinition(c.defId).onOtherPermanentDeathTransferCounters);
+    if (transferWatchers.length > 0) {
+      for (const watcher of transferWatchers) {
+        const watcherDef = getCardDefinition(watcher.defId);
+        const otherGraveyardDeaths = toGraveyard.filter((d) => d.instanceId !== watcher.instanceId);
+        for (const d of otherGraveyardDeaths) {
+          const totalCounters = d.counters.reduce((sum, c) => sum + c.amount, 0);
+          if (totalCounters <= 0) continue;
+          next = {
+            ...next,
+            pendingCounterTransferQueue: [...next.pendingCounterTransferQueue, { controllerId: player.id, sourceName: watcherDef.name, amount: totalCounters }],
+          };
+        }
+      }
+    }
   }
 
   return next;
@@ -1208,9 +1306,11 @@ export function resolveFight(state: GameState, aInstanceId: string, bInstanceId:
     const found = findInstance(next, id);
     if (!found) continue;
     if (!isEffectivelyCreature(def, found.instance)) continue;
-    const isIndestructible = hasKeywordEffective(def, found.instance, 'indestructible') || hasBoardGrantedKeyword(next, controllerId, found.instance, def, 'indestructible');
     const toughness = effectiveToughness(def, found.instance, next, controllerId);
-    if (!isIndestructible && toughness > 0 && (found.instance.damageMarked >= toughness || found.instance.tookDeathtouchDamage)) dead.push(id);
+    if (!(toughness > 0 && (found.instance.damageMarked >= toughness || found.instance.tookDeathtouchDamage))) continue;
+    const survives = checkIndestructibleOrShielded(next, id, def, found.instance, controllerId);
+    next = survives.state;
+    if (!survives.survives) dead.push(id);
   }
   if (dead.length > 0) {
     next = moveCreaturesToGraveyard(next, dead, 'dies from fighting');
@@ -1247,11 +1347,13 @@ export function resolveOneWayPowerDamage(
 
   const found = findInstance(next, targetInstanceId);
   if (found && isEffectivelyCreature(targetDef, found.instance)) {
-    const isIndestructible =
-      hasKeywordEffective(targetDef, found.instance, 'indestructible') || hasBoardGrantedKeyword(next, targetFound.controllerId, found.instance, targetDef, 'indestructible');
     const toughness = effectiveToughness(targetDef, found.instance, next, targetFound.controllerId);
-    if (!isIndestructible && toughness > 0 && (found.instance.damageMarked >= toughness || found.instance.tookDeathtouchDamage)) {
-      next = moveCreaturesToGraveyard(next, [targetInstanceId], 'dies from damage');
+    if (toughness > 0 && (found.instance.damageMarked >= toughness || found.instance.tookDeathtouchDamage)) {
+      const survives = checkIndestructibleOrShielded(next, targetInstanceId, targetDef, found.instance, targetFound.controllerId);
+      next = survives.state;
+      if (!survives.survives) {
+        next = moveCreaturesToGraveyard(next, [targetInstanceId], 'dies from damage');
+      }
     }
   }
 

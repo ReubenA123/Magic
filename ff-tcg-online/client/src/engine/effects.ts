@@ -14,7 +14,7 @@ import {
   SacrificeFilter,
 } from '../types';
 import { findCardAnywhere, getOpponent, getPlayer, nextInstanceId, shuffle, updatePlayer, detachEverythingFrom } from './state';
-import { getCardDefinition } from '../data/cards';
+import { getCardDefinition, frontFaceDefId } from '../data/cards';
 import { effectivePower, effectiveToughness, moveCreaturesToGraveyard, applyGainLifeTriggers, addLife, loseLife, damageMultiplierFor, hasGrantedSubtype } from './combat';
 import { hasKeyword, hasKeywordEffective } from './keywords';
 import { parseCostLabel, manaValue } from './mana';
@@ -432,6 +432,120 @@ export function resolveCardEffects(
       } else {
         next = { ...next, pendingTarget: { sourceInstanceId, controllerId: playerId, effect: { ...effect, alreadyChosen: [] } } };
       }
+    } else if (effect.type === 'exileTargetOpponentCreatureUntilSourceLeaves') {
+      const opponent = getOpponent(next, playerId);
+      const hasLegalTarget = opponent.zones.battlefield.some((c) => getCardDefinition(c.defId).type === 'creature');
+      const sourceName = getCardDefinition(findCardAnywhere(next, sourceInstanceId)!.card.defId).name;
+      if (!hasLegalTarget) {
+        logLines.push(`${sourceName}'s ability has no legal target.`);
+      } else {
+        next = { ...next, pendingTarget: { sourceInstanceId, controllerId: playerId, effect } };
+      }
+    } else if (effect.type === 'tapUpToOneTargetCreatureAndStun') {
+      const hasLegalTarget = [...next.players[0].zones.battlefield, ...next.players[1].zones.battlefield].some((c) => getCardDefinition(c.defId).type === 'creature');
+      if (hasLegalTarget) {
+        next = { ...next, pendingTarget: { sourceInstanceId, controllerId: playerId, effect } };
+      }
+    } else if (effect.type === 'putCounterOnUpToTwoOwnCreatures') {
+      const player = getPlayer(next, playerId);
+      const hasLegalTarget = player.zones.battlefield.some((c) => getCardDefinition(c.defId).type === 'creature');
+      if (hasLegalTarget) {
+        next = { ...next, pendingTarget: { sourceInstanceId, controllerId: playerId, effect } };
+      }
+    } else if (effect.type === 'returnUpToTwoTargetPermanentsFromGraveyardToHand') {
+      const player = getPlayer(next, playerId);
+      const hasLegalTarget = player.zones.graveyard.some((c) => {
+        const d = getCardDefinition(c.defId);
+        return d.type === 'creature' || d.type === 'artifact' || d.type === 'enchantment' || d.type === 'land';
+      });
+      if (hasLegalTarget) {
+        next = { ...next, pendingTarget: { sourceInstanceId, controllerId: playerId, effect } };
+      }
+    } else if (effect.type === 'sacrificeOwnCreatureThenDraw') {
+      const player = getPlayer(next, playerId);
+      const hasLegalTarget = player.zones.battlefield.some((c) => getCardDefinition(c.defId).type === 'creature');
+      const sourceName = getCardDefinition(findCardAnywhere(next, sourceInstanceId)!.card.defId).name;
+      if (!hasLegalTarget) {
+        logLines.push(`${sourceName}'s ability has no legal target - there's no creature to sacrifice.`);
+      } else {
+        next = { ...next, pendingTarget: { sourceInstanceId, controllerId: playerId, effect } };
+      }
+    } else if (effect.type === 'createTokenIfOpponentControlsCreatureWithPowerAtLeast') {
+      const opponent = getOpponent(next, playerId);
+      const qualifies = opponent.zones.battlefield.some((c) => {
+        const d = getCardDefinition(c.defId);
+        return d.type === 'creature' && effectivePower(d, c, next, opponent.id) >= effect.minPower;
+      });
+      if (qualifies) {
+        const tokenDef = getCardDefinition(effect.tokenId);
+        const tokens: CardInstance[] = Array.from({ length: effect.count }, () => ({
+          instanceId: nextInstanceId(),
+          defId: tokenDef.id,
+          ownerId: playerId,
+          tapped: false,
+          counters: [],
+          damageMarked: 0,
+          summoningSick: true,
+          isToken: true,
+        }));
+        next = updatePlayer(next, playerId, (p) => ({ ...p, zones: { ...p.zones, battlefield: [...p.zones.battlefield, ...tokens] } }));
+        logLines.push(`${getPlayer(next, playerId).name} creates ${effect.count} ${tokenDef.name} token(s).`);
+      }
+    } else if (effect.type === 'bounceOpponentCreaturesWithGreatestManaValue') {
+      const opponent = getOpponent(next, playerId);
+      const creatures = opponent.zones.battlefield.filter((c) => getCardDefinition(c.defId).type === 'creature');
+      if (creatures.length > 0) {
+        const maxMv = Math.max(...creatures.map((c) => manaValue(parseCostLabel(getCardDefinition(c.defId).costLabel))));
+        const toBounce = creatures.filter((c) => manaValue(parseCostLabel(getCardDefinition(c.defId).costLabel)) === maxMv);
+        const toBounceIds = new Set(toBounce.map((c) => c.instanceId));
+        let bounced = next;
+        for (const c of toBounce) bounced = detachEverythingFrom(bounced, c.instanceId);
+        bounced = updatePlayer(bounced, opponent.id, (p) => ({
+          ...p,
+          zones: {
+            ...p.zones,
+            battlefield: p.zones.battlefield.filter((c) => !toBounceIds.has(c.instanceId)),
+            hand: [...p.zones.hand, ...toBounce.map((c) => ({ ...c, tapped: false, attachedToInstanceId: undefined, damageMarked: 0 }))],
+          },
+        }));
+        next = bounced;
+        logLines.push(`${opponent.name} returns ${toBounce.map((c) => getCardDefinition(c.defId).name).join(', ')} to hand (highest mana value).`);
+      }
+    } else if (effect.type === 'chooseOneAtRandom') {
+      const index = Math.floor(Math.random() * effect.options.length);
+      const resolved = resolveCardEffects(next, playerId, effect.options[index], sourceInstanceId, wasKicked, chosenX);
+      next = resolved.state;
+      logLines.push(...resolved.logLines);
+    } else if (effect.type === 'revealUntilCreatureThenPutCountersEqualToManaValue') {
+      const player = getPlayer(next, playerId);
+      const revealed: CardInstance[] = [];
+      let foundCreature: CardInstance | null = null;
+      for (const c of player.zones.library) {
+        revealed.push(c);
+        if (getCardDefinition(c.defId).type === 'creature') {
+          foundCreature = c;
+          break;
+        }
+      }
+      const rest = revealed.filter((c) => c.instanceId !== foundCreature?.instanceId);
+      next = updatePlayer(next, playerId, (p) => ({
+        ...p,
+        zones: {
+          ...p.zones,
+          library: [...p.zones.library.slice(revealed.length), ...shuffle(rest)],
+          hand: foundCreature ? [...p.zones.hand, foundCreature] : p.zones.hand,
+        },
+      }));
+      if (foundCreature) {
+        const mv = manaValue(parseCostLabel(getCardDefinition(foundCreature.defId).costLabel));
+        logLines.push(`${player.name} reveals ${getCardDefinition(foundCreature.defId).name}, puts it into hand, and puts the rest on the bottom in a random order.`);
+        const hasLegalTarget = getPlayer(next, playerId).zones.battlefield.some((c) => getCardDefinition(c.defId).type === 'creature');
+        if (mv > 0 && hasLegalTarget) {
+          next = { ...next, pendingTarget: { sourceInstanceId, controllerId: playerId, effect: { ...effect, counterAmount: mv } } };
+        }
+      } else {
+        logLines.push(`${player.name} reveals their whole library and finds no creature card.`);
+      }
     } else if (effect.type === 'tapStunAndGainLifeForNonbasicLands') {
       // The life gain is unconditional - it isn't "for each permanent tapped
       // this way", just a flat "you gain X life" alongside the (separately
@@ -499,6 +613,20 @@ export function resolveCardEffects(
           },
         }));
         logLines.push(`${getCardDefinition(found.card.defId).name} gains: whenever it deals combat damage to a player, that player loses the game.`);
+      }
+    } else if (effect.type === 'grantAttacksCostUntilNextTurn') {
+      const found = findCardAnywhere(next, sourceInstanceId);
+      if (found && found.zone === 'battlefield') {
+        next = updatePlayer(next, found.ownerPlayerId, (p) => ({
+          ...p,
+          zones: {
+            ...p.zones,
+            battlefield: p.zones.battlefield.map((c) => (c.instanceId === sourceInstanceId ? { ...c, attacksYouCostGenericUntilNextTurn: effect.amount } : c)),
+          },
+        }));
+        logLines.push(
+          `${getCardDefinition(found.card.defId).name}: until ${getPlayer(next, found.ownerPlayerId).name}'s next turn, creatures can't attack them unless their controller pays {${effect.amount}} for each of those creatures.`
+        );
       }
     } else if (effect.type === 'untapSelfIfFirstCombatPhaseOfTurn') {
       if (next.combatPhaseNumberThisTurn === 1) {
@@ -937,6 +1065,16 @@ export function resolveCardEffects(
       } else {
         next = { ...next, pendingTarget: { sourceInstanceId, controllerId: playerId, effect } };
       }
+    } else if (effect.type === 'putCounterOnTargetCommanderEnteredThisTurn') {
+      const hasLegalTarget = next.players.some((owner) =>
+        owner.zones.battlefield.some((c) => !!owner.commanderDefId && frontFaceDefId(c.defId) === owner.commanderDefId && c.summoningSick)
+      );
+      const sourceName = getCardDefinition(findCardAnywhere(next, sourceInstanceId)!.card.defId).name;
+      if (!hasLegalTarget) {
+        logLines.push(`${sourceName}'s ability has no legal target.`);
+      } else {
+        next = { ...next, pendingTarget: { sourceInstanceId, controllerId: playerId, effect } };
+      }
     } else if (effect.type === 'debuffTargetByGraveyard') {
       const opponent = getOpponent(next, playerId);
       const hasLegalTarget = opponent.zones.battlefield.some((c) => getCardDefinition(c.defId).type === 'creature');
@@ -1147,7 +1285,9 @@ export function resolveCardEffects(
     } else if (effect.type === 'exileTargetPermanent') {
       const player = getPlayer(next, playerId);
       const sourceName = getCardDefinition(findCardAnywhere(next, sourceInstanceId)!.card.defId).name;
-      const hasLegalTarget = [...next.players[0].zones.battlefield, ...next.players[1].zones.battlefield].some((c) => {
+      const opponent = getOpponent(next, playerId);
+      const candidates = effect.opponentControlledOnly ? opponent.zones.battlefield : [...next.players[0].zones.battlefield, ...next.players[1].zones.battlefield];
+      const hasLegalTarget = candidates.some((c) => {
         const d = getCardDefinition(c.defId);
         return effect.targetFilter === 'artifact'
           ? d.type === 'artifact'
@@ -1155,7 +1295,9 @@ export function resolveCardEffects(
             ? d.type === 'creature'
             : effect.targetFilter === 'nonlandPermanent'
               ? d.type !== 'land'
-              : true;
+              : effect.targetFilter === 'artifactEnchantmentOrTappedCreature'
+                ? d.type === 'artifact' || d.type === 'enchantment' || (d.type === 'creature' && c.tapped)
+                : true;
       });
       if (!hasLegalTarget) {
         logLines.push(`${sourceName}'s ability has no legal target.`);
@@ -2087,7 +2229,18 @@ export function triggerSagaLoreCounter(state: GameState, playerId: string, insta
   }
 
   const maxChapterNumber = Math.max(...def.saga.chapters.flatMap((ch) => ch.numbers));
-  const reachedFinalChapterThisTime = matchingChapters.some((ch) => ch.numbers.includes(maxChapterNumber));
+  // Bug caught by testing Summon: Ixion (chapters [1], [2, 3],
+  // sacrificeAfterFinalChapter) - the old check was
+  // `matchingChapters.some((ch) => ch.numbers.includes(maxChapterNumber))`,
+  // which for a shared final chapter spanning multiple numbers (e.g. [2, 3])
+  // was true the moment lore reached 2, since THAT chapter's own numbers
+  // array happens to also contain 3 - sacrificing a full lore counter
+  // early, before chapter 3 (the actual final chapter) ever triggered. The
+  // correct check is simply whether the counter itself just reached the
+  // true final number - identical result for every single-number final
+  // chapter (the overwhelmingly common case), but correctly waits for the
+  // LAST number in a shared final chapter like this one.
+  const reachedFinalChapterThisTime = newCount === maxChapterNumber;
   const stillOnBattlefield = getPlayer(next, playerId).zones.battlefield.some((c) => c.instanceId === instanceId);
   const shouldSacrifice =
     reachedFinalChapterThisTime &&

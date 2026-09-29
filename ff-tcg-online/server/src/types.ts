@@ -196,6 +196,118 @@ export interface TapAndStunEffect {
   noStunCounter?: boolean;
 }
 
+/** "Tap up to one target creature and put a stun counter on it" (Summon:
+ * Valefor's chapters II-IV) - a dedicated, narrow effect (like
+ * TapStunAndGainLifeForNonbasicLandsEffect below) rather than widening
+ * TapAndStunEffect: this one has NO controller restriction at all (unlike
+ * TapAndStunEffect's hardcoded opponent-only), and the pick is optional
+ * ("up to one", declinable via CHOOSE_TARGET's null convention). */
+export interface TapUpToOneTargetCreatureAndStunEffect {
+  type: 'tapUpToOneTargetCreatureAndStun';
+}
+
+/** "Exile target creature an opponent controls until [this] leaves the
+ * battlefield" (Summon: Ixion's Aerospark) - the unrestricted-power sibling
+ * of ExileTargetCreatureWithLessPowerUntilSourceLeavesEffect above: same
+ * GameState.exileUntilSourceLeaves plumbing, mandatory target, just no
+ * power comparison. */
+export interface ExileTargetOpponentCreatureUntilSourceLeavesEffect {
+  type: 'exileTargetOpponentCreatureUntilSourceLeaves';
+}
+
+/** "Put a [counterLabel] counter on each of up to two target creatures you
+ * control" (Summon: Ixion's chapters II/III) - same "mandatory first pick,
+ * optional second" two-step convention as PumpUpToTwoTargetsEffect (see
+ * engine/actions.ts: chooseTarget's `firstInstanceId` handling), just
+ * applying a permanent counter to each pick immediately instead of a
+ * temporary buff, and restricted to creatures the controller owns. */
+export interface PutCounterOnUpToTwoOwnCreaturesEffect {
+  type: 'putCounterOnUpToTwoOwnCreatures';
+  counterLabel: string;
+  counterAmount: number;
+}
+
+/** "Create X Treasure tokens, where X is the number of opponents who
+ * control a creature with power [minPower] or greater" (Summon: Yojimbo's
+ * chapter IV) - this engine is 2-player only, so "number of opponents" is
+ * always 0 or 1: resolved immediately (no targeting) by checking whether
+ * the one opponent has any qualifying creature and creating `count` tokens
+ * if so, 0 otherwise. */
+export interface CreateTokenIfOpponentControlsCreatureWithPowerAtLeastEffect {
+  type: 'createTokenIfOpponentControlsCreatureWithPowerAtLeast';
+  tokenId: string;
+  minPower: number;
+  count: number;
+}
+
+/** "Each opponent chooses a creature with the greatest mana value among
+ * creatures they control. Return those creatures to their owners' hands"
+ * (Summon: Valefor's Sonic Wings) - resolved immediately, no targeting: in
+ * this 2-player engine "each opponent" is the one opponent, and rather than
+ * modeling an opponent-side "choice" UI, every one of their creatures tied
+ * for the highest mana value is bounced (matches the plural "those
+ * creatures" in the reminder text). */
+export interface BounceOpponentCreaturesWithGreatestManaValueEffect {
+  type: 'bounceOpponentCreaturesWithGreatestManaValue';
+}
+
+/** "Choose one at random —" (Summon: Magus Sisters) - unlike
+ * ChooseOneModeEffect (the PLAYER picks), the engine rolls a random index
+ * and resolves that one option's effects via the same resolveCardEffects
+ * machinery, immediately - no pending state needed at all, since there's no
+ * decision for anyone to make. Each option can still independently arm its
+ * own pendingTarget if IT needs a target (e.g. "put counters on target
+ * creature"), same as any other effect list. */
+export interface ChooseOneAtRandomEffect {
+  type: 'chooseOneAtRandom';
+  options: CardEffect[][];
+}
+
+/** "Return one or two target permanent cards from your graveyard to your
+ * hand" (Yuna's Decision's Find Another Way mode) - same "mandatory first,
+ * optional second" two-step convention as PumpUpToTwoTargetsEffect/
+ * PutCounterOnUpToTwoOwnCreaturesEffect above, just picking from the
+ * controller's OWN graveyard instead of the battlefield, restricted to
+ * permanent card types (creature/artifact/enchantment/land). */
+export interface ReturnUpToTwoTargetPermanentsFromGraveyardToHandEffect {
+  type: 'returnUpToTwoTargetPermanentsFromGraveyardToHand';
+}
+
+/** "Sacrifice a creature. If you do, draw a card[, then you may put a
+ * creature card and/or a land card from your hand onto the battlefield]"
+ * (Yuna's Decision's Continue the Pilgrimage mode) - modeled as choosing
+ * target creature you control (mandatory if you have one, arming
+ * has-legal-target the same way any other targeted effect does) via the
+ * normal pendingTarget/CHOOSE_TARGET flow, then sacrificing it and drawing
+ * in one step at resolution. `thenPutCreatureAndOrLandFromHand` chains
+ * straight into GameState.pendingPutCreatureAndOrLandFromHand right after
+ * the draw (can't just be a second sibling effect in the same onCast array -
+ * that would arm it immediately, before the sacrifice/draw above has even
+ * resolved, since resolveCardEffects doesn't pause between effects in a
+ * list). See engine/actions.ts: chooseTarget's 'sacrificeOwnCreatureThenDraw'
+ * branch, resolvePutCreatureOrLandFromHand. */
+export interface SacrificeOwnCreatureThenDrawEffect {
+  type: 'sacrificeOwnCreatureThenDraw';
+  thenPutCreatureAndOrLandFromHand?: boolean;
+}
+
+/** "Reveal cards from the top of your library until you reveal a creature
+ * card. Put that card into your hand and the rest on the bottom of your
+ * library in a random order. When you reveal a creature card this way, put
+ * X +1/+1 counters on target creature you control, where X is the mana
+ * value of that card." (Yuna's Whistle) - resolved in two parts: the reveal
+ * loop itself runs immediately (bounded by library size, same "loop until
+ * found or empty" shape as engine/effects.ts: beginRevealPickup), then -
+ * only if a creature was actually found - this arms a pendingTarget for the
+ * counter placement, with `counterAmount` already baked in to the mana
+ * value found (filled in at arm time, same convention as Altered Ego's
+ * chosenX capture). If no creature is left in the library, the reveal/mill
+ * still happens but there's nothing left to grant counters for. */
+export interface RevealUntilCreatureThenPutCountersEqualToManaValueEffect {
+  type: 'revealUntilCreatureThenPutCountersEqualToManaValue';
+  counterAmount?: number;
+}
+
 /** "For each opponent, tap up to one target nonland permanent that opponent
  * controls. Put X stun counters on each of those permanents and you gain X
  * life, where X is the number of nonbasic lands you control." (Omega,
@@ -276,7 +388,11 @@ export interface DamageTargetCreatureEffect {
  * change from destroying, not just a flavor difference. */
 export interface ExileTargetPermanentEffect {
   type: 'exileTargetPermanent';
-  targetFilter: 'artifact' | 'creature' | 'anyPermanent' | 'nonlandPermanent';
+  targetFilter: 'artifact' | 'creature' | 'anyPermanent' | 'nonlandPermanent' | 'artifactEnchantmentOrTappedCreature';
+  /** "...an opponent controls" (Summon: Yojimbo's chapter I) - every other
+   * targetFilter above has no owner restriction at all, so this only ever
+   * needs checking when set. */
+  opponentControlledOnly?: boolean;
 }
 
 /** "Exile target creature defending player controls with power less than
@@ -928,6 +1044,24 @@ export interface PutCounterOnTargetLandEffect {
   counterAmount: number;
 }
 
+/** "Choose target commander that entered this turn. Put a [counterLabel]
+ * counter on it if it's a creature and a loyalty counter on it if it's a
+ * planeswalker" (Forge of Heroes) - the planeswalker half of that text can
+ * never actually apply in this engine (CardType has no 'planeswalker'
+ * variant at all, and only a creature can ever be set as commanderDefId), so
+ * this always puts a counterLabel counter, no branching needed. "Entered
+ * this turn" reuses CardInstance.summoningSick as the entered-this-turn
+ * signal, same known approximation as CardDefinition.
+ * bounceSelfAtEndStepIfNotSummoningSick (breaks for a commander that entered
+ * this turn but also has haste, since summoningSick would already be false -
+ * accepted as consistent with that existing precedent rather than building a
+ * separate, more precise "entered this turn" tracker just for this card). */
+export interface PutCounterOnTargetCommanderEnteredThisTurnEffect {
+  type: 'putCounterOnTargetCommanderEnteredThisTurn';
+  counterLabel: string;
+  counterAmount: number;
+}
+
 /** "Target creature an opponent controls gets -X/-X until end of turn,
  * where X is the number of permanent cards in your graveyard" (Cloud of
  * Darkness's Particle Beam) - powerPerUnit/toughnessPerUnit are multiplied
@@ -1429,6 +1563,18 @@ export interface GrantCombatDamageToPlayerCausesLossEffect {
   type: 'grantCombatDamageToPlayerCausesLoss';
 }
 
+/** "Until your next turn, creatures can't attack you unless their
+ * controller pays {2} for each of those creatures" (Summon: Yojimbo,
+ * chapters II/III) - sets CardInstance.attacksYouCostGenericUntilNextTurn
+ * on the source (Yojimbo itself), read by engine/actions.ts: declareAttackers
+ * whenever an opponent declares attackers against this permanent's
+ * controller, and cleared at that controller's own next untap step (same
+ * duration as temporaryKeywordsUntilNextTurn). */
+export interface GrantAttacksCostUntilNextTurnEffect {
+  type: 'grantAttacksCostUntilNextTurn';
+  amount: number;
+}
+
 /** "Whenever equipped creature attacks, if it's the first combat phase of
  * the turn, untap it." (Genji Glove) - untaps sourceInstanceId (the
  * equipped creature - see CardDefinition.equipGrantsOnAttack) only when
@@ -1846,6 +1992,7 @@ export type CardEffect =
   | ChooseOpponentEffect
   | GrantTemporaryBaseStatsAndDeathReturnEffect
   | GrantCombatDamageToPlayerCausesLossEffect
+  | GrantAttacksCostUntilNextTurnEffect
   | UntapSelfIfFirstCombatPhaseOfTurnEffect
   | QueueExtraCombatPhaseIfFirstCombatPhaseOfTurnEffect
   | DestroyOpponentCreatureEffect
@@ -1867,6 +2014,15 @@ export type CardEffect =
   | QueueEffectsAtNextEndStepEffect
   | ExileTargetPermanentEffect
   | ExileTargetCreatureWithLessPowerUntilSourceLeavesEffect
+  | ExileTargetOpponentCreatureUntilSourceLeavesEffect
+  | TapUpToOneTargetCreatureAndStunEffect
+  | PutCounterOnUpToTwoOwnCreaturesEffect
+  | CreateTokenIfOpponentControlsCreatureWithPowerAtLeastEffect
+  | BounceOpponentCreaturesWithGreatestManaValueEffect
+  | ChooseOneAtRandomEffect
+  | ReturnUpToTwoTargetPermanentsFromGraveyardToHandEffect
+  | SacrificeOwnCreatureThenDrawEffect
+  | RevealUntilCreatureThenPutCountersEqualToManaValueEffect
   | ExileTopOfLibraryPlayableUntilCleanupEffect
   | PumpUpToTwoTargetsEffect
   | ReturnInstantOrSorceryFromGraveyardToHandEffect
@@ -1880,6 +2036,7 @@ export type CardEffect =
   | AttachAllControlledEquipmentToTargetCreatureEffect
   | DealDamageToAnyOtherTargetAndSelfEffect
   | PutCounterOnTargetLandEffect
+  | PutCounterOnTargetCommanderEnteredThisTurnEffect
   | BounceTargetEffect
   | ShuffleGraveyardIntoLibraryEffect
   | ReanimateTargetFromGraveyardEffect
@@ -2231,6 +2388,14 @@ export interface CardDefinition {
    * more attackers, regardless of who/how many. See engine/actions.ts:
    * declareAttackers, checked against the DEFENDING player's battlefield. */
   onOpponentAttacksYou?: CardEffect[];
+  /** "{T}: Add one mana of any color. [Additional effect]" (Yuna, Grand
+   * Summoner's Grand Summon) - fires alongside a plain producesMana tap
+   * (see CardDefinition.producesMana, engine/actions.ts: toggleTap), only
+   * when that specific tap actually produced mana (not a no-op tap on an
+   * already-tapped or summoning-sick permanent). Lets a mana ability carry
+   * a secondary effect without needing a whole separate activated ability -
+   * reusable by any future "tap for mana, and also X" card. */
+  onTapForManaEffects?: CardEffect[];
   /** "Cycling" family - activated from hand, see engine/actions.ts: cycleCard. */
   cycling?: CyclingAbility;
   /** See LandCountBuff - a static, always-on-condition-met power/toughness buff. */
@@ -2282,6 +2447,19 @@ export interface CardDefinition {
    * apply it to something other than themselves (search effects tutoring a
    * land onto the battlefield tapped); those still need to be handled by hand. */
   entersTapped?: boolean;
+  /** "As this land enters, you may reveal a [name1] or [name2] card from
+   * your hand. If you don't, this land enters tapped" (a "check land",
+   * Fortified Village) - matched by CARD NAME rather than a real land-type
+   * check, since this pool's basic lands don't carry a subtype field for
+   * their own basic land types (Forest/Plains/etc. are identified purely by
+   * name here) - close enough for the only cards that would ever actually
+   * satisfy this in practice (the basics themselves). See
+   * GameState.pendingRevealLandTypeFromHand, engine/actions.ts: castCard's
+   * land-playing branch, resolveRevealLandTypeFromHand. Only wired into
+   * castCard's own "play a land normally" path, not every other "put a land
+   * onto the battlefield" effect elsewhere in this engine (PuPu UFO, Yuna's
+   * Decision) - those still just use the land's plain entersTapped. */
+  entersTappedUnlessRevealLandNames?: string[];
   /** See LandfallTrigger. */
   landfall?: LandfallTrigger;
   /** See NoncreatureCastTrigger. */
@@ -2325,6 +2503,18 @@ export interface CardDefinition {
    * engine/combat.ts: moveCreaturesToGraveyard. Only 'legendary' (subtype
    * text contains "Legendary Creature") is implemented as a target filter. */
   onDeathDistributeCounters?: { counterLabel: string; targetFilter: 'legendary' };
+  /** "Whenever another permanent you control is put into a graveyard from
+   * the battlefield, if it had one or more counters on it, you may put that
+   * number of +1/+1 counters on target creature" (Yuna, Grand Summoner) -
+   * unlike onDeathDistributeCounters above (an automatic, untargeted payout
+   * read from the dying creature's OWN counters), this needs a target
+   * choice, so it can't just apply itself inline the way that one does -
+   * see GameState.pendingCounterTransferQueue, engine/combat.ts:
+   * moveCreaturesToGraveyard (where entries are queued) and
+   * engine/actions.ts: resolveCounterTransfer (where they're resolved).
+   * Applies to ANY permanent leaving via the graveyard, not creatures only -
+   * "another permanent," not "another creature." */
+  onOtherPermanentDeathTransferCounters?: boolean;
   /** Static ability: every OTHER permanent this card's controller controls
    * gains this as its own producesMana, as long as it doesn't already have
    * one of its own (e.g. A Realm Reborn's "Other permanents you control have
@@ -2866,6 +3056,16 @@ export interface CardInstance {
    * the GRANTING player's own next untap step. See engine/keywords.ts:
    * hasKeywordEffective and engine/actions.ts: runUntapStep. */
   temporaryKeywordsUntilNextTurn?: string[];
+  /** "Until your next turn, creatures can't attack you unless their
+   * controller pays {2} for each of those creatures" (Summon: Yojimbo) -
+   * the generic mana cost per attacking creature that a DECLARE_ATTACKERS
+   * against this permanent's controller must pay (summed across every
+   * permanent that has this set, then multiplied by the number of attackers
+   * being declared). Same "until your next turn" duration/clearing as
+   * temporaryKeywordsUntilNextTurn above - cleared at this permanent's
+   * controller's own next untap step. See engine/actions.ts: declareAttackers,
+   * runUntapStep. */
+  attacksYouCostGenericUntilNextTurn?: number;
   /** Set once CardDefinition.onAnyDeathDraw has fired for this instance this
    * turn (G'raha Tia's "triggers only once each turn") - cleared at the
    * cleanup step alongside temporaryBuff/temporaryKeywords. */
@@ -3082,12 +3282,19 @@ export interface GameState {
       | ChooseCreatureDealsDamageToOpponentCreatureEffect
       | ExileTargetPermanentEffect
       | ExileTargetCreatureWithLessPowerUntilSourceLeavesEffect
+      | ExileTargetOpponentCreatureUntilSourceLeavesEffect
+      | TapUpToOneTargetCreatureAndStunEffect
+      | PutCounterOnUpToTwoOwnCreaturesEffect
+      | ReturnUpToTwoTargetPermanentsFromGraveyardToHandEffect
+      | SacrificeOwnCreatureThenDrawEffect
+      | RevealUntilCreatureThenPutCountersEqualToManaValueEffect
       | PumpUpToTwoTargetsEffect
       | PutCounterOnAnotherCreatureGrantsIndestructibleUntilNextTurnEffect
       | ExileThenReturnTargetOwnCreatureEffect
       | AttachAllControlledEquipmentToTargetCreatureEffect
       | DealDamageToAnyOtherTargetAndSelfEffect
-      | PutCounterOnTargetLandEffect;
+      | PutCounterOnTargetLandEffect
+      | PutCounterOnTargetCommanderEnteredThisTurnEffect;
     /** Only used by ChooseCreaturesFightEffect/ChooseCreatureDealsDamageToOpponentCreatureEffect:
      * the first (controller's own) creature already chosen, waiting on the
      * second (opponent's) pick. */
@@ -3219,6 +3426,20 @@ export interface GameState {
    * outstanding - cleared by RESOLVE_PUT_LAND_FROM_HAND (an instanceId to
    * put onto the battlefield, or null to decline). */
   pendingPutLandFromHand: { sourceInstanceId: string; controllerId: string } | null;
+  /** Set while SacrificeOwnCreatureThenDrawEffect's
+   * thenPutCreatureAndOrLandFromHand choice is outstanding (Yuna's Decision) -
+   * `stage` tracks which of the two independent "you may" choices is
+   * currently being offered; picking (or declining, via instanceId: null)
+   * the creature stage advances to the land stage, and resolving the land
+   * stage clears this entirely. See engine/actions.ts:
+   * resolvePutCreatureOrLandFromHand. */
+  pendingPutCreatureAndOrLandFromHand: { controllerId: string; stage: 'creature' | 'land' } | null;
+  /** Set while a CardDefinition.entersTappedUnlessRevealLandNames check-land
+   * choice is outstanding (Fortified Village) - the land itself already
+   * entered tapped by the time this is set; revealing a matching card
+   * untaps it, declining (instanceId: null) leaves it tapped. See
+   * engine/actions.ts: resolveRevealLandTypeFromHand. */
+  pendingRevealLandTypeFromHand: { sourceInstanceId: string; controllerId: string; landNames: string[] } | null;
   /** Set while a CastTargetInstantOrSorceryFromGraveyardAnyManaEffect's "you
    * may" choice is outstanding - cleared by RESOLVE_CAST_FROM_GRAVEYARD_ANY_MANA
    * (an instanceId to cast, or null to decline). */
@@ -3273,6 +3494,29 @@ export interface GameState {
    * re-run the original targeting; declining clears both. See
    * engine/actions.ts: chooseTarget, resolveWardPayment. */
   pendingWardPayment: { controllerId: string; targetInstanceId: string; wardOwnerId: string; cost: WardCost } | null;
+  /** Set when DECLARE_ATTACKERS would attack a player whose battlefield has
+   * one or more permanents with attacksYouCostGenericUntilNextTurn set
+   * (Summon: Yojimbo) - `instanceIds` are the already-legality-checked
+   * attackers waiting on this payment, `totalGeneric` is the summed
+   * per-creature cost across every such permanent times the number of
+   * attackers. Paying re-runs the actual attack declaration (tapping,
+   * onAttack triggers, etc. - see engine/actions.ts: finalizeDeclareAttackers);
+   * declining simply clears this and leaves the game in declare_attackers,
+   * unchanged, for the player to redeclare with fewer/no attackers. */
+  pendingAttackTaxPayment: { controllerId: string; instanceIds: string[]; totalGeneric: number } | null;
+  /** Queued "you may put N +1/+1 counters on target creature" prompts from
+   * CardDefinition.onOtherPermanentDeathTransferCounters (Yuna, Grand
+   * Summoner) - a QUEUE (not a single pendingTarget-shaped slot) because
+   * several qualifying deaths can happen simultaneously (e.g. a board
+   * wipe), each needing its own independent target choice, and because
+   * setting this INSIDE moveCreaturesToGraveyard would otherwise collide
+   * with whatever pendingTarget flow is already resolving at the call site
+   * (nearly every chooseTarget branch unconditionally overwrites
+   * pendingTarget: null right after calling moveCreaturesToGraveyardAndTrigger,
+   * which would silently wipe out a pendingTarget set from in there). Always
+   * resolved from the FRONT of the queue - see engine/actions.ts:
+   * resolveCounterTransfer. */
+  pendingCounterTransferQueue: { controllerId: string; sourceName: string; amount: number }[];
   /** Set while CardDefinition.equipGrantsDrawThenMayCastFreeUpToCombatDamage's
    * "may cast" half is outstanding (Buster Sword) - cleared by
    * RESOLVE_FREE_CAST_FROM_HAND. Declining (instanceId: null) or casting
@@ -3458,6 +3702,10 @@ export type GameAction =
   | { type: 'RESOLVE_OPTIONAL_PAY_LIFE'; accept: boolean }
   | { type: 'RESOLVE_COMMANDER_ZONE_CHOICE'; toCommandZone: boolean }
   | { type: 'RESOLVE_WARD_PAYMENT'; pay: boolean }
+  | { type: 'RESOLVE_ATTACK_TAX_PAYMENT'; pay: boolean }
+  | { type: 'RESOLVE_COUNTER_TRANSFER'; targetInstanceId: string | null }
+  | { type: 'RESOLVE_PUT_CREATURE_OR_LAND_FROM_HAND'; instanceId: string | null }
+  | { type: 'RESOLVE_REVEAL_LAND_TYPE_FROM_HAND'; instanceId: string | null }
   | { type: 'RESOLVE_FREE_CAST_FROM_HAND'; instanceId: string | null }
   | { type: 'RESOLVE_LIBRARY_SEARCH'; instanceId: string | null }
   | { type: 'RESOLVE_GRAVEYARD_EXILE'; instanceId: string | null }

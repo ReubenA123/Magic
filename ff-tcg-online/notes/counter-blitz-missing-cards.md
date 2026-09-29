@@ -17,9 +17,6 @@ actually be published through the new Decks tab (Decks → Publish a deck) —
 right now it can't be seeded at all, since none of its 97 missing cards have
 an id to reference yet.
 
-Mana costs below are copied straight from the decklist you gave me
-(`{X}{2}{G}{U}` style) — everything else (type breakdown already sorted by
-section, subtype, power/toughness, rules text, image) still needs filling in.
 
 ## Commander (1)
 
@@ -27,8 +24,8 @@ section, subtype, power/toughness, rules text, image) still needs filling in.
 
 ## Creature (34)
 
-- Altered Ego — `{X}{2}{G}{U}`
-- Auron, Venerated Guardian — `{3}{W}`
+
+
 - Bane of Progress — `{4}{G}{G}`
 - Chasm Skulker — `{2}{U}`
 - Chocobo Knights — `{3}{W}`
@@ -42,7 +39,7 @@ section, subtype, power/toughness, rules text, image) still needs filling in.
 - Incubation Druid — `{1}{G}`
 - Kimahri, Valiant Guardian — `{2}{G}{U}`
 - Lord Jyscal Guado — `{1}{W}`
-- Lulu, Stern Guardian — `{2}{U}`
+
 - Luminous Broodmoth — `{2}{W}{W}`
 - Maester Seymour — `{2}{G}`
 - O'aka, Traveling Merchant — `{1}{U}`
@@ -51,27 +48,24 @@ section, subtype, power/toughness, rules text, image) still needs filling in.
 - Scholar of New Horizons — `{1}{W}`
 - Shelinda, Yevon Acolyte — `{G}{W}`
 - Sin, Unending Cataclysm — `{5}{G}{U}`
-- Summon: Ixion — `{2}{W}`
-- Summon: Magus Sisters — `{4}{G}`
-- Summon: Valefor — `{4}{U}`
-- Summon: Yojimbo — `{3}{W}`
+
 - Sunscorch Regent — `{3}{W}{W}`
 - Tireless Tracker — `{2}{G}`
 - Tromell, Seymour's Butler — `{2}{G}`
 - Wakka, Devoted Guardian — `{2}{G}{W}`
 - Walking Ballista — `{X}{X}`
-- Yuna, Grand Summoner — `{1}{G}{W}{U}`
+
 
 ## Instant (8)
 
-- An Offer You Can't Refuse — `{U}`
+
 - Destroy Evil — `{1}{W}`
 - Endless Detour — `{G}{W}{U}`
 - Inspiring Call — `{2}{G}`
 - Path to Exile — `{W}`
 - Protection Magic — `{1}{W}`
 - Pull from Tomorrow — `{X}{U}{U}`
-- Yuna's Whistle — `{1}{G}{G}`
+
 
 ## Sorcery (7)
 
@@ -81,7 +75,7 @@ section, subtype, power/toughness, rules text, image) still needs filling in.
 - Farseek — `{1}{G}`
 - Promise of Loyalty — `{4}{W}`
 - Three Visits — `{1}{G}`
-- Yuna's Decision — `{3}{G}`
+
 
 ## Artifact (4)
 
@@ -110,9 +104,9 @@ section, subtype, power/toughness, rules text, image) still needs filling in.
 - Command Tower
 - Evolving Wilds
 - Exotic Orchard
-- Flooded Grove
-- Forge of Heroes
-- Fortified Village
+
+
+
 - Glacial Fortress
 - Hinterland Harbor
 - Idyllic Beachfront

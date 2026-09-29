@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { CardInstance, GameAction, GameState, ManaColor } from '../types';
 import { applyAction } from '../engine/actions';
 import { getCardDefinition } from '../data/cards';
-import { canPay, parseCostLabel } from '../engine/mana';
+import { canPay, parseCostLabel, manaValue } from '../engine/mana';
 import { hasKeyword } from '../engine/keywords';
 import { effectivePower, effectiveToughness, isLegalPendingTarget } from '../engine/combat';
 import { matchesLibrarySearchFilter } from '../engine/effects';
@@ -249,6 +249,97 @@ export function useLocalGame(initialState: GameState) {
     return () => clearTimeout(timer);
   }, [state, dispatch]);
 
+  // --- AI: resolve its own pending attack tax payment (Summon: Yojimbo) ---
+  // Same "nobody else can choose for it" problem as Ward above - pays if it
+  // can afford the total generic cost, declines (no attackers) otherwise.
+  useEffect(() => {
+    if (state.winnerId) return;
+    if (state.mutualAdjustment.status !== 'inactive') return;
+    const pending = state.pendingAttackTaxPayment;
+    if (!pending || pending.controllerId !== AI_PLAYER_ID) return;
+
+    const timer = setTimeout(() => {
+      const ai = state.players.find((p) => p.id === AI_PLAYER_ID)!;
+      const canAfford = canPay(ai.manaPool, parseCostLabel(`{${pending.totalGeneric}}`), 0);
+      dispatch({ type: 'RESOLVE_ATTACK_TAX_PAYMENT', pay: canAfford }, AI_PLAYER_ID);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [state, dispatch]);
+
+  // --- AI: resolve its own pending counter transfer (Yuna, Grand Summoner) -
+  // Same "nobody else can choose for it" problem again - puts the counters
+  // on its own best creature (highest power+toughness, same heuristic as the
+  // generic pendingTarget resolver above), or declines if it controls none.
+  useEffect(() => {
+    if (state.winnerId) return;
+    if (state.mutualAdjustment.status !== 'inactive') return;
+    const pending = state.pendingCounterTransferQueue[0];
+    if (!pending || pending.controllerId !== AI_PLAYER_ID) return;
+
+    const timer = setTimeout(() => {
+      const ai = state.players.find((p) => p.id === AI_PLAYER_ID)!;
+      const creatures = ai.zones.battlefield.filter((c) => getCardDefinition(c.defId).type === 'creature');
+      if (creatures.length === 0) {
+        dispatch({ type: 'RESOLVE_COUNTER_TRANSFER', targetInstanceId: null }, AI_PLAYER_ID);
+        return;
+      }
+      let best = creatures[0];
+      let bestScore = -Infinity;
+      for (const c of creatures) {
+        const d = getCardDefinition(c.defId);
+        const score = effectivePower(d, c, state, ai.id) + effectiveToughness(d, c, state, ai.id);
+        if (score > bestScore) {
+          best = c;
+          bestScore = score;
+        }
+      }
+      dispatch({ type: 'RESOLVE_COUNTER_TRANSFER', targetInstanceId: best.instanceId }, AI_PLAYER_ID);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [state, dispatch]);
+
+  // --- AI: resolve its own pending put-creature-or-land choice (Yuna's
+  // Decision) - Same "nobody else can choose for it" problem again - always
+  // puts a card onto the battlefield when it has one eligible for the
+  // current stage (free value, no reason to decline), preferring the
+  // highest mana value card of that type.
+  useEffect(() => {
+    if (state.winnerId) return;
+    if (state.mutualAdjustment.status !== 'inactive') return;
+    const pending = state.pendingPutCreatureAndOrLandFromHand;
+    if (!pending || pending.controllerId !== AI_PLAYER_ID) return;
+
+    const timer = setTimeout(() => {
+      const ai = state.players.find((p) => p.id === AI_PLAYER_ID)!;
+      const eligible = ai.zones.hand.filter((c) => getCardDefinition(c.defId).type === pending.stage);
+      if (eligible.length === 0) {
+        dispatch({ type: 'RESOLVE_PUT_CREATURE_OR_LAND_FROM_HAND', instanceId: null }, AI_PLAYER_ID);
+        return;
+      }
+      const best = eligible.reduce((a, b) => (manaValue(parseCostLabel(getCardDefinition(b.defId).costLabel ?? '-')) > manaValue(parseCostLabel(getCardDefinition(a.defId).costLabel ?? '-')) ? b : a));
+      dispatch({ type: 'RESOLVE_PUT_CREATURE_OR_LAND_FROM_HAND', instanceId: best.instanceId }, AI_PLAYER_ID);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [state, dispatch]);
+
+  // --- AI: resolve its own pending check-land reveal (Fortified Village) --
+  // Same "nobody else can choose for it" problem again - reveals a matching
+  // card whenever it has one (free value, no reason to keep the land
+  // tapped), declines otherwise.
+  useEffect(() => {
+    if (state.winnerId) return;
+    if (state.mutualAdjustment.status !== 'inactive') return;
+    const pending = state.pendingRevealLandTypeFromHand;
+    if (!pending || pending.controllerId !== AI_PLAYER_ID) return;
+
+    const timer = setTimeout(() => {
+      const ai = state.players.find((p) => p.id === AI_PLAYER_ID)!;
+      const match = ai.zones.hand.find((c) => pending.landNames.includes(getCardDefinition(c.defId).name));
+      dispatch({ type: 'RESOLVE_REVEAL_LAND_TYPE_FROM_HAND', instanceId: match?.instanceId ?? null }, AI_PLAYER_ID);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [state, dispatch]);
+
   // --- AI: resolve its own pending optional pay-life (Seymour Flux) -------
   // Same "nobody else can choose for it" problem again - without this, the
   // AI's own upkeep just sat there forever the moment Seymour Flux was on
@@ -355,6 +446,10 @@ export function useLocalGame(initialState: GameState) {
     if (state.pendingLibrarySearch?.controllerId === AI_PLAYER_ID) return;
     if (state.pendingManaColorChoice?.controllerId === AI_PLAYER_ID) return;
     if (state.pendingWardPayment?.controllerId === AI_PLAYER_ID) return;
+    if (state.pendingAttackTaxPayment?.controllerId === AI_PLAYER_ID) return;
+    if (state.pendingCounterTransferQueue[0]?.controllerId === AI_PLAYER_ID) return;
+    if (state.pendingPutCreatureAndOrLandFromHand?.controllerId === AI_PLAYER_ID) return;
+    if (state.pendingRevealLandTypeFromHand?.controllerId === AI_PLAYER_ID) return;
     if (state.pendingOptionalPayLife?.controllerId === AI_PLAYER_ID) return;
     if (state.pendingRevealPickup?.controllerId === AI_PLAYER_ID) return;
     if (state.pendingCommanderZoneChoice?.ownerId === AI_PLAYER_ID) return;

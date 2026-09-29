@@ -22,6 +22,7 @@ import {
   effectiveWardCost,
   hasBoardGrantedKeyword,
   beginCommanderZoneChoice,
+  checkIndestructibleOrShielded,
 } from './combat';
 import {
   resolveCardEffects,
@@ -274,6 +275,14 @@ function applyActionInner(state: GameState, action: GameAction, playerId: string
       return resolveCommanderZoneChoice(state, playerId, action.toCommandZone);
     case 'RESOLVE_WARD_PAYMENT':
       return resolveWardPayment(state, playerId, action.pay);
+    case 'RESOLVE_ATTACK_TAX_PAYMENT':
+      return resolveAttackTaxPayment(state, playerId, action.pay);
+    case 'RESOLVE_COUNTER_TRANSFER':
+      return resolveCounterTransfer(state, playerId, action.targetInstanceId);
+    case 'RESOLVE_PUT_CREATURE_OR_LAND_FROM_HAND':
+      return resolvePutCreatureOrLandFromHand(state, playerId, action.instanceId);
+    case 'RESOLVE_REVEAL_LAND_TYPE_FROM_HAND':
+      return resolveRevealLandTypeFromHand(state, playerId, action.instanceId);
     case 'RESOLVE_FREE_CAST_FROM_HAND':
       return resolveFreeCastFromHand(state, playerId, action.instanceId);
     case 'RESOLVE_LIBRARY_SEARCH':
@@ -547,6 +556,14 @@ function toggleTap(state: GameState, playerId: string, instanceId: string, chose
     next = { ...sacResult.state, log: [...sacResult.state.log, ...sacResult.logLines] };
   }
 
+  // "{T}: Add one mana of any color. [Additional effect]" (Yuna, Grand
+  // Summoner's Grand Summon) - only once this tap actually produced mana,
+  // same no-op-tap gate as sacrificesOnTap just above.
+  if (resolvedColor && def.onTapForManaEffects && def.onTapForManaEffects.length > 0) {
+    const resolved = resolveCardEffects(next, found.ownerPlayerId, def.onTapForManaEffects, instanceId);
+    next = { ...resolved.state, log: [...resolved.state.log, ...resolved.logLines] };
+  }
+
   return { ok: true, state: next };
 }
 
@@ -630,7 +647,12 @@ function castCard(
       if (player.landsPlayedThisTurn >= maxLandsPerTurn(state, playerId)) return { ok: false, error: "You've already played a land this turn." };
     }
     let next = updatePlayer(state, playerId, (p) => ({ ...p, zones: { ...p.zones, hand: p.zones.hand.filter((c) => c.instanceId !== instanceId) } }));
-    const movedCard = { ...card, tapped: !!def.entersTapped, damageMarked: 0, summoningSick: false };
+    // A "check land" (entersTappedUnlessRevealLandNames) always enters
+    // tapped provisionally - the reveal choice (pendingRevealLandTypeFromHand)
+    // untaps it after the fact if a matching card is shown, since the
+    // reveal itself needs the land to already be a real battlefield object
+    // (findCardAnywhere target) rather than being decided before placement.
+    const movedCard = { ...card, tapped: !!def.entersTapped || !!def.entersTappedUnlessRevealLandNames, damageMarked: 0, summoningSick: false };
     next = updatePlayer(next, playerId, (p) => ({
       ...p,
       zones: { ...p.zones, battlefield: [...p.zones.battlefield, movedCard] },
@@ -648,6 +670,10 @@ function castCard(
     const landfallResult = triggerLandfall(next, playerId);
     next = landfallResult.state;
     effectLogLines = [...effectLogLines, ...landfallResult.logLines];
+
+    if (def.entersTappedUnlessRevealLandNames) {
+      next = { ...next, pendingRevealLandTypeFromHand: { sourceInstanceId: movedCard.instanceId, controllerId: playerId, landNames: def.entersTappedUnlessRevealLandNames } };
+    }
 
     return { ok: true, state: { ...next, log: [...next.log, `${player.name} plays ${def.name}.`, ...effectLogLines] } };
   }
@@ -1594,6 +1620,32 @@ function declareAttackers(state: GameState, playerId: string, instanceIds: strin
     if (isEffectivelyDefender(def, creature)) return { ok: false, error: `${def.name} has defender and can't attack.` };
   }
 
+  // "Until your next turn, creatures can't attack you unless their
+  // controller pays {2} for each of those creatures" (Summon: Yojimbo) -
+  // summed across every such permanent the DEFENDER controls, then
+  // multiplied by the number of attackers actually being declared (no tax
+  // on declaring zero attackers). Pauses here on a payment prompt instead
+  // of committing the attack, same shape as Ward's pendingWardPayment.
+  if (instanceIds.length > 0) {
+    const defender = getOpponent(state, playerId);
+    const costPerCreature = defender.zones.battlefield.reduce((sum, c) => sum + (c.attacksYouCostGenericUntilNextTurn ?? 0), 0);
+    if (costPerCreature > 0) {
+      const totalGeneric = costPerCreature * instanceIds.length;
+      return { ok: true, state: { ...state, pendingAttackTaxPayment: { controllerId: playerId, instanceIds, totalGeneric } } };
+    }
+  }
+
+  return finalizeDeclareAttackers(state, playerId, instanceIds);
+}
+
+/** Actually commits an attack declaration - tapping non-vigilance attackers,
+ * setting combatAssignments/phase, and firing every onAttack-adjacent
+ * trigger. Split out from declareAttackers so a Yojimbo-style attack tax can
+ * pause on a payment prompt (see pendingAttackTaxPayment) and re-enter here
+ * afterward with the SAME already-legality-checked instanceIds, without
+ * re-running (or duplicating) the legality checks above. */
+function finalizeDeclareAttackers(state: GameState, playerId: string, instanceIds: string[]): ActionResult {
+  const player = getPlayer(state, playerId);
   const attackerIds = new Set(instanceIds);
   let next = updatePlayer(state, playerId, (p) => ({
     ...p,
@@ -1811,11 +1863,12 @@ function chooseTarget(state: GameState, playerId: string, targetInstanceId: stri
       }));
       logLines.push(`${sourceDef.name} deals ${amount} damage to ${otherDef.name}.`);
       const damagedOther = getPlayer(next, otherFound.ownerPlayerId).zones.battlefield.find((c) => c.instanceId === targetInstanceId);
-      const otherLethal =
-        !!damagedOther &&
-        !hasKeywordEffective(otherDef, damagedOther, 'indestructible') &&
-        !hasBoardGrantedKeyword(next, otherFound.ownerPlayerId, damagedOther, otherDef, 'indestructible') &&
-        damagedOther.damageMarked >= effectiveToughness(otherDef, damagedOther, next, otherFound.ownerPlayerId);
+      let otherLethal = !!damagedOther && damagedOther.damageMarked >= effectiveToughness(otherDef, damagedOther, next, otherFound.ownerPlayerId);
+      if (otherLethal && damagedOther) {
+        const survives = checkIndestructibleOrShielded(next, targetInstanceId, otherDef, damagedOther, otherFound.ownerPlayerId);
+        next = survives.state;
+        otherLethal = !survives.survives;
+      }
       if (otherLethal) {
         const lethalResult = moveCreaturesToGraveyardAndTrigger(next, [targetInstanceId], 'dies');
         next = { ...lethalResult.state, log: [...lethalResult.state.log, ...lethalResult.logLines] };
@@ -1829,11 +1882,12 @@ function chooseTarget(state: GameState, playerId: string, targetInstanceId: stri
     }));
     logLines.push(`${sourceDef.name} deals ${amount} damage to itself.`);
     const damagedSource = getPlayer(next, sourceFound.ownerPlayerId).zones.battlefield.find((c) => c.instanceId === pending.firstInstanceId);
-    const selfLethal =
-      !!damagedSource &&
-      !hasKeywordEffective(sourceDef, damagedSource, 'indestructible') &&
-      !hasBoardGrantedKeyword(next, sourceFound.ownerPlayerId, damagedSource, sourceDef, 'indestructible') &&
-      damagedSource.damageMarked >= effectiveToughness(sourceDef, damagedSource, next, sourceFound.ownerPlayerId);
+    let selfLethal = !!damagedSource && damagedSource.damageMarked >= effectiveToughness(sourceDef, damagedSource, next, sourceFound.ownerPlayerId);
+    if (selfLethal && damagedSource) {
+      const survives = checkIndestructibleOrShielded(next, pending.firstInstanceId, sourceDef, damagedSource, sourceFound.ownerPlayerId);
+      next = survives.state;
+      selfLethal = !survives.survives;
+    }
     if (selfLethal) {
       const lethalResult = moveCreaturesToGraveyardAndTrigger(next, [pending.firstInstanceId], 'dies');
       next = { ...lethalResult.state, log: [...lethalResult.state.log, ...lethalResult.logLines] };
@@ -1900,7 +1954,10 @@ function chooseTarget(state: GameState, playerId: string, targetInstanceId: stri
       pending.effect.type === 'tapStunAndGainLifeForNonbasicLands' ||
       (pending.effect.type === 'pumpUpToTwoTargets' && !!pending.firstInstanceId) ||
       pending.effect.type === 'attachAllControlledEquipmentToTargetCreature' ||
-      pending.effect.type === 'proliferate';
+      pending.effect.type === 'proliferate' ||
+      pending.effect.type === 'tapUpToOneTargetCreatureAndStun' ||
+      (pending.effect.type === 'putCounterOnUpToTwoOwnCreatures' && !!pending.firstInstanceId) ||
+      (pending.effect.type === 'returnUpToTwoTargetPermanentsFromGraveyardToHand' && !!pending.firstInstanceId);
     if (!isOptional) {
       return { ok: false, error: 'This ability requires a target.' };
     }
@@ -1908,6 +1965,34 @@ function chooseTarget(state: GameState, playerId: string, targetInstanceId: stri
     const sourceName = source ? getCardDefinition(source.card.defId).name : 'This ability';
     const declineNote = pending.effect.type === 'proliferate' ? `${sourceName} finishes proliferating.` : `${sourceName}'s optional target was declined.`;
     return { ok: true, state: { ...state, pendingTarget: null, log: [...state.log, declineNote] } };
+  }
+
+  // "Return one or two target permanent cards from your graveyard to your
+  // hand" (Yuna's Decision) - a top-level special case, not the generic
+  // battlefield-only `found`/`targetDef` a few lines down (this targets the
+  // GRAVEYARD instead), same mandatory-first/optional-second two-step as
+  // PumpUpToTwoTargetsEffect (see the isOptional whitelist above).
+  if (pending.effect.type === 'returnUpToTwoTargetPermanentsFromGraveyardToHand') {
+    if (targetInstanceId === pending.firstInstanceId) return { ok: false, error: 'The second card must be different from the first.' };
+    const graveyardFound = findCardAnywhere(state, targetInstanceId);
+    if (!graveyardFound || graveyardFound.zone !== 'graveyard' || graveyardFound.ownerPlayerId !== playerId) {
+      return { ok: false, error: "That's not a legal target - it must be a permanent card in your own graveyard." };
+    }
+    const graveyardTargetDef = getCardDefinition(graveyardFound.card.defId);
+    if (graveyardTargetDef.type !== 'creature' && graveyardTargetDef.type !== 'artifact' && graveyardTargetDef.type !== 'enchantment' && graveyardTargetDef.type !== 'land') {
+      return { ok: false, error: `${graveyardTargetDef.name} is not a legal target - it must be a permanent card.` };
+    }
+    let next = updatePlayer(state, playerId, (p) => ({
+      ...p,
+      zones: { ...p.zones, graveyard: p.zones.graveyard.filter((c) => c.instanceId !== targetInstanceId), hand: [...p.zones.hand, graveyardFound.card] },
+    }));
+    const actor = getPlayer(next, playerId);
+    next = {
+      ...next,
+      pendingTarget: pending.firstInstanceId ? null : { ...pending, firstInstanceId: targetInstanceId },
+      log: [...next.log, `${actor.name} returns ${graveyardTargetDef.name} from their graveyard to hand.`],
+    };
+    return { ok: true, state: next };
   }
 
   // "Hexproof" - can't be targeted by an opponent's spells or abilities at
@@ -2144,6 +2229,105 @@ function chooseTarget(state: GameState, playerId: string, targetInstanceId: stri
   if (!found || found.zone !== 'battlefield') return { ok: false, error: "That's not a legal target - it must be a permanent on the battlefield." };
   const targetDef = getCardDefinition(found.card.defId);
 
+  if (pending.effect.type === 'exileTargetOpponentCreatureUntilSourceLeaves') {
+    if (targetDef.type !== 'creature') return { ok: false, error: `${targetDef.name} is not a legal target - it must be a creature.` };
+    if (found.ownerPlayerId === playerId) return { ok: false, error: `${targetDef.name} is not a legal target - it must be a creature an opponent controls.` };
+    const sourceFound = findCardAnywhere(state, pending.sourceInstanceId);
+    const sourceName = sourceFound ? getCardDefinition(sourceFound.card.defId).name : 'This Saga';
+    let next = detachEverythingFrom(state, targetInstanceId);
+    next = updatePlayer(next, found.ownerPlayerId, (p) => ({ ...p, zones: { ...p.zones, battlefield: p.zones.battlefield.filter((c) => c.instanceId !== targetInstanceId) } }));
+    next = updatePlayer(next, found.ownerPlayerId, (p) => ({ ...p, zones: { ...p.zones, exile: [...p.zones.exile, found.card] } }));
+    next = {
+      ...next,
+      pendingTarget: null,
+      exileUntilSourceLeaves: [...next.exileUntilSourceLeaves, { sourceInstanceId: pending.sourceInstanceId, exiledInstanceId: targetInstanceId }],
+    };
+    return { ok: true, state: { ...next, log: [...next.log, `${sourceName} exiles ${targetDef.name} until it leaves the battlefield.`] } };
+  }
+
+  if (pending.effect.type === 'tapUpToOneTargetCreatureAndStun') {
+    if (targetDef.type !== 'creature') return { ok: false, error: `${targetDef.name} is not a legal target - it must be a creature.` };
+    const existingStun = found.card.counters.find((c) => c.label === 'Stun')?.amount ?? 0;
+    let next = updatePlayer(state, found.ownerPlayerId, (p) => ({
+      ...p,
+      zones: {
+        ...p.zones,
+        battlefield: p.zones.battlefield.map((c) =>
+          c.instanceId === targetInstanceId ? { ...c, tapped: true, counters: [...c.counters.filter((ctr) => ctr.label !== 'Stun'), { label: 'Stun', amount: existingStun + 1 }] } : c
+        ),
+      },
+    }));
+    next = { ...next, pendingTarget: null };
+    const actor = getPlayer(next, playerId);
+    return { ok: true, state: { ...next, log: [...next.log, `${actor.name} taps ${targetDef.name} and puts a Stun counter on it.`] } };
+  }
+
+  if (pending.effect.type === 'putCounterOnUpToTwoOwnCreatures') {
+    if (targetDef.type !== 'creature') return { ok: false, error: `${targetDef.name} is not a legal target - it must be a creature.` };
+    if (found.ownerPlayerId !== playerId) return { ok: false, error: `${targetDef.name} is not a legal target - it must be a creature you control.` };
+    if (targetInstanceId === pending.firstInstanceId) return { ok: false, error: 'The second target must be a different creature.' };
+    const { counterLabel, counterAmount } = pending.effect;
+    let next = updatePlayer(state, playerId, (p) => ({
+      ...p,
+      zones: {
+        ...p.zones,
+        battlefield: p.zones.battlefield.map((c) => {
+          if (c.instanceId !== targetInstanceId) return c;
+          const hasCounter = c.counters.some((ctr) => ctr.label === counterLabel);
+          const counters = hasCounter
+            ? c.counters.map((ctr) => (ctr.label === counterLabel ? { ...ctr, amount: ctr.amount + counterAmount } : ctr))
+            : [...c.counters, { label: counterLabel, amount: counterAmount }];
+          return { ...c, counters };
+        }),
+      },
+    }));
+    const actor = getPlayer(next, playerId);
+    next = {
+      ...next,
+      pendingTarget: pending.firstInstanceId ? null : { ...pending, firstInstanceId: targetInstanceId },
+      log: [...next.log, `${actor.name} puts a ${counterLabel} counter on ${targetDef.name}.`],
+    };
+    return { ok: true, state: next };
+  }
+
+  if (pending.effect.type === 'sacrificeOwnCreatureThenDraw') {
+    if (targetDef.type !== 'creature') return { ok: false, error: `${targetDef.name} is not a legal target - it must be a creature.` };
+    if (found.ownerPlayerId !== playerId) return { ok: false, error: `${targetDef.name} is not a legal target - it must be a creature you control.` };
+    const sacResult = moveCreaturesToGraveyardAndTrigger(state, [targetInstanceId], 'is sacrificed');
+    let next: GameState = { ...sacResult.state, pendingTarget: null, log: [...sacResult.state.log, ...sacResult.logLines] };
+    const actor = getPlayer(next, playerId);
+    const drawn = actor.zones.library.slice(0, 1);
+    next = updatePlayer(next, playerId, (p) => ({ ...p, zones: { ...p.zones, library: p.zones.library.slice(1), hand: [...p.zones.hand, ...drawn] } }));
+    next = { ...next, log: [...next.log, `${actor.name} draws a card.`] };
+    if (pending.effect.thenPutCreatureAndOrLandFromHand) {
+      next = { ...next, pendingPutCreatureAndOrLandFromHand: { controllerId: playerId, stage: 'creature' } };
+    }
+    return { ok: true, state: next };
+  }
+
+  if (pending.effect.type === 'revealUntilCreatureThenPutCountersEqualToManaValue') {
+    if (targetDef.type !== 'creature') return { ok: false, error: `${targetDef.name} is not a legal target - it must be a creature.` };
+    if (found.ownerPlayerId !== playerId) return { ok: false, error: `${targetDef.name} is not a legal target - it must be a creature you control.` };
+    const counterAmount = pending.effect.counterAmount ?? 0;
+    let next = state;
+    if (counterAmount > 0) {
+      next = updatePlayer(state, playerId, (p) => ({
+        ...p,
+        zones: {
+          ...p.zones,
+          battlefield: p.zones.battlefield.map((c) => {
+            if (c.instanceId !== targetInstanceId) return c;
+            const existing = c.counters.find((ctr) => ctr.label === '+1/+1')?.amount ?? 0;
+            return { ...c, counters: [...c.counters.filter((ctr) => ctr.label !== '+1/+1'), { label: '+1/+1', amount: existing + counterAmount }] };
+          }),
+        },
+      }));
+    }
+    next = { ...next, pendingTarget: null };
+    const actor = getPlayer(next, playerId);
+    return { ok: true, state: { ...next, log: [...next.log, `${actor.name} puts ${counterAmount} +1/+1 counter(s) on ${targetDef.name}.`] } };
+  }
+
   if (pending.effect.type === 'destroyTarget') {
     // Unlike tapAndStun, this can target either player's permanents (e.g.
     // Airship Crash names no controller restriction at all).
@@ -2161,12 +2345,14 @@ function chooseTarget(state: GameState, playerId: string, targetInstanceId: stri
       (pending.effect.targetFilter === 'creature' && targetDef.type === 'creature');
     if (!matchesFilter) return { ok: false, error: `${targetDef.name} is not a legal target for this ability.` };
 
-    if (hasKeywordEffective(targetDef, found.card, 'indestructible') || hasBoardGrantedKeyword(state, found.ownerPlayerId, found.card, targetDef, 'indestructible')) {
-      const next = { ...state, pendingTarget: null };
-      return { ok: true, state: { ...next, log: [...next.log, `${targetDef.name} is indestructible and survives.`] } };
+    const survives = checkIndestructibleOrShielded(state, targetInstanceId, targetDef, found.card, found.ownerPlayerId);
+    if (survives.survives) {
+      const next = { ...survives.state, pendingTarget: null };
+      const note = survives.via === 'shield' ? `${targetDef.name}'s shield counter is removed, preventing the destruction.` : `${targetDef.name} is indestructible and survives.`;
+      return { ok: true, state: { ...next, log: [...next.log, note] } };
     }
 
-    const destroyResult = moveCreaturesToGraveyardAndTrigger(state, [targetInstanceId], 'is destroyed');
+    const destroyResult = moveCreaturesToGraveyardAndTrigger(survives.state, [targetInstanceId], 'is destroyed');
     const next = { ...destroyResult.state, pendingTarget: null, log: [...destroyResult.state.log, ...destroyResult.logLines] };
     return { ok: true, state: next };
   }
@@ -2356,6 +2542,29 @@ function chooseTarget(state: GameState, playerId: string, targetInstanceId: stri
     return { ok: true, state: { ...next, log: [...next.log, `${actor.name} puts a ${counterLabel} counter on ${targetDef.name}.`] } };
   }
 
+  if (pending.effect.type === 'putCounterOnTargetCommanderEnteredThisTurn') {
+    if (!isPlayersCommander(state, found.ownerPlayerId, found.card)) return { ok: false, error: `${targetDef.name} is not a legal target - it must be a commander.` };
+    if (!found.card.summoningSick) return { ok: false, error: `${targetDef.name} is not a legal target - it must have entered the battlefield this turn.` };
+    const { counterLabel, counterAmount } = pending.effect;
+    let next = updatePlayer(state, found.ownerPlayerId, (p) => ({
+      ...p,
+      zones: {
+        ...p.zones,
+        battlefield: p.zones.battlefield.map((c) => {
+          if (c.instanceId !== targetInstanceId) return c;
+          const hasCounter = c.counters.some((ctr) => ctr.label === counterLabel);
+          const counters = hasCounter
+            ? c.counters.map((ctr) => (ctr.label === counterLabel ? { ...ctr, amount: ctr.amount + counterAmount } : ctr))
+            : [...c.counters, { label: counterLabel, amount: counterAmount }];
+          return { ...c, counters };
+        }),
+      },
+    }));
+    next = { ...next, pendingTarget: null };
+    const actor = getPlayer(next, playerId);
+    return { ok: true, state: { ...next, log: [...next.log, `${actor.name} puts a ${counterLabel} counter on ${targetDef.name}.`] } };
+  }
+
   if (pending.effect.type === 'debuffTargetByGraveyard') {
     // Must be a creature an OPPONENT controls, like tapAndStun.
     if (found.ownerPlayerId === playerId) return { ok: false, error: "That's not a legal target - it must be a creature your opponent controls." };
@@ -2516,11 +2725,13 @@ function chooseTarget(state: GameState, playerId: string, targetInstanceId: stri
     // opponent-only, creature-only.
     if (targetDef.type !== 'creature') return { ok: false, error: `${targetDef.name} is not a legal target - it must be a creature.` };
     if (found.ownerPlayerId === playerId) return { ok: false, error: "That's not a legal target - it must be a creature your opponent controls." };
-    if (hasKeywordEffective(targetDef, found.card, 'indestructible') || hasBoardGrantedKeyword(state, found.ownerPlayerId, found.card, targetDef, 'indestructible')) {
-      const next = { ...state, pendingTarget: null };
-      return { ok: true, state: { ...next, log: [...next.log, `${targetDef.name} is indestructible and survives.`] } };
+    const destroySurvives = checkIndestructibleOrShielded(state, targetInstanceId, targetDef, found.card, found.ownerPlayerId);
+    if (destroySurvives.survives) {
+      const next = { ...destroySurvives.state, pendingTarget: null };
+      const note = destroySurvives.via === 'shield' ? `${targetDef.name}'s shield counter is removed, preventing the destruction.` : `${targetDef.name} is indestructible and survives.`;
+      return { ok: true, state: { ...next, log: [...next.log, note] } };
     }
-    const destroyResult = moveCreaturesToGraveyardAndTrigger(state, [targetInstanceId], 'is destroyed');
+    const destroyResult = moveCreaturesToGraveyardAndTrigger(destroySurvives.state, [targetInstanceId], 'is destroyed');
     let next: GameState = { ...destroyResult.state, pendingTarget: null, log: [...destroyResult.state.log, ...destroyResult.logLines] };
     if (pending.effect.thenDrawForCreaturesDiedThisTurn && next.creaturesDiedThisTurn > 0) {
       const actor = getPlayer(next, playerId);
@@ -2596,11 +2807,12 @@ function chooseTarget(state: GameState, playerId: string, targetInstanceId: stri
       log: [...next.log, `${actor.name} deals ${damageToCreature} damage to ${targetDef.name} and ${equipmentCount} damage to ${targetOwner.name}.`],
     };
     const damagedTarget = getPlayer(next, found.ownerPlayerId).zones.battlefield.find((c) => c.instanceId === targetInstanceId);
-    const isLethal =
-      !!damagedTarget &&
-      !hasKeywordEffective(targetDef, damagedTarget, 'indestructible') &&
-      !hasBoardGrantedKeyword(next, found.ownerPlayerId, damagedTarget, targetDef, 'indestructible') &&
-      damagedTarget.damageMarked >= effectiveToughness(targetDef, damagedTarget, next, found.ownerPlayerId);
+    let isLethal = !!damagedTarget && damagedTarget.damageMarked >= effectiveToughness(targetDef, damagedTarget, next, found.ownerPlayerId);
+    if (isLethal && damagedTarget) {
+      const survives = checkIndestructibleOrShielded(next, targetInstanceId, targetDef, damagedTarget, found.ownerPlayerId);
+      next = survives.state;
+      isLethal = !survives.survives;
+    }
     if (isLethal) {
       const lethalResult = moveCreaturesToGraveyardAndTrigger(next, [targetInstanceId], 'dies');
       next = { ...lethalResult.state, log: [...lethalResult.state.log, ...lethalResult.logLines] };
@@ -2732,11 +2944,12 @@ function chooseTarget(state: GameState, playerId: string, targetInstanceId: stri
     }));
     next = { ...next, pendingTarget: null, log: [...next.log, `${actor.name} deals ${amount} damage to ${targetDef.name}.`] };
     const damagedTarget = getPlayer(next, found.ownerPlayerId).zones.battlefield.find((c) => c.instanceId === targetInstanceId);
-    const isLethal =
-      !!damagedTarget &&
-      !hasKeywordEffective(targetDef, damagedTarget, 'indestructible') &&
-      !hasBoardGrantedKeyword(next, found.ownerPlayerId, damagedTarget, targetDef, 'indestructible') &&
-      damagedTarget.damageMarked >= effectiveToughness(targetDef, damagedTarget, next, found.ownerPlayerId);
+    let isLethal = !!damagedTarget && damagedTarget.damageMarked >= effectiveToughness(targetDef, damagedTarget, next, found.ownerPlayerId);
+    if (isLethal && damagedTarget) {
+      const survives = checkIndestructibleOrShielded(next, targetInstanceId, targetDef, damagedTarget, found.ownerPlayerId);
+      next = survives.state;
+      isLethal = !survives.survives;
+    }
     if (isLethal && pending.effect.exileIfDies) {
       // "If that creature would die this turn, exile it instead" (Suplex) -
       // a one-shot replacement, so this skips moveCreaturesToGraveyardAndTrigger
@@ -2763,8 +2976,13 @@ function chooseTarget(state: GameState, playerId: string, targetInstanceId: stri
           ? targetDef.type === 'creature'
           : pending.effect.targetFilter === 'nonlandPermanent'
             ? targetDef.type !== 'land'
-            : true;
+            : pending.effect.targetFilter === 'artifactEnchantmentOrTappedCreature'
+              ? targetDef.type === 'artifact' || targetDef.type === 'enchantment' || (targetDef.type === 'creature' && found.card.tapped)
+              : true;
     if (!isLegal) return { ok: false, error: `${targetDef.name} is not a legal target.` };
+    if (pending.effect.opponentControlledOnly && found.ownerPlayerId === playerId) {
+      return { ok: false, error: `${targetDef.name} is not a legal target - it must be a permanent an opponent controls.` };
+    }
     const actor = getPlayer(state, playerId);
     let next = detachEverythingFrom(state, targetInstanceId);
     next = updatePlayer(next, found.ownerPlayerId, (p) => ({ ...p, zones: { ...p.zones, battlefield: p.zones.battlefield.filter((c) => c.instanceId !== targetInstanceId) } }));
@@ -2818,7 +3036,10 @@ function chooseTarget(state: GameState, playerId: string, targetInstanceId: stri
           zones: { ...pl.zones, battlefield: pl.zones.battlefield.map((bc) => (bc.instanceId === c.instanceId ? { ...bc, damageMarked: bc.damageMarked + amount } : bc)) },
         }));
         const updated = getPlayer(next, p.id).zones.battlefield.find((bc) => bc.instanceId === c.instanceId)!;
-        if (updated.damageMarked >= effectiveToughness(cDef, updated, next, p.id)) dead.push(c.instanceId);
+        if (updated.damageMarked < effectiveToughness(cDef, updated, next, p.id)) continue;
+        const survives = checkIndestructibleOrShielded(next, c.instanceId, cDef, updated, p.id);
+        next = survives.state;
+        if (!survives.survives) dead.push(c.instanceId);
       }
     }
     next = { ...next, pendingTarget: null, log: [...next.log, `${actor.name}'s ${targetDef.name} deals ${amount} damage to every other creature.`] };
@@ -2891,6 +3112,66 @@ function resolveWardPayment(state: GameState, playerId: string, pay: boolean): A
     return chooseTarget(paidState, playerId, pending.targetInstanceId, true);
   }
   return { ok: false, error: "This Ward's cost can no longer be computed." };
+}
+
+/** Summon: Yojimbo's attack tax - the attacking player either pays the
+ * summed {N} cost (re-entering finalizeDeclareAttackers with the SAME
+ * already-legality-checked instanceIds) or declines, which simply cancels
+ * the attack declaration (no attackers are tapped, phase stays
+ * declare_attackers) so they can redeclare with fewer/no attackers. */
+function resolveAttackTaxPayment(state: GameState, playerId: string, pay: boolean): ActionResult {
+  const pending = state.pendingAttackTaxPayment;
+  if (!pending) return { ok: false, error: 'Nothing is waiting on an attack tax payment right now.' };
+  if (pending.controllerId !== playerId) return { ok: false, error: "It's not your payment to make." };
+
+  if (!pay) {
+    return { ok: true, state: { ...state, pendingAttackTaxPayment: null, log: [...state.log, `${getPlayer(state, playerId).name} declines to pay the attack tax - no attackers are declared.`] } };
+  }
+
+  const actor = getPlayer(state, playerId);
+  const parsed = parseCostLabel(`{${pending.totalGeneric}}`);
+  if (!canPay(actor.manaPool, parsed, 0)) return { ok: false, error: 'Not enough mana to pay the attack tax.' };
+  const next = updatePlayer(state, playerId, (p) => ({ ...p, manaPool: payCost(p.manaPool, parsed, 0) }));
+  const paidState = { ...next, pendingAttackTaxPayment: null, log: [...next.log, `${actor.name} pays {${pending.totalGeneric}} to attack.`] };
+  return finalizeDeclareAttackers(paidState, playerId, pending.instanceIds);
+}
+
+/** Yuna, Grand Summoner's "you may put N +1/+1 counters on target creature" -
+ * always resolves the FRONT of pendingCounterTransferQueue (see that field's
+ * own comment for why this is a queue rather than pendingTarget itself).
+ * null declines; a target must be a creature (either player's - the real
+ * card names no restriction). */
+function resolveCounterTransfer(state: GameState, playerId: string, targetInstanceId: string | null): ActionResult {
+  const queue = state.pendingCounterTransferQueue;
+  const current = queue[0];
+  if (!current) return { ok: false, error: 'Nothing is waiting on a counter transfer choice right now.' };
+  if (current.controllerId !== playerId) return { ok: false, error: "It's not your choice to make." };
+
+  if (!targetInstanceId) {
+    return { ok: true, state: { ...state, pendingCounterTransferQueue: queue.slice(1) } };
+  }
+
+  const found = findCardAnywhere(state, targetInstanceId);
+  if (!found || found.zone !== 'battlefield') return { ok: false, error: "That's not a legal target - it must be a creature on the battlefield." };
+  const targetDef = getCardDefinition(found.card.defId);
+  if (targetDef.type !== 'creature') return { ok: false, error: `${targetDef.name} is not a legal target - it must be a creature.` };
+
+  let next = updatePlayer(state, found.ownerPlayerId, (p) => ({
+    ...p,
+    zones: {
+      ...p.zones,
+      battlefield: p.zones.battlefield.map((c) => {
+        if (c.instanceId !== targetInstanceId) return c;
+        const hasCounter = c.counters.some((ctr) => ctr.label === '+1/+1');
+        const counters = hasCounter
+          ? c.counters.map((ctr) => (ctr.label === '+1/+1' ? { ...ctr, amount: ctr.amount + current.amount } : ctr))
+          : [...c.counters, { label: '+1/+1', amount: current.amount }];
+        return { ...c, counters };
+      }),
+    },
+  }));
+  next = { ...next, pendingCounterTransferQueue: queue.slice(1) };
+  return { ok: true, state: { ...next, log: [...next.log, `${current.sourceName} triggers: puts ${current.amount} +1/+1 counter(s) on ${targetDef.name}.`] } };
 }
 
 /** "As it enters, choose a color" (Crossroads Village) - see types.ts:
@@ -3254,6 +3535,102 @@ function resolvePutLandFromHand(state: GameState, playerId: string, instanceId: 
   effectLogLines = [...effectLogLines, ...landfallResult.logLines];
 
   return { ok: true, state: { ...next, log: [...next.log, `${player.name} puts ${def.name} onto the battlefield.`, ...effectLogLines] } };
+}
+
+/** "You may put a creature card and/or a land card from your hand onto the
+ * battlefield" (Yuna's Decision) - two INDEPENDENT "you may" choices, so
+ * `pending.stage` tracks which one is currently being offered; declining
+ * (instanceId: null) or completing the 'creature' stage always advances to
+ * 'land', and resolving 'land' clears pendingPutCreatureAndOrLandFromHand
+ * entirely. The creature half mirrors castCard's own permanent-enters
+ * plumbing (onEnter, creature/subtype enter watchers, summoning sickness
+ * unless it has haste) rather than resolvePutLandFromHand's simpler land-only
+ * shape just above. */
+function resolvePutCreatureOrLandFromHand(state: GameState, playerId: string, instanceId: string | null): ActionResult {
+  const pending = state.pendingPutCreatureAndOrLandFromHand;
+  if (!pending) return { ok: false, error: 'Nothing is waiting on that choice right now.' };
+  if (pending.controllerId !== playerId) return { ok: false, error: "It's not your choice to make." };
+
+  const nextStage = pending.stage === 'creature' ? { controllerId: playerId, stage: 'land' as const } : null;
+
+  if (!instanceId) {
+    return { ok: true, state: { ...state, pendingPutCreatureAndOrLandFromHand: nextStage } };
+  }
+
+  const player = getPlayer(state, playerId);
+  const card = player.zones.hand.find((c) => c.instanceId === instanceId);
+  if (!card) return { ok: false, error: 'That card is not in your hand.' };
+  const def = getCardDefinition(card.defId);
+  if (pending.stage === 'creature' && def.type !== 'creature') return { ok: false, error: `${def.name} is not a creature.` };
+  if (pending.stage === 'land' && def.type !== 'land') return { ok: false, error: `${def.name} is not a land.` };
+
+  const movedCard: CardInstance = {
+    ...card,
+    tapped: !!def.entersTapped,
+    damageMarked: 0,
+    summoningSick: def.type === 'creature' ? !hasKeyword(def, 'haste') : false,
+  };
+  let next = updatePlayer(state, playerId, (p) => ({
+    ...p,
+    zones: { ...p.zones, hand: p.zones.hand.filter((c) => c.instanceId !== instanceId), battlefield: [...p.zones.battlefield, movedCard] },
+  }));
+  next = checkLegendRule(next, playerId);
+  next = { ...next, pendingPutCreatureAndOrLandFromHand: nextStage };
+
+  let effectLogLines: string[] = [];
+  if (def.onEnter && def.onEnter.length > 0) {
+    const resolved = resolveCardEffects(next, playerId, def.onEnter, movedCard.instanceId);
+    next = resolved.state;
+    effectLogLines = resolved.logLines;
+  }
+  if (def.type === 'creature') {
+    const creatureWatchResult = triggerCreatureEnterWatchers(next, playerId, movedCard.instanceId);
+    next = creatureWatchResult.state;
+    effectLogLines = [...effectLogLines, ...creatureWatchResult.logLines];
+    const subtypeWatchResult = triggerSubtypeEnterWatchers(next, playerId, def.subtype);
+    next = subtypeWatchResult.state;
+    effectLogLines = [...effectLogLines, ...subtypeWatchResult.logLines];
+  } else {
+    const landfallResult = triggerLandfall(next, playerId);
+    next = landfallResult.state;
+    effectLogLines = [...effectLogLines, ...landfallResult.logLines];
+  }
+
+  return { ok: true, state: { ...next, log: [...next.log, `${player.name} puts ${def.name} onto the battlefield.`, ...effectLogLines] } };
+}
+
+/** "As this land enters, you may reveal a [name] or [name] card from your
+ * hand. If you don't, this land enters tapped" (a check land, Fortified
+ * Village) - the land already entered tapped by the time this is set (see
+ * castCard's land-playing branch); revealing a matching card untaps it,
+ * null (or a non-matching card) leaves it tapped. Revealing doesn't move or
+ * exile the card - it stays in hand, this is a look-and-verify only. */
+function resolveRevealLandTypeFromHand(state: GameState, playerId: string, instanceId: string | null): ActionResult {
+  const pending = state.pendingRevealLandTypeFromHand;
+  if (!pending) return { ok: false, error: 'Nothing is waiting on that choice right now.' };
+  if (pending.controllerId !== playerId) return { ok: false, error: "It's not your choice to make." };
+
+  if (!instanceId) {
+    return { ok: true, state: { ...state, pendingRevealLandTypeFromHand: null } };
+  }
+
+  const player = getPlayer(state, playerId);
+  const card = player.zones.hand.find((c) => c.instanceId === instanceId);
+  if (!card) return { ok: false, error: 'That card is not in your hand.' };
+  const def = getCardDefinition(card.defId);
+  if (!pending.landNames.includes(def.name)) return { ok: false, error: `${def.name} doesn't match what's needed here.` };
+
+  const landFound = findCardAnywhere(state, pending.sourceInstanceId);
+  let next = state;
+  if (landFound && landFound.zone === 'battlefield') {
+    next = updatePlayer(next, landFound.ownerPlayerId, (p) => ({
+      ...p,
+      zones: { ...p.zones, battlefield: p.zones.battlefield.map((c) => (c.instanceId === pending.sourceInstanceId ? { ...c, tapped: false } : c)) },
+    }));
+  }
+  const landName = landFound ? getCardDefinition(landFound.card.defId).name : 'This land';
+  next = { ...next, pendingRevealLandTypeFromHand: null };
+  return { ok: true, state: { ...next, log: [...next.log, `${player.name} reveals ${def.name} - ${landName} enters untapped.`] } };
 }
 
 /** "You may cast target instant or sorcery card from a graveyard, and mana
@@ -4480,8 +4857,8 @@ function runUntapStep(state: GameState, playerId: string): GameState {
         if (stun && stun.amount > 0) {
           return { ...c, counters: c.counters.map((ctr) => (ctr.label.toLowerCase() === 'stun' ? { ...ctr, amount: ctr.amount - 1 } : ctr)).filter((ctr) => ctr.amount > 0) };
         }
-        if (preventsUntap(c.instanceId)) return { ...c, summoningSick: false, producedManaColor: undefined, temporaryKeywordsUntilNextTurn: undefined };
-        return { ...c, tapped: false, summoningSick: false, producedManaColor: undefined, temporaryKeywordsUntilNextTurn: undefined };
+        if (preventsUntap(c.instanceId)) return { ...c, summoningSick: false, producedManaColor: undefined, temporaryKeywordsUntilNextTurn: undefined, attacksYouCostGenericUntilNextTurn: undefined };
+        return { ...c, tapped: false, summoningSick: false, producedManaColor: undefined, temporaryKeywordsUntilNextTurn: undefined, attacksYouCostGenericUntilNextTurn: undefined };
       }),
     },
   }));

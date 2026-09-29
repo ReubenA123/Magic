@@ -171,6 +171,22 @@ export const CARD_POOL: CardDefinition[] = [
     landfall: { temporaryBuff: { power: 1, toughness: 0 } },
   },
   {
+    id: 'an-offer-you-can-t-refuse',
+    name: 'An Offer You Can’t Refuse',
+    type: 'instant',
+    costLabel: '{U}',
+    // "Counter target noncreature spell" is deferred - this engine has no
+    // stack/priority system at all (CAST_CARD resolves a spell's effects
+    // immediately, so there's no "spell sitting on the stack" object left to
+    // counter by the time any other card could respond), same conclusion as
+    // Syncopate's own card comment. A real implementation would need a whole
+    // new casting pipeline (announce -> priority window -> resolve), not
+    // just a new effect on this one card, so this stays flavor/rules text
+    // only - no onCast effects.
+    text: 'Counter target noncreature spell. Its controller creates two Treasure tokens. (They’re artifacts with "{T}, Sacrifice this token: Add one mana of any color.")',
+    imagePath: '/assets/cards/an-offer-you-can-t-refuse.webp',
+  },
+  {
     id: 'ancient-adamantoise',
     name: 'Ancient Adamantoise',
     type: 'creature',
@@ -1341,6 +1357,23 @@ export const CARD_POOL: CardDefinition[] = [
     // text), which createToken (fixed pre-authored tokenIds only) can't do.
     imagePath: '/assets/cards/firion-wild-rose-warrior.webp'
   }, {
+    id: 'flooded-grove',
+    name: 'Flooded Grove',
+    type: 'land',
+    costLabel: '-',
+    text: '{T}: Add {C}.\n' +
+      '{G/U}, {T}: Add {G}{G}, {G}{U}, or {U}{U}.',
+    imagePath: '/assets/cards/flooded-grove.webp',
+    producesMana: 'C',
+    // The filter ability ({G/U}, T: Add two mana in one of three color
+    // combos) is deferred, same reasoning as Starting Town's own deferred
+    // alternate mana ability - parseCostLabel has no concept of a hybrid
+    // mana symbol like {G/U} at all (it would just be silently ignored, same
+    // as any other unrecognized symbol), and "add TWO mana in a chosen
+    // combination" doesn't fit producesMana's model either (that always
+    // produces exactly one mana of a chosen color, never a pair). Both would
+    // need real new infrastructure, not just a new CardDefinition field.
+  }, {
     id: "forest",
     name: "Forest",
     type: "land",
@@ -1348,6 +1381,43 @@ export const CARD_POOL: CardDefinition[] = [
     text: "(T: Add G.)",
     imagePath: '/assets/cards/forest.webp',
     producesMana: 'G'
+  }, {
+    id: 'forge-of-heroes',
+    name: 'Forge of Heroes',
+    type: 'land',
+    costLabel: '-',
+    text: '{T}: Add {C}. \n' +
+      '{T}: Choose target commander that entered this turn. Put a +1/+1 counter on it if it’s a creature ' +
+      'and a loyalty counter on it if it’s a planeswalker.',
+    imagePath: '/assets/cards/forge-of-heroes.webp',
+    producesMana: 'C',
+    // The "loyalty counter if it's a planeswalker" half of the second
+    // ability can never actually apply - this engine has no planeswalker
+    // CardType at all, and only a creature can ever be a commanderDefId - so
+    // putCounterOnTargetCommanderEnteredThisTurn always puts a +1/+1 counter,
+    // no branching needed. This is a real activated ability (cost.tap),
+    // mutually exclusive with the plain {T}: Add {C} mana ability above
+    // since both share the same tapped flag - activating one uses up the
+    // land's tap for the turn, just like real Magic.
+    abilities: [
+      {
+        id: 'counter-commander-entered-this-turn',
+        label: 'Put a counter on target commander that entered this turn',
+        cost: { tap: true },
+        effects: [{ type: 'putCounterOnTargetCommanderEnteredThisTurn', counterLabel: '+1/+1', counterAmount: 1 }],
+        effectText: 'Choose target commander that entered this turn. Put a +1/+1 counter on it.',
+      },
+    ],
+  }, {
+    id: 'fortified-village',
+    name: 'Fortified Village',
+    type: 'land',
+    costLabel: '-',
+    text: 'As this land enters, you may reveal a Forest or Plains card from your hand. If you don’t, ' +
+      'this land enters tapped. \n{T}: Add {G} or {W}.',
+    imagePath: '/assets/cards/fortified-village.webp',
+    producesMana: ['G', 'W'],
+    entersTappedUnlessRevealLandNames: ['Forest', 'Plains'],
   }, {
     id: "freya-crescent",
     name: "Freya Crescent",
@@ -3917,6 +3987,27 @@ export const CARD_POOL: CardDefinition[] = [
   },
   },
   {
+    id: 'summon-ixion',
+    name: 'Summon: Ixion',
+    costLabel: '{2}{W}',
+    type: 'creature',
+    subtype: 'Enchantment Creature Saga Unicorn',
+    power: 3,
+    toughness: 3,
+    text: '(As this Saga enters and after your draw step, add a lore counter. Sacrifice after III.)\n' +
+      'I — Aerospark — Exile target creature an opponent controls until this Saga leaves the battlefield.\n' +
+      'II, III — Put a +1/+1 counter on each of up to two target creatures you control. You gain 2 life.\n' +
+      'First strike',
+    imagePath: '/assets/cards/summon-ixion.webp',
+    saga: {
+      chapters: [
+        { numbers: [1], effects: [{ type: 'exileTargetOpponentCreatureUntilSourceLeaves' }] },
+        { numbers: [2, 3], effects: [{ type: 'gainLife', amount: 2 }, { type: 'putCounterOnUpToTwoOwnCreatures', counterLabel: '+1/+1', counterAmount: 1 }] },
+      ],
+      sacrificeAfterFinalChapter: true,
+    },
+  },
+  {
   id: 'summon-knights-of-round',
   name: 'Summon: Knights of Round',
   costLabel: '{6}{W}{W}',
@@ -3967,6 +4058,40 @@ export const CARD_POOL: CardDefinition[] = [
     chapters: [{ numbers: [1], effects: [] }, { numbers: [2, 3], effects: [] }],
     sacrificeAfterFinalChapter: true,
   },
+  },
+  {
+    id: 'summon-magus-sisters',
+    name: 'Summon: Magus Sisters',
+    costLabel: '{4}{G}',
+    type: 'creature',
+    subtype: 'Enchantment Creature Saga Faerie',
+    power: 5,
+    toughness: 5,
+    text: '(As this Saga enters and after your draw step, add a lore counter. Sacrifice after III.)\n' +
+      'I, II, III — Choose one at random —\n' +
+      '• Combine Powers! — Put three +1/+1 counters on target creature.\n' +
+      '• Defense! — Put a shield counter on target creature. You gain 3 life. \n' +
+      '• Fight! — This creature fights up to one target creature an opponent controls.\n' +
+      'Haste',
+    imagePath: '/assets/cards/summon-magus-sisters.webp',
+    saga: {
+      chapters: [
+        {
+          numbers: [1, 2, 3],
+          effects: [
+            {
+              type: 'chooseOneAtRandom',
+              options: [
+                [{ type: 'putCounterOnTarget', counterLabel: '+1/+1', counterAmount: 3 }],
+                [{ type: 'putCounterOnTarget', counterLabel: 'Shield', counterAmount: 1 }, { type: 'gainLife', amount: 3 }],
+                [{ type: 'selfFightTarget', optional: true }],
+              ],
+            },
+          ],
+        },
+      ],
+      sacrificeAfterFinalChapter: true,
+    },
   },
   {
   id: 'summon-primal-garuda',
@@ -4064,6 +4189,51 @@ export const CARD_POOL: CardDefinition[] = [
     ],
     sacrificeAfterFinalChapter: true,
   },
+  },
+  {
+    id: 'summon-valefor',
+    name: 'Summon: Valefor',
+    costLabel: '{4}{U}',
+    type: 'creature',
+    subtype: 'Enchantment Creature Saga Drake',
+    power: 5,
+    toughness: 4,
+    text: '(As this Saga enters and after your draw step, add a lore counter. Sacrifice after IV.)\n' +
+      'I — Sonic Wings — Each opponent chooses a creature with the greatest mana value among creatures they control. ' +
+      'Return those creatures to their owners’ hands. \n' +
+      'II, III, IV — Tap up to one target creature and put a stun counter on it.\n' +
+      'Flying',
+    imagePath: '/assets/cards/summon-valefor.webp',
+    saga: {
+      chapters: [
+        { numbers: [1], effects: [{ type: 'bounceOpponentCreaturesWithGreatestManaValue' }] },
+        { numbers: [2, 3, 4], effects: [{ type: 'tapUpToOneTargetCreatureAndStun' }] },
+      ],
+      sacrificeAfterFinalChapter: true,
+    },
+  },
+  {
+    id: 'summon-yojimbo',
+    name: 'Summon: Yojimbo',
+    costLabel: '{3}{W}',
+    type: 'creature',
+    subtype: 'Enchantment Creature Saga Samurai',
+    power: 5,
+    toughness: 5,
+    text: '(As this Saga enters and after your draw step, add a lore counter. Sacrifice after IV.)\n' +
+      'I — Exile target artifact, enchantment, or tapped creature an opponent controls.\n' +
+      'II, III — Until your next turn, creatures can’t attack you unless their controller pays {2} for each of those creatures.\n' +
+      'IV — Create X Treasure tokens, where X is the number of opponents who control a creature with power 4 or greater.\n' +
+      'Vigilance',
+    imagePath: '/assets/cards/summon-yojimbo.webp',
+    saga: {
+      chapters: [
+        { numbers: [1], effects: [{ type: 'exileTargetPermanent', targetFilter: 'artifactEnchantmentOrTappedCreature', opponentControlledOnly: true }] },
+        { numbers: [2, 3], effects: [{ type: 'grantAttacksCostUntilNextTurn', amount: 2 }] },
+        { numbers: [4], effects: [{ type: 'createTokenIfOpponentControlsCreatureWithPowerAtLeast', tokenId: 'token-treasure', minPower: 4, count: 1 }] },
+      ],
+      sacrificeAfterFinalChapter: true,
+    },
   },
   {
   id: 'suplex',
@@ -5111,6 +5281,23 @@ export const CARD_POOL: CardDefinition[] = [
   onOwnEndStep: [{ type: 'exileThenReturnTargetOwnCreature' }, { type: 'queueExtraEndStepIfFirstEndStepOfTurn' }],
   },
   {
+    id: 'yuna-grand-summoner',
+    name: 'Yuna, Grand Summoner',
+    costLabel: '{1}{G}{W}{U}',
+    type: 'creature',
+    subtype: 'Legendary Creature Human Cleric',
+    power: 1,
+    toughness: 5,
+    text: 'Grand Summon — {T}: Add one mana of any color. When you next cast a creature spell this turn, ' +
+      'that creature enters with two additional +1/+1 counters on it.\n' +
+      'Whenever another permanent you control is put into a graveyard from the battlefield, ' +
+      'if it had one or more counters on it, you may put that number of +1/+1 counters on target creature.',
+    imagePath: '/assets/cards/yuna-grand-summoner.webp',
+    producesMana: 'any',
+    onTapForManaEffects: [{ type: 'setPendingNextCreatureSpellBonus', counterLabel: '+1/+1', counterAmount: 2 }],
+    onOtherPermanentDeathTransferCounters: true,
+  },
+  {
   id: 'yuna-hope-of-spira',
   name: 'Yuna, Hope of Spira',
   costLabel: '{3}{G}{W}',
@@ -5129,6 +5316,34 @@ export const CARD_POOL: CardDefinition[] = [
   // permanent), neither of which matches "an enchantment card" specifically,
   // and finality counters aren't mechanically implemented anywhere in this
   // engine yet either (currently just flavor text on several cards).
+  },
+  {
+    id: 'yuna-s-decision',
+    name: 'Yuna’s Decision',
+    costLabel: '{3}{G}',
+    type: 'sorcery',
+    text: 'Choose one —\n' +
+      '• Continue the Pilgrimage — Sacrifice a creature. If you do, draw a card, then you may put a creature card and/or a land card from your hand onto the battlefield. \n' +
+      '• Find Another Way — Return one or two target permanent cards from your graveyard to your hand.',
+    imagePath: '/assets/cards/yuna-s-decision.webp',
+    chooseModes: [
+      {
+        label: 'Continue the Pilgrimage — Sacrifice a creature. If you do, draw a card, then you may put a creature card and/or a land card from your hand onto the battlefield.',
+        effects: [{ type: 'sacrificeOwnCreatureThenDraw', thenPutCreatureAndOrLandFromHand: true }],
+      },
+      { label: 'Find Another Way — Return one or two target permanent cards from your graveyard to your hand.', effects: [{ type: 'returnUpToTwoTargetPermanentsFromGraveyardToHand' }] },
+    ],
+  },
+  {
+    id: 'yuna-s-whistle',
+    name: 'Yuna’s Whistle',
+    costLabel: '{1}{G}{G}',
+    type: 'instant',
+    text: 'Reveal cards from the top of your library until you reveal a creature card. Put that card into your hand ' +
+      'and the rest on the bottom of your library in a random order. When you reveal a creature card this way, ' +
+      'put X +1/+1 counters on target creature you control, where X is the mana value of that card.',
+    imagePath: '/assets/cards/yuna-s-whistle.webp',
+    onCast: [{ type: 'revealUntilCreatureThenPutCountersEqualToManaValue' }],
   },
   {
   id: 'zack-fair',

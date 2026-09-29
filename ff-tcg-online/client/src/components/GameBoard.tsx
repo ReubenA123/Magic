@@ -487,6 +487,8 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     state.pendingTarget && !state.pendingWardPayment && (state.pendingTarget.controllerId === yourPlayerId || soloControl) ? state.pendingTarget : null;
   const pendingTargetSourceName = pendingTargetForYou ? getCardDefinition(findCard(state, pendingTargetForYou.sourceInstanceId)?.card.defId ?? '')?.name ?? 'Ability' : '';
   const pendingSacrificeForYou = state.pendingSacrifice && (state.pendingSacrifice.remainingPlayerIds[0] === yourPlayerId || soloControl) ? state.pendingSacrifice : null;
+  const pendingCounterTransfer = state.pendingCounterTransferQueue[0];
+  const pendingCounterTransferForYou = pendingCounterTransfer && (pendingCounterTransfer.controllerId === yourPlayerId || soloControl) ? pendingCounterTransfer : null;
 
   const [openPanelId, setOpenPanelId] = useState<string | null>(null);
   // Purely cosmetic: which card within an equipment/creature battlefield
@@ -1014,6 +1016,16 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   function isLegalPendingTarget(card: CardInstance, ownerId: string): boolean {
     if (!pendingTargetForYou) return false;
     return isLegalPendingTargetShared(state, pendingTargetForYou, card, ownerId);
+  }
+
+  /** Is this permanent a legal choice for Yuna, Grand Summoner's queued
+   * "put N +1/+1 counters on target creature" prompt? A separate mechanism
+   * from pendingTarget entirely (see GameState.pendingCounterTransferQueue's
+   * own comment) - any creature, either player's, same as the real card's
+   * unrestricted "target creature." */
+  function isLegalCounterTransferTarget(card: CardInstance): boolean {
+    if (!pendingCounterTransferForYou) return false;
+    return getCardDefinition(card.defId).type === 'creature';
   }
 
   /** Is this permanent a legal target for the Equip/Attach button's pending
@@ -1696,13 +1708,21 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     const acceptsAttackerRemoval = isDeclaringAttackers && isAttackingSide && canControl;
     const acceptsBlockerRemoval = isDeclaringBlockers && !isAttackingSide && canControl;
     const isLegalTarget = isLegalPendingTarget(c, ownerId);
+    const isCounterTransferTarget = isLegalCounterTransferTarget(c);
     const isAttachTarget = isLegalAttachTarget(c, ownerId);
     const isSacrificeChoice = isLegalSacrifice(c, ownerId);
     const isSacrificeCostChoice = isLegalSacrificeCostChoice(c, ownerId);
     const isCrewChoice = isLegalCrewChoice(c, ownerId);
     const isCrewSelected = !!pendingCrew?.selected.includes(c.instanceId);
     const selected =
-      pendingBlocker === c.instanceId || multiSelected.has(c.instanceId) || isLegalTarget || isAttachTarget || isSacrificeChoice || isSacrificeCostChoice || isCrewSelected;
+      pendingBlocker === c.instanceId ||
+      multiSelected.has(c.instanceId) ||
+      isLegalTarget ||
+      isCounterTransferTarget ||
+      isAttachTarget ||
+      isSacrificeChoice ||
+      isSacrificeCostChoice ||
+      isCrewSelected;
 
     // Attached Equipment/Auras stack literally UNDERNEATH the creature they're
     // attached to - the exact same diagonal peek-offset technique as several
@@ -1771,6 +1791,8 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                 );
               } else if (isLegalTarget) {
                 onAction({ type: 'CHOOSE_TARGET', targetInstanceId: c.instanceId });
+              } else if (isCounterTransferTarget) {
+                onAction({ type: 'RESOLVE_COUNTER_TRANSFER', targetInstanceId: c.instanceId }, pendingCounterTransferForYou!.controllerId);
               } else if (isAttachTarget) {
                 onAction({ type: 'ATTACH_CARD', instanceId: pendingAttach!.instanceId, targetInstanceId: c.instanceId }, pendingAttach!.ownerId);
                 setPendingAttach(null);
@@ -2735,6 +2757,20 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                                   ? `Choose a creature attacking you for ${pendingTargetSourceName} to put a Stun counter on.`
                                   : effect.type === 'proliferate'
                                   ? `Choose a permanent with a counter on it to proliferate, or Skip to stop.`
+                                  : effect.type === 'exileTargetOpponentCreatureUntilSourceLeaves'
+                                  ? `Choose an opponent's creature for ${pendingTargetSourceName} to exile until it leaves the battlefield.`
+                                  : effect.type === 'tapUpToOneTargetCreatureAndStun'
+                                  ? `Choose up to one creature for ${pendingTargetSourceName}'s ability to tap and put a Stun counter on (either player's) - or Skip.`
+                                  : effect.type === 'putCounterOnUpToTwoOwnCreatures'
+                                  ? `Choose one or two creatures you control for ${pendingTargetSourceName}'s ability${pendingTargetForYou.firstInstanceId ? ' - or Skip to stop at one.' : '.'}`
+                                  : effect.type === 'returnUpToTwoTargetPermanentsFromGraveyardToHand'
+                                  ? `Choose one or two permanent cards in your graveyard to return to hand${pendingTargetForYou.firstInstanceId ? ' - or Skip to stop at one.' : '.'}`
+                                  : effect.type === 'sacrificeOwnCreatureThenDraw'
+                                  ? `Choose a creature you control to sacrifice.`
+                                  : effect.type === 'revealUntilCreatureThenPutCountersEqualToManaValue'
+                                  ? `Choose a creature you control for ${pendingTargetSourceName}'s ability to put +1/+1 counters on.`
+                                  : effect.type === 'putCounterOnTargetCommanderEnteredThisTurn'
+                                  ? `Choose a commander that entered the battlefield this turn (either player's) for ${pendingTargetSourceName}'s ability.`
                                   : effect.targetFilter === 'artifactOrEnchantment'
                                   ? `Choose an artifact or enchantment for ${pendingTargetSourceName}'s ability (either player's).`
                                   : effect.targetFilter === 'anyPermanent'
@@ -2881,6 +2917,36 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
             </div>
           );
         })()}
+
+      {state.pendingAttackTaxPayment &&
+        (state.pendingAttackTaxPayment.controllerId === yourPlayerId || soloControl) &&
+        (() => {
+          const pending = state.pendingAttackTaxPayment;
+          return (
+            <div className="pending-target-banner">
+              <span>
+                Creatures can't attack unless you pay {`{${pending.totalGeneric}}`} total for {pending.instanceIds.length} attacker(s).
+              </span>
+              <button className="opponent-view-exit-button" onClick={() => onAction({ type: 'RESOLVE_ATTACK_TAX_PAYMENT', pay: true }, pending.controllerId)}>
+                Pay {`{${pending.totalGeneric}}`}
+              </button>
+              <button className="opponent-view-exit-button" onClick={() => onAction({ type: 'RESOLVE_ATTACK_TAX_PAYMENT', pay: false }, pending.controllerId)}>
+                Decline (No Attackers)
+              </button>
+            </div>
+          );
+        })()}
+
+      {pendingCounterTransferForYou && (
+        <div className="pending-target-banner">
+          <span>
+            {pendingCounterTransferForYou.sourceName}: you may put {pendingCounterTransferForYou.amount} +1/+1 counter(s) on target creature.
+          </span>
+          <button className="opponent-view-exit-button" onClick={() => onAction({ type: 'RESOLVE_COUNTER_TRANSFER', targetInstanceId: null }, pendingCounterTransferForYou.controllerId)}>
+            Skip
+          </button>
+        </div>
+      )}
 
       {state.pendingOptionalPayLife &&
         (state.pendingOptionalPayLife.controllerId === yourPlayerId || soloControl) &&
@@ -3639,6 +3705,44 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
               onSkip={() => onAction({ type: 'RESOLVE_PUT_LAND_FROM_HAND', instanceId: null }, pending.controllerId)}
               title="Put a land onto the battlefield?"
               prompt="You may put a land card from your hand onto the battlefield."
+            />
+          );
+        })()}
+
+      {state.pendingPutCreatureAndOrLandFromHand &&
+        (() => {
+          const pending = state.pendingPutCreatureAndOrLandFromHand;
+          const controller = state.players.find((p) => p.id === pending.controllerId)!;
+          const eligible = controller.zones.hand.filter((c) => getCardDefinition(c.defId).type === pending.stage);
+          return (
+            <OptionalBounceModal
+              sourceName="Yuna’s Decision"
+              cards={eligible.map((c) => ({ definition: getCardDefinition(c.defId), instance: c }))}
+              onChoose={(instanceId) => onAction({ type: 'RESOLVE_PUT_CREATURE_OR_LAND_FROM_HAND', instanceId }, pending.controllerId)}
+              onSkip={() => onAction({ type: 'RESOLVE_PUT_CREATURE_OR_LAND_FROM_HAND', instanceId: null }, pending.controllerId)}
+              title={`Put a ${pending.stage} onto the battlefield?`}
+              prompt={`You may put a ${pending.stage} card from your hand onto the battlefield.`}
+              emptyText={`No ${pending.stage} card in hand.`}
+            />
+          );
+        })()}
+
+      {state.pendingRevealLandTypeFromHand &&
+        (() => {
+          const pending = state.pendingRevealLandTypeFromHand;
+          const sourceFound = findCard(state, pending.sourceInstanceId);
+          const sourceName = sourceFound ? getCardDefinition(sourceFound.card.defId).name : 'This land';
+          const controller = state.players.find((p) => p.id === pending.controllerId)!;
+          const eligible = controller.zones.hand.filter((c) => pending.landNames.includes(getCardDefinition(c.defId).name));
+          return (
+            <OptionalBounceModal
+              sourceName={sourceName}
+              cards={eligible.map((c) => ({ definition: getCardDefinition(c.defId), instance: c }))}
+              onChoose={(instanceId) => onAction({ type: 'RESOLVE_REVEAL_LAND_TYPE_FROM_HAND', instanceId }, pending.controllerId)}
+              onSkip={() => onAction({ type: 'RESOLVE_REVEAL_LAND_TYPE_FROM_HAND', instanceId: null }, pending.controllerId)}
+              title="Reveal a card to enter untapped?"
+              prompt={`You may reveal a ${pending.landNames.join(' or ')} card from your hand. If you don't, ${sourceName} enters tapped.`}
+              emptyText={`No ${pending.landNames.join(' or ')} card in hand - ${sourceName} enters tapped.`}
             />
           );
         })()}

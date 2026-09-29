@@ -16,7 +16,8 @@
 import { CardDefinition } from '../types';
 
 export const CARD_POOL: CardDefinition[] = [
-  { id: 'a-realm-reborn',
+  {
+    id: 'a-realm-reborn',
     name: 'A Realm Reborn',
     type: 'enchantment',
     costLabel: '{4}{G}{G}',
@@ -171,6 +172,15 @@ export const CARD_POOL: CardDefinition[] = [
     landfall: { temporaryBuff: { power: 1, toughness: 0 } },
   },
   {
+    id: 'an-offer-you-can-t-refuse',
+    name: 'An Offer You Can\u2019t Refuse',
+    type: 'instant',
+    costLabel: '{U}',
+    text: 'Counter target noncreature spell. Its controller creates two Treasure tokens. (They\u2019re artifacts with “{T}, Sacrifice this token: Add one mana of any color.”)',
+    imagePath: '/assets/cards/an-offer-you-can-t-refuse.webp'
+
+  },
+  {
     id: 'ancient-adamantoise',
     name: 'Ancient Adamantoise',
     type: 'creature',
@@ -256,18 +266,18 @@ export const CARD_POOL: CardDefinition[] = [
     imagePath: '/assets/cards/aurons-inspiration.webp',
   },
   {
-    id:'auron-venerated-guardian',
-    name:'Auron, Venerated Guardian',
-    type:'creature',
+    id: 'auron-venerated-guardian',
+    name: 'Auron, Venerated Guardian',
+    type: 'creature',
     subtype: 'Legendary Creature Human Spirit Samurai',
     costLabel: '{3}{W}',
     power: 2,
     toughness: 5,
-    text:'Vigilance \n' +
-    'Shooting Star — Whenever Auron attacks, put a +1/+1 counter on it. When you do, ' +
-    'exile target creature defending player controls with power less than Auron\u2019s ' +
-    'power until Auron leaves the battlefield.',
-    imagePath:'/assets/cards/auron-venerated-guardian.webp',
+    text: 'Vigilance \n' +
+      'Shooting Star — Whenever Auron attacks, put a +1/+1 counter on it. When you do, ' +
+      'exile target creature defending player controls with power less than Auron\u2019s ' +
+      'power until Auron leaves the battlefield.',
+    imagePath: '/assets/cards/auron-venerated-guardian.webp',
     onAttack: [
       { type: 'putCounterOnSelf', counterLabel: '+1/+1', counterAmount: 1 },
       { type: 'exileTargetCreatureWithLessPowerUntilSourceLeaves' },
@@ -1340,7 +1350,65 @@ export const CARD_POOL: CardDefinition[] = [
     // that dynamically copies another card's characteristics (with modified
     // text), which createToken (fixed pre-authored tokenIds only) can't do.
     imagePath: '/assets/cards/firion-wild-rose-warrior.webp'
-  }, {
+  }, 
+  {
+    id:'flooded-grove',
+    name:'Flooded Grove',
+    type: 'land',
+    costLabel: '-',
+    text:'{T}: Add {C}.\n' +
+    '{G/U}, {T}: Add {G}{G}, {G}{U}, or {U}{U}.',
+    imagePath:'/assets/cards/flooded-grove.webp',
+    producesMana: 'C',
+    // The filter ability ({G/U}, T: Add two mana in one of three color
+    // combos) is deferred, same reasoning as Starting Town's own deferred
+    // alternate mana ability - parseCostLabel has no concept of a hybrid
+    // mana symbol like {G/U} at all (it would just be silently ignored, same
+    // as any other unrecognized symbol), and "add TWO mana in a chosen
+    // combination" doesn't fit producesMana's model either (that always
+    // produces exactly one mana of a chosen color, never a pair). Both would
+    // need real new infrastructure, not just a new CardDefinition field.
+  },
+  {
+    id:'forge-of-heroes',
+    name: 'Forge of Heroes',
+    type: 'land',
+    costLabel: '-',
+    text:'{T}: Add {C}. \n' +
+    '{T}: Choose target commander that entered this turn. Put a +1/+1 counter on it if it\u2019s a creature ' +
+    'and a loyalty counter on it if it\u2019s a planeswalker.',
+    imagePath:'/assets/cards/forge-of-heroes.webp',
+    producesMana: 'C',
+    // The "loyalty counter if it's a planeswalker" half of the second
+    // ability can never actually apply - this engine has no planeswalker
+    // CardType at all, and only a creature can ever be a commanderDefId - so
+    // putCounterOnTargetCommanderEnteredThisTurn always puts a +1/+1 counter,
+    // no branching needed. This is a real activated ability (cost.tap),
+    // mutually exclusive with the plain {T}: Add {C} mana ability above
+    // since both share the same tapped flag - activating one uses up the
+    // land's tap for the turn, just like real Magic.
+    abilities: [
+      {
+        id: 'counter-commander-entered-this-turn',
+        label: 'Put a counter on target commander that entered this turn',
+        cost: { tap: true },
+        effects: [{ type: 'putCounterOnTargetCommanderEnteredThisTurn', counterLabel: '+1/+1', counterAmount: 1 }],
+        effectText: 'Choose target commander that entered this turn. Put a +1/+1 counter on it.',
+      },
+    ],
+  },
+  {
+    id:'fortified-village',
+    name:'Fortified Village',
+    type:'land',
+    costLabel: '-',
+    text:'As this land enters, you may reveal a Forest or Plains card from your hand. If you don\u2019t, ' +
+    'this land enters tapped. \n{T}: Add {G} or {W}.',
+    imagePath:'/assets/cards/fortified-village.webp',
+    producesMana: ['G', 'W'],
+    entersTappedUnlessRevealLandNames: ['Forest', 'Plains'],
+  },
+  {
     id: "forest",
     name: "Forest",
     type: "land",
@@ -1348,7 +1416,8 @@ export const CARD_POOL: CardDefinition[] = [
     text: "(T: Add G.)",
     imagePath: '/assets/cards/forest.webp',
     producesMana: 'G'
-  }, {
+  }, 
+  {
     id: "freya-crescent",
     name: "Freya Crescent",
     type: "creature",
@@ -3635,1014 +3704,1114 @@ export const CARD_POOL: CardDefinition[] = [
     // differently-costed mana option on the same land.
   },
   {
-  id: 'stiltzkin-moogle-merchant',
-  name: 'Stiltzkin, Moogle Merchant',
-  costLabel: '{W}',
-  type: 'creature',
-  subtype: 'Legendary Creature Moogle',
-  power: 1,
-  toughness: 2,
-  text: 'Lifelink \n' +
-  '2, Tap: Target opponent gains control of another target permanent you control. If they do, you draw a card.',
-  imagePath:'/assets/cards/stiltzkin-moogle-merchant.webp',
-  abilities: [
-    {
-      id: 'stiltzkin-moogle-merchant-giveaway',
-      label: 'Give Away',
-      cost: { manaLabel: '{2}', tap: true },
-      effectText: 'Target opponent gains control of another target permanent you control. If they do, you draw a card.',
-      effects: [{ type: 'giveControlOfAnotherOwnPermanentToOpponent', drawCard: true }],
+    id: 'stiltzkin-moogle-merchant',
+    name: 'Stiltzkin, Moogle Merchant',
+    costLabel: '{W}',
+    type: 'creature',
+    subtype: 'Legendary Creature Moogle',
+    power: 1,
+    toughness: 2,
+    text: 'Lifelink \n' +
+      '2, Tap: Target opponent gains control of another target permanent you control. If they do, you draw a card.',
+    imagePath: '/assets/cards/stiltzkin-moogle-merchant.webp',
+    abilities: [
+      {
+        id: 'stiltzkin-moogle-merchant-giveaway',
+        label: 'Give Away',
+        cost: { manaLabel: '{2}', tap: true },
+        effectText: 'Target opponent gains control of another target permanent you control. If they do, you draw a card.',
+        effects: [{ type: 'giveControlOfAnotherOwnPermanentToOpponent', drawCard: true }],
+      },
+    ],
+  },
+  {
+    id: 'stolen-uniform',
+    name: 'Stolen Uniform',
+    costLabel: '{U}',
+    type: 'instant',
+    text: 'Choose target creature you control and target Equipment. Gain control of that Equipment until end of turn. ' +
+      'Attach it to the chosen creature. When you lose control of that Equipment this turn, if it\u2019s attached to a creature you control, unattach it.',
+    imagePath: '/assets/cards/stolen-uniform.webp',
+    onCast: [{ type: 'gainControlOfTargetEquipmentAndAttach' }],
+    // The delayed "when you lose control of that Equipment this turn, if
+    // it's attached to a creature you control, unattach it" clause is still
+    // deferred - the core control-change/attach is wired, but nothing
+    // detaches it again once temporaryControlUntilEndOfTurn reverts at
+    // cleanup, so it may remain attached to the borrower's creature.
+  },
+  {
+    id: 'stuck-in-summoner-s-sanctum',
+    name: 'Stuck in Summoner\u2019s Sanctum',
+    costLabel: '{2}{U}',
+    type: 'enchantment',
+    subtype: 'Aura',
+    text: 'Flash \n' +
+      'Enchant artifact or creature \n' +
+      'When this Aura enters, tap enchanted permanent. \n' +
+      'Enchanted permanent doesn\u2019t untap during its controller\u2019s untap step and its activated abilities can\u2019t be activated.',
+    imagePath: '/assets/cards/stuck-in-summoner-s-sanctum.webp',
+    // Was wired via onCast, which castCard never reads for a permanent type
+    // (creature/artifact/enchantment) - only onEnter is, so this Aura's
+    // attach effect silently never fired at all. Fixed to onEnter.
+    onEnter: [{ type: 'attachSelfToTarget', allowAnyController: true, targetTypeFilter: 'artifactOrCreature', tapTarget: true }],
+    attachedPreventsUntap: true,
+    attachedPreventsAbilities: true,
+  },
+  {
+    id: 'summon-anima',
+    name: 'Summon: Anima',
+    costLabel: '{4}{B}{B}',
+    type: 'creature',
+    subtype: 'Enchantment Creature Saga Horror',
+    power: 4,
+    toughness: 4,
+    text: '(As this Saga enters and after your draw step, add a lore counter. Sacrifice after IV.) \n' +
+      'I, II, III — Pain — You draw a card and you lose 1 life. \n' +
+      'IV — Oblivion — Each opponent sacrifices a creature of their choice and loses 3 life.\n' +
+      'Menace',
+    saga: {
+      chapters: [
+        { numbers: [1, 2, 3], effects: [{ type: 'drawCards', amount: 1 }, { type: 'loseLife', amount: 1 }] },
+        { numbers: [4], effects: [{ type: 'sacrificeCreature', target: 'opponent' }, { type: 'eachOpponentLosesLife', amount: 3 }] },
+      ],
+      sacrificeAfterFinalChapter: true,
     },
-  ],
+    imagePath: '/assets/cards/summon-anima.webp'
   },
   {
-  id: 'stolen-uniform',
-  name: 'Stolen Uniform',
-  costLabel: '{U}',
-  type: 'instant',
-  text: 'Choose target creature you control and target Equipment. Gain control of that Equipment until end of turn. ' +
-  'Attach it to the chosen creature. When you lose control of that Equipment this turn, if it\u2019s attached to a creature you control, unattach it.',
-  imagePath: '/assets/cards/stolen-uniform.webp',
-  onCast: [{ type: 'gainControlOfTargetEquipmentAndAttach' }],
-  // The delayed "when you lose control of that Equipment this turn, if
-  // it's attached to a creature you control, unattach it" clause is still
-  // deferred - the core control-change/attach is wired, but nothing
-  // detaches it again once temporaryControlUntilEndOfTurn reverts at
-  // cleanup, so it may remain attached to the borrower's creature.
+    id: 'summon-bahamut',
+    name: 'Summon: Bahamut',
+    costLabel: '{9}',
+    type: 'creature',
+    subtype: 'Enchantment Creature Saga Dragon',
+    power: 9,
+    toughness: 9,
+    text: '(As this Saga enters and after your draw step, add a lore counter. Sacrifice after IV.) \n' +
+      'I, II — Destroy up to one target nonland permanent. \n' +
+      'III — Draw two cards. \n' +
+      'IV — Mega Flare — This creature deals damage equal to the total mana value of other permanents you control to each opponent.' +
+      'Flying',
+    // Chapter IV's "damage equal to the total mana value of other permanents
+    // you control" is deferred - a one-off calculation with no reusable
+    // mechanism behind it. The chapter number itself is still tracked (with
+    // no effects attached) purely so the 4th lore counter is the one that
+    // triggers the "Sacrifice after IV" cleanup instead of the 3rd.
+    saga: {
+      chapters: [
+        { numbers: [1, 2], effects: [{ type: 'destroyTarget', targetFilter: 'nonlandPermanent', optional: true }] },
+        { numbers: [3], effects: [{ type: 'drawCards', amount: 2 }] },
+        { numbers: [4], effects: [] },
+      ],
+      sacrificeAfterFinalChapter: true,
+    },
+    imagePath: '/assets/cards/summon-bahamut.webp'
   },
   {
-  id: 'stuck-in-summoner-s-sanctum',
-  name: 'Stuck in Summoner\u2019s Sanctum',
-  costLabel: '{2}{U}',
-  type: 'enchantment',
-  subtype: 'Aura',
-  text: 'Flash \n' +
-  'Enchant artifact or creature \n' +
-  'When this Aura enters, tap enchanted permanent. \n' +
-  'Enchanted permanent doesn\u2019t untap during its controller\u2019s untap step and its activated abilities can\u2019t be activated.',
-  imagePath:'/assets/cards/stuck-in-summoner-s-sanctum.webp',
-  // Was wired via onCast, which castCard never reads for a permanent type
-  // (creature/artifact/enchantment) - only onEnter is, so this Aura's
-  // attach effect silently never fired at all. Fixed to onEnter.
-  onEnter: [{ type: 'attachSelfToTarget', allowAnyController: true, targetTypeFilter: 'artifactOrCreature', tapTarget: true }],
-  attachedPreventsUntap: true,
-  attachedPreventsAbilities: true,
+    id: 'summon-brynhildr',
+    name: 'Summon: Brynhildr',
+    costLabel: '{1}{R}',
+    type: 'creature',
+    subtype: 'Enchantment Creature Saga Knight',
+    power: 2,
+    toughness: 1,
+    text: '(As this Saga enters and after your draw step, add a lore counter. Sacrifice after III.) \n' +
+      'I — Chain — Exile the top card of your library. During any turn you put a lore counter on this Saga, you may play that card. \n' +
+      'II, III — Gestalt Mode — When you next cast a creature spell this turn, it gains haste until end of turn.',
+    imagePath: '/assets/cards/summon-brynhildr.webp',
+    // Chapter I is still deferred - "exile the top card, then during any
+    // turn you put a lore counter on this you may play it" needs a
+    // persistent-condition impulse play window tied to a specific
+    // permanent's ongoing lore-counter triggers, which doesn't exist yet.
+    saga: {
+      chapters: [
+        { numbers: [1], effects: [] },
+        { numbers: [2, 3], effects: [{ type: 'setPendingNextCreatureSpellBonus', grantsHaste: true }] },
+      ],
+      sacrificeAfterFinalChapter: true,
+    },
   },
   {
-  id: 'summon-anima',
-  name: 'Summon: Anima',
-  costLabel: '{4}{B}{B}',
-  type: 'creature',
-  subtype: 'Enchantment Creature Saga Horror',
-  power: 4,
-  toughness: 4,
-  text: '(As this Saga enters and after your draw step, add a lore counter. Sacrifice after IV.) \n' +
-  'I, II, III — Pain — You draw a card and you lose 1 life. \n' +
-  'IV — Oblivion — Each opponent sacrifices a creature of their choice and loses 3 life.\n' +
-  'Menace',
-  saga: {
-    chapters: [
-      { numbers: [1, 2, 3], effects: [{ type: 'drawCards', amount: 1 }, { type: 'loseLife', amount: 1 }] },
-      { numbers: [4], effects: [{ type: 'sacrificeCreature', target: 'opponent' }, { type: 'eachOpponentLosesLife', amount: 3 }] },
+    id: 'summon-choco-mog',
+    name: 'Summon: Choco/Mog',
+    costLabel: '{2}{W}',
+    type: 'creature',
+    subtype: 'Enchantment Creature Saga Bird Moogle',
+    power: 3,
+    toughness: 3,
+    text: '(As this Saga enters and after your draw step, add a lore counter. Sacrifice after IV.) \n' +
+      'I, II, III, IV — Stampede! — Other creatures you control get +1/+0 until end of turn.',
+    saga: {
+      chapters: [{ numbers: [1, 2, 3, 4], effects: [{ type: 'buffOtherCreaturesYouControl', power: 1, toughness: 0 }] }],
+      sacrificeAfterFinalChapter: true,
+    },
+    imagePath: '/assets/cards/summon-choco-mog.webp'
+  },
+  {
+    id: 'summoner-s-grimoire',
+    name: 'Summoner\u2019s Grimoire',
+    costLabel: '{3}{G}',
+    type: 'artifact',
+    subtype: 'Artifact Equipment',
+    text: 'Job select \n' +
+      'Equipped creature is a Shaman in addition to its other types and has “Whenever this creature attacks, ' +
+      'you may put a creature card from your hand onto the battlefield. If that card is an enchantment card, it enters tapped and attacking.”' +
+      'Abraxas — Equip 3',
+    // The granted attack-trigger battlefield-cheat ("put a creature card
+    // from your hand onto the battlefield, entering tapped and attacking if
+    // it's an enchantment") is still deferred - "enters already attacking,
+    // joining an in-progress combat" has no supporting mechanism here.
+    onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
+    equipGrantsSubtype: 'Shaman',
+    attachesTo: 'creature',
+    equipCost: '{3}',
+    imagePath: '/assets/cards/summoner-s-grimoire.webp'
+  },
+  {
+    id: 'summon-esper-ramuh',
+    name: 'Summon: Esper Ramuh',
+    costLabel: '{2}{R}{R}',
+    type: 'creature',
+    subtype: 'Enhancement Creature Saga Wizard',
+    power: 3,
+    toughness: 3,
+    text: '(As this Saga enters and after your draw step, add a lore counter. Sacrifice after III.) \n' +
+      'I — Judgment Bolt — This creature deals damage equal to the number of noncreature, nonland cards in your graveyard to target creature an opponent controls.\n' +
+      'II, III — Wizards you control get +1/+0 until end of turn.',
+    // Chapter I's "damage equal to noncreature nonland cards in graveyard" is
+    // deferred - a one-off graveyard-count calculation with no reusable
+    // mechanism behind it.
+    saga: {
+      chapters: [{ numbers: [2, 3], effects: [{ type: 'pumpControlledSubtype', subtype: 'Wizard', power: 1, toughness: 0 }] }],
+      sacrificeAfterFinalChapter: true,
+    },
+    imagePath: '/assets/cards/summon-esper-ramuh.webp'
+  },
+  {
+    // Was '' (an empty id) - getCardDefinition('') could never find this card,
+    // and any deck containing it would break. 'summon-fat-chocobo' matches the
+    // naming convention every other Summon: X card uses.
+    id: 'summon-fat-chocobo',
+    name: 'Summon: Fat Chocobo',
+    costLabel: '{4}{G}',
+    type: 'creature',
+    subtype: 'Enchantment Creature Saga Bird',
+    power: 4,
+    toughness: 4,
+    text: '(As this Saga enters and after your draw step, add a lore counter. Sacrifice after IV.) \n' +
+      'I — Wark — Create a 2/2 green Bird creature token with “Whenever a land you control enters, this token gets +1/+0 until end of turn.”\n' +
+      'II, III, IV — Kerplunk — Creatures you control gain trample until end of turn.',
+    // Chapters II-IV grant trample to OTHER creatures you control only
+    // (buffOtherCreaturesYouControl always excludes the source) - the real
+    // card's "creatures you control" would include Fat Chocobo itself too.
+    saga: {
+      chapters: [
+        { numbers: [1], effects: [{ type: 'createToken', tokenId: 'token-bird' }] },
+        { numbers: [2, 3, 4], effects: [{ type: 'buffOtherCreaturesYouControl', grantKeyword: 'trample' }] },
+      ],
+      sacrificeAfterFinalChapter: true,
+    },
+    imagePath: '/assets/cards/summon-fat-chocobo.webp'
+  },
+  {
+    id: 'summon-fenrir',
+    name: 'Summon: Fenrir',
+    costLabel: '{2}{G}',
+    type: 'creature',
+    subtype: 'Enchanment Creature Saga Wolf',
+    power: 3,
+    toughness: 2,
+    text: 'I — Crescent Fang — Search your library for a basic land card, put it onto the battlefield tapped, then shuffle. \n' +
+      'II — Heavenward Howl — When you next cast a creature spell this turn, that creature enters with an additional +1/+1 counter on it. \n' +
+      'III — Ecliptic Growl — Draw a card if you control the creature with the greatest power or tied for the greatest power.',
+    imagePath: '/assets/cards/summon-fenrir.webp',
+    // Chapter III is still deferred - "draw a card if you control the
+    // creature with the greatest power (or tied for it)" needs a "compare my
+    // power against every creature on the battlefield" mechanism that
+    // doesn't exist yet. Still wired up for lore-counter progression and
+    // sacrifice after III (missing from the printed text here, but every
+    // other 3-chapter Saga in this set ends the same way).
+    saga: {
+      chapters: [
+        { numbers: [1], effects: [{ type: 'searchLibraryForBasicLand', toBattlefieldTapped: true }] },
+        { numbers: [2], effects: [{ type: 'setPendingNextCreatureSpellBonus', counterLabel: '+1/+1', counterAmount: 1 }] },
+        { numbers: [3], effects: [] },
+      ],
+      sacrificeAfterFinalChapter: true,
+    },
+  },
+  {
+    id: 'summon-g-f-cerberus',
+    name: 'Summon: G.F. Cerberus',
+    costLabel: '{2}{R}{R}',
+    type: 'creature',
+    subtype: 'Enchantment Creature Saga Dog',
+    power: 3,
+    toughness: 3,
+    text: '(As this Saga enters and after your draw step, add a lore counter. Sacrifice after III.) \n' +
+      'I — Surveil 1. (Look at the top card of your library. You may put it into your graveyard.) \n' +
+      'II — Double — When you next cast an instant or sorcery spell this turn, copy it. You may choose new targets for the copy. \n' +
+      'III — Triple — When you next cast an instant or sorcery spell this turn, copy it twice. You may choose new targets for the copies.',
+    // Chapters II-III's spell-copying are deferred - no spell-copy mechanism
+    // exists anywhere in this engine. Both chapter numbers are still tracked
+    // (with no effects attached) purely so the 3rd lore counter is the one
+    // that triggers the "Sacrifice after III" cleanup instead of the 1st.
+    saga: {
+      chapters: [
+        { numbers: [1], effects: [{ type: 'surveil', count: 1 }] },
+        { numbers: [2], effects: [] },
+        { numbers: [3], effects: [] },
+      ],
+      sacrificeAfterFinalChapter: true,
+    },
+    imagePath: '/assets/cards/summon-g-f-cerberus.webp'
+  },
+  {
+    id: 'summon-g-f-ifrit',
+    name: 'Summon: G.F. Ifrit',
+    costLabel: '{2}{R}',
+    type: 'creature',
+    subtype: 'Enchantment Creature Saga Demon',
+    power: 3,
+    toughness: 2,
+    text: '(As this Saga enters and after your draw step, add a lore counter. Sacrifice after IV.) \n' +
+      'I, II — You may discard a card. If you do, draw a card. \n' +
+      'III, IV — Add R.',
+    imagePath: '/assets/cards/summon-g-f-ifrit.webp',
+    saga: {
+      chapters: [
+        { numbers: [1, 2], effects: [{ type: 'discardUpToThenDrawThatMany', maxCount: 1 }] },
+        { numbers: [3, 4], effects: [{ type: 'addMana', colors: { R: 1 } }] },
+      ],
+      sacrificeAfterFinalChapter: true,
+    },
+  },
+  {
+    id: 'summon-ixion',
+    name: 'Summon: Ixion',
+    costLabel: '{2}{W}',
+    type: 'creature',
+    subtype: 'Enchantment Creature Saga Unicorn',
+    power: 3,
+    toughness: 3,
+    text: '(As this Saga enters and after your draw step, add a lore counter. Sacrifice after III.)\n' +
+      'I — Aerospark — Exile target creature an opponent controls until this Saga leaves the battlefield.\n' +
+      'II, III — Put a +1/+1 counter on each of up to two target creatures you control. You gain 2 life.\n' +
+      'First strike',
+    imagePath: '/assets/cards/summon-ixion.webp',
+    saga: {
+      chapters: [
+        { numbers: [1], effects: [{ type: 'exileTargetOpponentCreatureUntilSourceLeaves' }] },
+        { numbers: [2, 3], effects: [{ type: 'gainLife', amount: 2 }, { type: 'putCounterOnUpToTwoOwnCreatures', counterLabel: '+1/+1', counterAmount: 1 }] },
+      ],
+      sacrificeAfterFinalChapter: true,
+    },
+  },
+  {
+    id: 'summon-knights-of-round',
+    name: 'Summon: Knights of Round',
+    costLabel: '{6}{W}{W}',
+    type: 'creature',
+    subtype: 'Enchantment Creature Saga Knight',
+    power: 3,
+    toughness: 3,
+    text: '(As this Saga enters and after your draw step, add a lore counter. Sacrifice after V.) \n' +
+      'I, II, III, IV — Create three 2/2 white Knight creature tokens. \n' +
+      'V — Ultimate End — Other creatures you control get +2/+2 until end of turn. Put an indestructible counter on each of them.\n' +
+      'Indestructible',
+    imagePath: '/assets/cards/summon-knights-of-round.webp',
+    // Chapter V's "indestructible counter" is granted as an actual (temporary)
+    // indestructible keyword instead of a cosmetic counter - a counter labeled
+    // 'indestructible' wouldn't be consulted by anything that actually checks
+    // destruction (engine/combat.ts: hasKeywordEffective is), so a literal
+    // counter would be decoration only. grantTemporaryKeyword IS checked
+    // there, so this is the version that actually protects them.
+    saga: {
+      chapters: [
+        { numbers: [1, 2, 3, 4], effects: [{ type: 'createToken', tokenId: 'token-knight', count: 3 }] },
+        { numbers: [5], effects: [{ type: 'buffOtherCreaturesYouControl', power: 2, toughness: 2, grantKeyword: 'indestructible' }] },
+      ],
+      sacrificeAfterFinalChapter: true,
+    },
+  },
+  {
+    id: 'summon-leviathan',
+    name: 'Summon: Leviathan',
+    costLabel: '{4}{U}{U}',
+    type: 'creature',
+    subtype: 'Enchantment Creature Saga Leviathan',
+    power: 6,
+    toughness: 6,
+    text: '(As this Saga enters and after your draw step, add a lore counter. Sacrifice after III.) \n' +
+      'I — Return each creature that isn’t a Kraken, Leviathan, Merfolk, Octopus, or Serpent to its owner\u2019s hand. \n' +
+      'II, III — Until end of turn, whenever a Kraken, Leviathan, Merfolk, Octopus, or Serpent attacks, draw a card. \n' +
+      'Ward 2',
+    imagePath: '/assets/cards/summon-leviathan.webp',
+    wardCost: { mana: '{2}' },
+    // Both chapters' own effects are still deferred: chapter I needs a
+    // conditional "return every creature EXCEPT [subtype list]" mass bounce,
+    // and chapters II/III need a delayed "until end of turn, whenever a
+    // [subtype list] attacks, draw" granted trigger - neither mechanism
+    // exists yet. Still wired up for lore-counter progression and sacrifice
+    // after III.
+    saga: {
+      chapters: [{ numbers: [1], effects: [] }, { numbers: [2, 3], effects: [] }],
+      sacrificeAfterFinalChapter: true,
+    },
+  },
+  {
+    id: 'summon-magus-sisters',
+    name: 'Summon: Magus Sisters',
+    costLabel: '{4}{G}',
+    type: 'creature',
+    subtype: 'Enchantment Creature Saga Faerie',
+    power: 5,
+    toughness: 5,
+    text: '(As this Saga enters and after your draw step, add a lore counter. Sacrifice after III.)\n' +
+      'I, II, III — Choose one at random —\n' +
+      '• Combine Powers! — Put three +1/+1 counters on target creature.\n' +
+      '• Defense! — Put a shield counter on target creature. You gain 3 life. \n' +
+      '• Fight! — This creature fights up to one target creature an opponent controls.\n' +
+      'Haste',
+    imagePath: '/assets/cards/summon-magus-sisters.webp',
+    saga: {
+      chapters: [
+        {
+          numbers: [1, 2, 3],
+          effects: [
+            {
+              type: 'chooseOneAtRandom',
+              options: [
+                [{ type: 'putCounterOnTarget', counterLabel: '+1/+1', counterAmount: 3 }],
+                [{ type: 'putCounterOnTarget', counterLabel: 'Shield', counterAmount: 1 }, { type: 'gainLife', amount: 3 }],
+                [{ type: 'selfFightTarget', optional: true }],
+              ],
+            },
+          ],
+        },
+      ],
+      sacrificeAfterFinalChapter: true,
+    },
+  },
+  {
+    id: 'summon-primal-garuda',
+    name: 'Summon: Primal Garuda',
+    costLabel: '{3}{W}',
+    type: 'creature',
+    subtype: 'Enchantment Creature Saga Harpy',
+    power: 3,
+    toughness: 3,
+    text: '(As this Saga enters and after your draw step, add a lore counter. Sacrifice after III.) \n' +
+      'I — Aerial Blast — This creature deals 4 damage to target tapped creature an opponent controls. \n' +
+      'II, III — Slipstream — Another target creature you control gets +1/+0 and gains flying until end of turn. \n' +
+      'Flying',
+    imagePath: '/assets/cards/summon-primal-garuda.webp',
+    // Chapter I's own effect is deferred - the only existing damage-a-target
+    // effect (damageTargetCreature) allows ANY creature either player
+    // controls, with no way to restrict to "an opponent's TAPPED creature",
+    // and using it as-is would let this hit a legal target the real card
+    // couldn't. Chapters II/III match pumpAnotherControlledCreature exactly.
+    saga: {
+      chapters: [
+        { numbers: [1], effects: [] },
+        { numbers: [2, 3], effects: [{ type: 'pumpAnotherControlledCreature', power: 1, toughness: 0, grantKeyword: 'flying' }] },
+      ],
+      sacrificeAfterFinalChapter: true,
+    },
+  },
+  {
+    id: 'summon-primal-odin',
+    name: 'Summon: Primal Odin',
+    costLabel: '{4}{B}{B}',
+    type: 'creature',
+    subtype: 'Enchantment Creature Saga Knight',
+    power: 5,
+    toughness: 3,
+    text: '(As this Saga enters and after your draw step, add a lore counter. Sacrifice after III.)\n' +
+      'I — Gungnir — Destroy target creature an opponent controls. \n' +
+      'II — Zantetsuken — This creature gains “Whenever this creature deals combat damage to a player, that player loses the game.” \n' +
+      'III — Hall of Sorrow — Draw two cards. Each player loses 2 life.',
+    imagePath: '/assets/cards/summon-primal-odin.webp',
+    saga: {
+      chapters: [
+        { numbers: [1], effects: [{ type: 'destroyOpponentCreature' }] },
+        { numbers: [2], effects: [{ type: 'grantCombatDamageToPlayerCausesLoss' }] },
+        { numbers: [3], effects: [{ type: 'drawCards', amount: 2 }, { type: 'eachPlayerLosesLife', amount: 2 }] },
+      ],
+      sacrificeAfterFinalChapter: true,
+    },
+  },
+  {
+    id: 'summon-shiva',
+    name: 'Summon: Shiva',
+    costLabel: '{3}{U}{U}',
+    type: 'creature',
+    subtype: 'Enchantment Creature Saga Elemental',
+    power: 4,
+    toughness: 5,
+    text: '(As this Saga enters and after your draw step, add a lore counter. Sacrifice after III.) \n' +
+      'I, II — Heavenly Strike — Tap target creature an opponent controls. Put a stun counter on it. ' +
+      '(If a permanent with a stun counter would become untapped, remove one from it instead.) \n' +
+      'III — Diamond Dust — Draw a card for each tapped creature your opponents control.',
+    imagePath: '/assets/cards/summon-shiva.webp',
+    saga: {
+      chapters: [
+        { numbers: [1, 2], effects: [{ type: 'tapAndStun', targetController: 'opponent', targetType: 'creature' }] },
+        { numbers: [3], effects: [{ type: 'drawForTappedOpponentCreatures' }] },
+      ],
+      sacrificeAfterFinalChapter: true,
+    },
+  },
+  {
+    id: 'summon-titan',
+    name: 'Summon: Titan',
+    costLabel: '{3}{G}{G}',
+    type: 'creature',
+    subtype: 'Enchantment Creature Saga Giant',
+    power: 7,
+    toughness: 7,
+    text: '(As this Saga enters and after your draw step, add a lore counter. Sacrifice after III.) \n' +
+      'I — Mill five cards. \n' +
+      'II — Return all land cards from your graveyard to the battlefield tapped. \n' +
+      'III — Until end of turn, another target creature you control gains trample and gets +X/+X, where X is the number of lands you control.\n' +
+      'Reach, trample',
+    imagePath: '/assets/cards/summon-titan.webp',
+    // Chapter II's own effect is deferred - no mass graveyard-to-battlefield
+    // reanimation mechanism exists (only single-target reanimate). Chapter
+    // III is deferred too - PumpAnotherControlledCreatureEffect only takes a
+    // fixed power/toughness, not a dynamic X based on lands controlled.
+    // Chapter I matches millSelf exactly.
+    saga: {
+      chapters: [
+        { numbers: [1], effects: [{ type: 'millSelf', count: 5 }] },
+        { numbers: [2], effects: [] },
+        { numbers: [3], effects: [] },
+      ],
+      sacrificeAfterFinalChapter: true,
+    },
+  },
+  {
+    id: 'summon-valefor',
+    name: 'Summon: Valefor',
+    costLabel: '{4}{U}',
+    type: 'creature',
+    subtype: 'Enchantment Creature Saga Drake',
+    power: 5,
+    toughness: 4,
+    text: '(As this Saga enters and after your draw step, add a lore counter. Sacrifice after IV.)\n' +
+      'I — Sonic Wings — Each opponent chooses a creature with the greatest mana value among creatures they control. ' +
+      'Return those creatures to their owners\u2019 hands. \n' +
+      'II, III, IV — Tap up to one target creature and put a stun counter on it.\n' +
+      'Flying',
+    imagePath: '/assets/cards/summon-valefor.webp',
+    saga: {
+      chapters: [
+        { numbers: [1], effects: [{ type: 'bounceOpponentCreaturesWithGreatestManaValue' }] },
+        { numbers: [2, 3, 4], effects: [{ type: 'tapUpToOneTargetCreatureAndStun' }] },
+      ],
+      sacrificeAfterFinalChapter: true,
+    },
+  },
+  {
+    id: 'summon-yojimbo',
+    name: 'Summon: Yojimbo',
+    costLabel: '{3}{W}',
+    type: 'creature',
+    subtype: 'Enchantment Creature Saga Samurai',
+    power: 5,
+    toughness: 5,
+    text: '(As this Saga enters and after your draw step, add a lore counter. Sacrifice after IV.)\n' +
+      'I — Exile target artifact, enchantment, or tapped creature an opponent controls.\n' +
+      'II, III — Until your next turn, creatures can’t attack you unless their controller pays {2} for each of those creatures.\n' +
+      'IV — Create X Treasure tokens, where X is the number of opponents who control a creature with power 4 or greater.\n' +
+      'Vigilance',
+    imagePath: '/assets/cards/summon-yojimbo.webp',
+    saga: {
+      chapters: [
+        { numbers: [1], effects: [{ type: 'exileTargetPermanent', targetFilter: 'artifactEnchantmentOrTappedCreature', opponentControlledOnly: true }] },
+        { numbers: [2, 3], effects: [{ type: 'grantAttacksCostUntilNextTurn', amount: 2 }] },
+        { numbers: [4], effects: [{ type: 'createTokenIfOpponentControlsCreatureWithPowerAtLeast', tokenId: 'token-treasure', minPower: 4, count: 1 }] },
+      ],
+      sacrificeAfterFinalChapter: true,
+    },
+  },
+  {
+    id: 'suplex',
+    name: 'Suplex',
+    costLabel: '{1}{R}',
+    type: 'sorcery',
+    text: 'Choose one — \n' +
+      '• Suplex deals 3 damage to target creature. If that creature would die this turn, exile it instead. \n' +
+      '• Exile target artifact.',
+    imagePath: '/assets/cards/suplex.webp',
+    onCast: [
+      {
+        type: 'chooseOneMode',
+        modes: [
+          { label: 'Deal 3 damage to target creature', effects: [{ type: 'damageTargetCreature', amount: 3, exileIfDies: true }] },
+          { label: 'Exile target artifact', effects: [{ type: 'exileTargetPermanent', targetFilter: 'artifact' }] },
+        ],
+      },
     ],
-    sacrificeAfterFinalChapter: true,
-  },
-  imagePath:'/assets/cards/summon-anima.webp'
   },
   {
-  id: 'summon-bahamut',
-  name: 'Summon: Bahamut',
-  costLabel: '{9}',
-  type: 'creature',
-  subtype: 'Enchantment Creature Saga Dragon',
-  power: 9,
-  toughness: 9,
-  text: '(As this Saga enters and after your draw step, add a lore counter. Sacrifice after IV.) \n' +
-  'I, II — Destroy up to one target nonland permanent. \n' +
-  'III — Draw two cards. \n' +
-  'IV — Mega Flare — This creature deals damage equal to the total mana value of other permanents you control to each opponent.' +
-  'Flying',
-  // Chapter IV's "damage equal to the total mana value of other permanents
-  // you control" is deferred - a one-off calculation with no reusable
-  // mechanism behind it. The chapter number itself is still tracked (with
-  // no effects attached) purely so the 4th lore counter is the one that
-  // triggers the "Sacrifice after IV" cleanup instead of the 3rd.
-  saga: {
-    chapters: [
-      { numbers: [1, 2], effects: [{ type: 'destroyTarget', targetFilter: 'nonlandPermanent', optional: true }] },
-      { numbers: [3], effects: [{ type: 'drawCards', amount: 2 }] },
-      { numbers: [4], effects: [] },
+    id: 'swallowed-by-leviathan',
+    name: 'Swallowed by Leviathan',
+    costLabel: '{2}{U}',
+    type: 'instant',
+    text: 'Choose target spell. Surveil 2, then counter the chosen spell unless its controller pays 1 for each card in your graveyard. ' +
+      '(To surveil 2, look at the top two cards of your library, then put any number of them into your graveyard and the rest on top of your library in any order.)',
+    imagePath: '/assets/cards/swallowed-by-leviathan.webp',
+    // Deferred - same reason as Syncopate: this engine has no stack/priority
+    // system, so "target spell" has nothing left to point at by the time a
+    // response could be cast. Blocked on the same missing architecture, not
+    // a per-card gap.
+  },
+  {
+    id: 'swamp',
+    name: 'Swamp',
+    costLabel: '-',
+    type: 'land',
+    text: 'Tap add B',
+    imagePath: '/assets/cards/swamp.webp',
+    producesMana: 'B'
+  },
+  {
+    id: 'syncopate',
+    name: 'Syncopate',
+    costLabel: '{X}{U}',
+    type: 'instant',
+    text: 'Counter target spell unless its controller pays {X}. If that spell is countered this way, exile it instead of putting it into its owner\u2019s graveyard.',
+    imagePath: '/assets/cards/syncopate.webp',
+    // Deferred - this engine has no stack/priority system (see the similar
+    // note on line 37): CAST_CARD resolves a spell's effects immediately,
+    // so there is no "spell sitting on the stack" object left to counter by
+    // the time any other card could respond. A real implementation would
+    // need a whole new casting pipeline (announce -> priority window for
+    // responses -> resolve), not just a new effect on this one card.
+  },
+  {
+    id: 'tellah-great-sage',
+    name: 'Tellah, Great Sage',
+    costLabel: '{3}{U}{R}',
+    type: 'creature',
+    subtype: 'Legendary Creature Human Wizard',
+    power: 3,
+    toughness: 3,
+    text: 'Whenever you cast a noncreature spell, create a 1/1 colorless Hero creature token. If four or more mana was spent to cast that spell, ' +
+      'draw two cards. If eight or more mana was spent to cast that spell, sacrifice Tellah and it deals that much damage to each opponent.',
+    noncreatureCastTrigger: {
+      createTokenIfExpensive: { minManaValue: 0, tokenId: 'token-hero' },
+      drawCardsIfExpensive: { minManaValue: 4, amount: 2 },
+      sacrificeSelfAndDealDamageEqualToManaSpentIfExpensive: { minManaValue: 8 },
+    },
+    imagePath: '/assets/cards/tellah-great-sage.webp'
+  },
+  {
+    id: 'terra-magical-adept',
+    name: 'Terra, Magical Adept',
+    costLabel: '{1}{R}{G}',
+    type: 'creature',
+    subtype: 'Legendary Creature Human Wizard Warrior',
+    power: 4,
+    toughness: 2,
+    text: 'When Terra enters, mill five cards. Put up to one enchantment card milled this way into your hand. \n' +
+      'Trance — 4RG, Tap: Exile Terra, then return it to the battlefield transformed under its owner\u2019s control. Activate only as a sorcery.',
+    imagePath: '/assets/cards/terra-magical-adept.webp',
+    transformsInto: 'esper-terra',
+    // "Mill 5, put up to one enchantment card FROM AMONG THOSE MILLED into
+    // hand" is exactly revealFiltered with restDestination 'graveyard' - the
+    // chosen card is pulled into hand instead of joining the rest in the
+    // graveyard, matching "milled this way" (only these 5, not the whole
+    // graveyard).
+    onEnter: [{ type: 'revealFiltered', count: 5, filterType: 'enchantment', restDestination: 'graveyard' }],
+    abilities: [
+      {
+        id: 'terra-trance',
+        label: 'Trance',
+        cost: { manaLabel: '{4}{R}{G}', tap: true },
+        onlyDuringOwnMainPhase: true,
+        exileAndReturnTransformed: true,
+        effectText: 'Exile Terra, then return it to the battlefield transformed under its owner’s control.',
+      },
     ],
-    sacrificeAfterFinalChapter: true,
-  },
-  imagePath:'/assets/cards/summon-bahamut.webp'
   },
   {
-  id: 'summon-brynhildr',
-  name: 'Summon: Brynhildr',
-  costLabel: '{1}{R}',
-  type: 'creature',
-  subtype: 'Enchantment Creature Saga Knight',
-  power: 2,
-  toughness: 1,
-  text: '(As this Saga enters and after your draw step, add a lore counter. Sacrifice after III.) \n' +
-  'I — Chain — Exile the top card of your library. During any turn you put a lore counter on this Saga, you may play that card. \n' +
-  'II, III — Gestalt Mode — When you next cast a creature spell this turn, it gains haste until end of turn.',
-  imagePath:'/assets/cards/summon-brynhildr.webp',
-  // Chapter I is still deferred - "exile the top card, then during any
-  // turn you put a lore counter on this you may play it" needs a
-  // persistent-condition impulse play window tied to a specific
-  // permanent's ongoing lore-counter triggers, which doesn't exist yet.
-  saga: {
-    chapters: [
-      { numbers: [1], effects: [] },
-      { numbers: [2, 3], effects: [{ type: 'setPendingNextCreatureSpellBonus', grantsHaste: true }] },
-    ],
-    sacrificeAfterFinalChapter: true,
-  },
-  },
-  {
-  id: 'summon-choco-mog',
-  name: 'Summon: Choco/Mog',
-  costLabel: '{2}{W}',
-  type: 'creature',
-  subtype: 'Enchantment Creature Saga Bird Moogle',
-  power: 3,
-  toughness: 3,
-  text: '(As this Saga enters and after your draw step, add a lore counter. Sacrifice after IV.) \n' +
-  'I, II, III, IV — Stampede! — Other creatures you control get +1/+0 until end of turn.',
-  saga: {
-    chapters: [{ numbers: [1, 2, 3, 4], effects: [{ type: 'buffOtherCreaturesYouControl', power: 1, toughness: 0 }] }],
-    sacrificeAfterFinalChapter: true,
-  },
-  imagePath:'/assets/cards/summon-choco-mog.webp'
-  },
-  {
-  id: 'summoner-s-grimoire',
-  name: 'Summoner\u2019s Grimoire',
-  costLabel: '{3}{G}',
-  type: 'artifact',
-  subtype: 'Artifact Equipment',
-  text: 'Job select \n' +
-  'Equipped creature is a Shaman in addition to its other types and has “Whenever this creature attacks, ' +
-  'you may put a creature card from your hand onto the battlefield. If that card is an enchantment card, it enters tapped and attacking.”' +
-  'Abraxas — Equip 3',
-  // The granted attack-trigger battlefield-cheat ("put a creature card
-  // from your hand onto the battlefield, entering tapped and attacking if
-  // it's an enchantment") is still deferred - "enters already attacking,
-  // joining an in-progress combat" has no supporting mechanism here.
-  onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
-  equipGrantsSubtype: 'Shaman',
-  attachesTo: 'creature',
-  equipCost: '{3}',
-  imagePath:'/assets/cards/summoner-s-grimoire.webp'
-  },
-  {
-  id: 'summon-esper-ramuh',
-  name: 'Summon: Esper Ramuh',
-  costLabel: '{2}{R}{R}',
-  type: 'creature',
-  subtype: 'Enhancement Creature Saga Wizard',
-  power: 3,
-  toughness: 3,
-  text: '(As this Saga enters and after your draw step, add a lore counter. Sacrifice after III.) \n' +
-  'I — Judgment Bolt — This creature deals damage equal to the number of noncreature, nonland cards in your graveyard to target creature an opponent controls.\n' +
-  'II, III — Wizards you control get +1/+0 until end of turn.',
-  // Chapter I's "damage equal to noncreature nonland cards in graveyard" is
-  // deferred - a one-off graveyard-count calculation with no reusable
-  // mechanism behind it.
-  saga: {
-    chapters: [{ numbers: [2, 3], effects: [{ type: 'pumpControlledSubtype', subtype: 'Wizard', power: 1, toughness: 0 }] }],
-    sacrificeAfterFinalChapter: true,
-  },
-  imagePath:'/assets/cards/summon-esper-ramuh.webp'
-  },
-  {
-  // Was '' (an empty id) - getCardDefinition('') could never find this card,
-  // and any deck containing it would break. 'summon-fat-chocobo' matches the
-  // naming convention every other Summon: X card uses.
-  id: 'summon-fat-chocobo',
-  name: 'Summon: Fat Chocobo',
-  costLabel: '{4}{G}',
-  type: 'creature',
-  subtype: 'Enchantment Creature Saga Bird',
-  power: 4,
-  toughness: 4,
-  text: '(As this Saga enters and after your draw step, add a lore counter. Sacrifice after IV.) \n' +
-  'I — Wark — Create a 2/2 green Bird creature token with “Whenever a land you control enters, this token gets +1/+0 until end of turn.”\n' +
-  'II, III, IV — Kerplunk — Creatures you control gain trample until end of turn.',
-  // Chapters II-IV grant trample to OTHER creatures you control only
-  // (buffOtherCreaturesYouControl always excludes the source) - the real
-  // card's "creatures you control" would include Fat Chocobo itself too.
-  saga: {
-    chapters: [
-      { numbers: [1], effects: [{ type: 'createToken', tokenId: 'token-bird' }] },
-      { numbers: [2, 3, 4], effects: [{ type: 'buffOtherCreaturesYouControl', grantKeyword: 'trample' }] },
-    ],
-    sacrificeAfterFinalChapter: true,
-  },
-  imagePath:'/assets/cards/summon-fat-chocobo.webp'
-  },
-  {
-  id: 'summon-fenrir',
-  name: 'Summon: Fenrir',
-  costLabel: '{2}{G}',
-  type: 'creature',
-  subtype: 'Enchanment Creature Saga Wolf',
-  power: 3,
-  toughness: 2,
-  text: 'I — Crescent Fang — Search your library for a basic land card, put it onto the battlefield tapped, then shuffle. \n' +
-  'II — Heavenward Howl — When you next cast a creature spell this turn, that creature enters with an additional +1/+1 counter on it. \n' +
-  'III — Ecliptic Growl — Draw a card if you control the creature with the greatest power or tied for the greatest power.',
-  imagePath:'/assets/cards/summon-fenrir.webp',
-  // Chapter III is still deferred - "draw a card if you control the
-  // creature with the greatest power (or tied for it)" needs a "compare my
-  // power against every creature on the battlefield" mechanism that
-  // doesn't exist yet. Still wired up for lore-counter progression and
-  // sacrifice after III (missing from the printed text here, but every
-  // other 3-chapter Saga in this set ends the same way).
-  saga: {
-    chapters: [
-      { numbers: [1], effects: [{ type: 'searchLibraryForBasicLand', toBattlefieldTapped: true }] },
-      { numbers: [2], effects: [{ type: 'setPendingNextCreatureSpellBonus', counterLabel: '+1/+1', counterAmount: 1 }] },
-      { numbers: [3], effects: [] },
-    ],
-    sacrificeAfterFinalChapter: true,
-  },
-  },
-  {
-  id: 'summon-g-f-cerberus',
-  name: 'Summon: G.F. Cerberus',
-  costLabel: '{2}{R}{R}',
-  type: 'creature',
-  subtype: 'Enchantment Creature Saga Dog',
-  power: 3,
-  toughness: 3,
-  text: '(As this Saga enters and after your draw step, add a lore counter. Sacrifice after III.) \n' +
-  'I — Surveil 1. (Look at the top card of your library. You may put it into your graveyard.) \n' +
-  'II — Double — When you next cast an instant or sorcery spell this turn, copy it. You may choose new targets for the copy. \n' +
-  'III — Triple — When you next cast an instant or sorcery spell this turn, copy it twice. You may choose new targets for the copies.',
-  // Chapters II-III's spell-copying are deferred - no spell-copy mechanism
-  // exists anywhere in this engine. Both chapter numbers are still tracked
-  // (with no effects attached) purely so the 3rd lore counter is the one
-  // that triggers the "Sacrifice after III" cleanup instead of the 1st.
-  saga: {
-    chapters: [
-      { numbers: [1], effects: [{ type: 'surveil', count: 1 }] },
-      { numbers: [2], effects: [] },
-      { numbers: [3], effects: [] },
-    ],
-    sacrificeAfterFinalChapter: true,
-  },
-  imagePath:'/assets/cards/summon-g-f-cerberus.webp'
-  },
-  {
-  id: 'summon-g-f-ifrit',
-  name: 'Summon: G.F. Ifrit',
-  costLabel: '{2}{R}',
-  type: 'creature',
-  subtype: 'Enchantment Creature Saga Demon',
-  power: 3,
-  toughness: 2,
-  text: '(As this Saga enters and after your draw step, add a lore counter. Sacrifice after IV.) \n' +
-  'I, II — You may discard a card. If you do, draw a card. \n' +
-  'III, IV — Add R.',
-  imagePath:'/assets/cards/summon-g-f-ifrit.webp',
-  saga: {
-    chapters: [
-      { numbers: [1, 2], effects: [{ type: 'discardUpToThenDrawThatMany', maxCount: 1 }] },
-      { numbers: [3, 4], effects: [{ type: 'addMana', colors: { R: 1 } }] },
-    ],
-    sacrificeAfterFinalChapter: true,
-  },
-  },
-  {
-  id: 'summon-knights-of-round',
-  name: 'Summon: Knights of Round',
-  costLabel: '{6}{W}{W}',
-  type: 'creature',
-  subtype: 'Enchantment Creature Saga Knight',
-  power: 3,
-  toughness: 3,
-  text: '(As this Saga enters and after your draw step, add a lore counter. Sacrifice after V.) \n' +
-  'I, II, III, IV — Create three 2/2 white Knight creature tokens. \n' +
-  'V — Ultimate End — Other creatures you control get +2/+2 until end of turn. Put an indestructible counter on each of them.\n' +
-  'Indestructible',
-  imagePath:'/assets/cards/summon-knights-of-round.webp',
-  // Chapter V's "indestructible counter" is granted as an actual (temporary)
-  // indestructible keyword instead of a cosmetic counter - a counter labeled
-  // 'indestructible' wouldn't be consulted by anything that actually checks
-  // destruction (engine/combat.ts: hasKeywordEffective is), so a literal
-  // counter would be decoration only. grantTemporaryKeyword IS checked
-  // there, so this is the version that actually protects them.
-  saga: {
-    chapters: [
-      { numbers: [1, 2, 3, 4], effects: [{ type: 'createToken', tokenId: 'token-knight', count: 3 }] },
-      { numbers: [5], effects: [{ type: 'buffOtherCreaturesYouControl', power: 2, toughness: 2, grantKeyword: 'indestructible' }] },
-    ],
-    sacrificeAfterFinalChapter: true,
-  },
-  },
-  {
-  id: 'summon-leviathan',
-  name: 'Summon: Leviathan',
-  costLabel: '{4}{U}{U}',
-  type: 'creature',
-  subtype: 'Enchantment Creature Saga Leviathan',
-  power: 6,
-  toughness: 6,
-  text: '(As this Saga enters and after your draw step, add a lore counter. Sacrifice after III.) \n' +
-  'I — Return each creature that isn’t a Kraken, Leviathan, Merfolk, Octopus, or Serpent to its owner\u2019s hand. \n' +
-  'II, III — Until end of turn, whenever a Kraken, Leviathan, Merfolk, Octopus, or Serpent attacks, draw a card. \n' +
-  'Ward 2',
-  imagePath:'/assets/cards/summon-leviathan.webp',
-  wardCost: { mana: '{2}' },
-  // Both chapters' own effects are still deferred: chapter I needs a
-  // conditional "return every creature EXCEPT [subtype list]" mass bounce,
-  // and chapters II/III need a delayed "until end of turn, whenever a
-  // [subtype list] attacks, draw" granted trigger - neither mechanism
-  // exists yet. Still wired up for lore-counter progression and sacrifice
-  // after III.
-  saga: {
-    chapters: [{ numbers: [1], effects: [] }, { numbers: [2, 3], effects: [] }],
-    sacrificeAfterFinalChapter: true,
-  },
-  },
-  {
-  id: 'summon-primal-garuda',
-  name: 'Summon: Primal Garuda',
-  costLabel: '{3}{W}',
-  type: 'creature',
-  subtype: 'Enchantment Creature Saga Harpy',
-  power: 3,
-  toughness: 3,
-  text: '(As this Saga enters and after your draw step, add a lore counter. Sacrifice after III.) \n' +
-  'I — Aerial Blast — This creature deals 4 damage to target tapped creature an opponent controls. \n' +
-  'II, III — Slipstream — Another target creature you control gets +1/+0 and gains flying until end of turn. \n' +
-  'Flying',
-  imagePath:'/assets/cards/summon-primal-garuda.webp',
-  // Chapter I's own effect is deferred - the only existing damage-a-target
-  // effect (damageTargetCreature) allows ANY creature either player
-  // controls, with no way to restrict to "an opponent's TAPPED creature",
-  // and using it as-is would let this hit a legal target the real card
-  // couldn't. Chapters II/III match pumpAnotherControlledCreature exactly.
-  saga: {
-    chapters: [
-      { numbers: [1], effects: [] },
-      { numbers: [2, 3], effects: [{ type: 'pumpAnotherControlledCreature', power: 1, toughness: 0, grantKeyword: 'flying' }] },
-    ],
-    sacrificeAfterFinalChapter: true,
-  },
-  },
-  {
-  id: 'summon-primal-odin',
-  name: 'Summon: Primal Odin',
-  costLabel: '{4}{B}{B}',
-  type: 'creature',
-  subtype: 'Enchantment Creature Saga Knight',
-  power: 5,
-  toughness: 3,
-  text: '(As this Saga enters and after your draw step, add a lore counter. Sacrifice after III.)\n' +
-  'I — Gungnir — Destroy target creature an opponent controls. \n' +
-  'II — Zantetsuken — This creature gains “Whenever this creature deals combat damage to a player, that player loses the game.” \n' +
-  'III — Hall of Sorrow — Draw two cards. Each player loses 2 life.',
-  imagePath:'/assets/cards/summon-primal-odin.webp',
-  saga: {
-    chapters: [
-      { numbers: [1], effects: [{ type: 'destroyOpponentCreature' }] },
-      { numbers: [2], effects: [{ type: 'grantCombatDamageToPlayerCausesLoss' }] },
-      { numbers: [3], effects: [{ type: 'drawCards', amount: 2 }, { type: 'eachPlayerLosesLife', amount: 2 }] },
-    ],
-    sacrificeAfterFinalChapter: true,
-  },
-  },
-  {
-  id: 'summon-shiva',
-  name: 'Summon: Shiva',
-  costLabel: '{3}{U}{U}',
-  type: 'creature',
-  subtype: 'Enchantment Creature Saga Elemental',
-  power: 4,
-  toughness: 5,
-  text: '(As this Saga enters and after your draw step, add a lore counter. Sacrifice after III.) \n' +
-  'I, II — Heavenly Strike — Tap target creature an opponent controls. Put a stun counter on it. ' +
-  '(If a permanent with a stun counter would become untapped, remove one from it instead.) \n' +
-  'III — Diamond Dust — Draw a card for each tapped creature your opponents control.',
-  imagePath:'/assets/cards/summon-shiva.webp',
-  saga: {
-    chapters: [
-      { numbers: [1, 2], effects: [{ type: 'tapAndStun', targetController: 'opponent', targetType: 'creature' }] },
-      { numbers: [3], effects: [{ type: 'drawForTappedOpponentCreatures' }] },
-    ],
-    sacrificeAfterFinalChapter: true,
-  },
-  },
-  {
-  id: 'summon-titan',
-  name: 'Summon: Titan',
-  costLabel: '{3}{G}{G}',
-  type: 'creature',
-  subtype: 'Enchantment Creature Saga Giant',
-  power: 7,
-  toughness: 7,
-  text: '(As this Saga enters and after your draw step, add a lore counter. Sacrifice after III.) \n' +
-  'I — Mill five cards. \n' +
-  'II — Return all land cards from your graveyard to the battlefield tapped. \n' +
-  'III — Until end of turn, another target creature you control gains trample and gets +X/+X, where X is the number of lands you control.\n' +
-  'Reach, trample',
-  imagePath:'/assets/cards/summon-titan.webp',
-  // Chapter II's own effect is deferred - no mass graveyard-to-battlefield
-  // reanimation mechanism exists (only single-target reanimate). Chapter
-  // III is deferred too - PumpAnotherControlledCreatureEffect only takes a
-  // fixed power/toughness, not a dynamic X based on lands controlled.
-  // Chapter I matches millSelf exactly.
-  saga: {
-    chapters: [
-      { numbers: [1], effects: [{ type: 'millSelf', count: 5 }] },
-      { numbers: [2], effects: [] },
-      { numbers: [3], effects: [] },
-    ],
-    sacrificeAfterFinalChapter: true,
-  },
-  },
-  {
-  id: 'suplex',
-  name: 'Suplex',
-  costLabel: '{1}{R}',
-  type: 'sorcery',
-  text: 'Choose one — \n' +
-  '• Suplex deals 3 damage to target creature. If that creature would die this turn, exile it instead. \n' +
-  '• Exile target artifact.',
-  imagePath:'/assets/cards/suplex.webp',
-  onCast: [
-    {
-      type: 'chooseOneMode',
-      modes: [
-        { label: 'Deal 3 damage to target creature', effects: [{ type: 'damageTargetCreature', amount: 3, exileIfDies: true }] },
-        { label: 'Exile target artifact', effects: [{ type: 'exileTargetPermanent', targetFilter: 'artifact' }] },
+    id: 'esper-terra',
+    name: 'Esper Terra',
+    costLabel: '-',
+    type: 'creature',
+    subtype: 'Legendary Enchantment Creature Saga Wizard',
+    power: 6,
+    toughness: 6,
+    text: '(As this Saga enters and after your draw step, add a lore counter.) \n' +
+      'I, II, III — Create a token that’s a copy of target nonlegendary enchantment you control. It gains haste. ' +
+      'If it\u2019s a Saga, put up to three lore counters on it. Sacrifice it at the beginning of your next end step.\n' +
+      'IV — Add {W}{W}, {U}{U}, {B}{B}, {R}{R}, and {G}{G}. Exile Esper Terra, then return it to the battlefield (front face up).\n' +
+      'Flying',
+    imagePath: '/assets/cards/esper-terra.webp',
+    // Chapters I-III are deferred entirely - "create a token copy of target
+    // nonlegendary enchantment, conditionally seed it with lore counters, then
+    // sacrifice it at a delayed end step" is well beyond any existing
+    // mechanism. Chapter IV's mana is implemented; the "exile, then return"
+    // half isn't - unlike Ifrit/Bahamut's matching chapter (which has a real
+    // transformsInto back face), Terra returns as ITSELF ("front face up"),
+    // and exileAndReturnTransformedSelfIfLoreAtLeast is transform-only, so
+    // this Saga is left uncapped rather than sacrificed - it just keeps
+    // accruing lore counters (chapters I-IV won't re-trigger once reached)
+    // once it hits Chapter IV.
+    saga: {
+      chapters: [
+        { numbers: [1, 2, 3], effects: [] },
+        { numbers: [4], effects: [{ type: 'addMana', colors: { W: 2, U: 2, B: 2, R: 2, G: 2 } }] },
       ],
     },
-  ],
   },
   {
-  id: 'swallowed-by-leviathan',
-  name: 'Swallowed by Leviathan',
-  costLabel: '{2}{U}',
-  type: 'instant',
-  text: 'Choose target spell. Surveil 2, then counter the chosen spell unless its controller pays 1 for each card in your graveyard. ' +
-  '(To surveil 2, look at the top two cards of your library, then put any number of them into your graveyard and the rest on top of your library in any order.)',
-  imagePath:'/assets/cards/swallowed-by-leviathan.webp',
-  // Deferred - same reason as Syncopate: this engine has no stack/priority
-  // system, so "target spell" has nothing left to point at by the time a
-  // response could be cast. Blocked on the same missing architecture, not
-  // a per-card gap.
-  },
-  {
-  id: 'swamp',
-  name: 'Swamp',
-  costLabel: '-',
-  type: 'land',
-  text: 'Tap add B',
-  imagePath:'/assets/cards/swamp.webp',
-  producesMana: 'B'
-  },
-  {
-  id: 'syncopate',
-  name: 'Syncopate',
-  costLabel: '{X}{U}',
-  type: 'instant',
-  text: 'Counter target spell unless its controller pays {X}. If that spell is countered this way, exile it instead of putting it into its owner\u2019s graveyard.',
-  imagePath: '/assets/cards/syncopate.webp',
-  // Deferred - this engine has no stack/priority system (see the similar
-  // note on line 37): CAST_CARD resolves a spell's effects immediately,
-  // so there is no "spell sitting on the stack" object left to counter by
-  // the time any other card could respond. A real implementation would
-  // need a whole new casting pipeline (announce -> priority window for
-  // responses -> resolve), not just a new effect on this one card.
-  },
-  {
-  id: 'tellah-great-sage',
-  name: 'Tellah, Great Sage',
-  costLabel: '{3}{U}{R}',
-  type: 'creature',
-  subtype: 'Legendary Creature Human Wizard',
-  power: 3,
-  toughness: 3,
-  text: 'Whenever you cast a noncreature spell, create a 1/1 colorless Hero creature token. If four or more mana was spent to cast that spell, ' +
-  'draw two cards. If eight or more mana was spent to cast that spell, sacrifice Tellah and it deals that much damage to each opponent.',
-  noncreatureCastTrigger: {
-    createTokenIfExpensive: { minManaValue: 0, tokenId: 'token-hero' },
-    drawCardsIfExpensive: { minManaValue: 4, amount: 2 },
-    sacrificeSelfAndDealDamageEqualToManaSpentIfExpensive: { minManaValue: 8 },
-  },
-  imagePath: '/assets/cards/tellah-great-sage.webp'
-  },
-  {
-  id: 'terra-magical-adept',
-  name: 'Terra, Magical Adept',
-  costLabel: '{1}{R}{G}',
-  type: 'creature',
-  subtype: 'Legendary Creature Human Wizard Warrior',
-  power: 4,
-  toughness: 2,
-  text: 'When Terra enters, mill five cards. Put up to one enchantment card milled this way into your hand. \n' +
-  'Trance — 4RG, Tap: Exile Terra, then return it to the battlefield transformed under its owner\u2019s control. Activate only as a sorcery.',
-  imagePath: '/assets/cards/terra-magical-adept.webp',
-  transformsInto: 'esper-terra',
-  // "Mill 5, put up to one enchantment card FROM AMONG THOSE MILLED into
-  // hand" is exactly revealFiltered with restDestination 'graveyard' - the
-  // chosen card is pulled into hand instead of joining the rest in the
-  // graveyard, matching "milled this way" (only these 5, not the whole
-  // graveyard).
-  onEnter: [{ type: 'revealFiltered', count: 5, filterType: 'enchantment', restDestination: 'graveyard' }],
-  abilities: [
-    {
-      id: 'terra-trance',
-      label: 'Trance',
-      cost: { manaLabel: '{4}{R}{G}', tap: true },
-      onlyDuringOwnMainPhase: true,
-      exileAndReturnTransformed: true,
-      effectText: 'Exile Terra, then return it to the battlefield transformed under its owner’s control.',
-    },
-  ],
-  },
-  {
-  id: 'esper-terra',
-  name: 'Esper Terra',
-  costLabel: '-',
-  type: 'creature',
-  subtype: 'Legendary Enchantment Creature Saga Wizard',
-  power: 6,
-  toughness: 6,
-  text: '(As this Saga enters and after your draw step, add a lore counter.) \n' +
-  'I, II, III — Create a token that’s a copy of target nonlegendary enchantment you control. It gains haste. ' +
-  'If it\u2019s a Saga, put up to three lore counters on it. Sacrifice it at the beginning of your next end step.\n' +
-  'IV — Add {W}{W}, {U}{U}, {B}{B}, {R}{R}, and {G}{G}. Exile Esper Terra, then return it to the battlefield (front face up).\n' +
-  'Flying',
-  imagePath: '/assets/cards/esper-terra.webp',
-  // Chapters I-III are deferred entirely - "create a token copy of target
-  // nonlegendary enchantment, conditionally seed it with lore counters, then
-  // sacrifice it at a delayed end step" is well beyond any existing
-  // mechanism. Chapter IV's mana is implemented; the "exile, then return"
-  // half isn't - unlike Ifrit/Bahamut's matching chapter (which has a real
-  // transformsInto back face), Terra returns as ITSELF ("front face up"),
-  // and exileAndReturnTransformedSelfIfLoreAtLeast is transform-only, so
-  // this Saga is left uncapped rather than sacrificed - it just keeps
-  // accruing lore counters (chapters I-IV won't re-trigger once reached)
-  // once it hits Chapter IV.
-  saga: {
-    chapters: [
-      { numbers: [1, 2, 3], effects: [] },
-      { numbers: [4], effects: [{ type: 'addMana', colors: { W: 2, U: 2, B: 2, R: 2, G: 2 } }] },
+    id: 'the-crystal-s-chosen',
+    name: 'The Crystal\u2019s Chosen',
+    costLabel: '{5}{W}{W}',
+    type: 'sorcery',
+    text: 'Create four 1/1 colorless Hero creature tokens. Then put a +1/+1 counter on each creature you control.',
+    imagePath: '/assets/cards/the-crystal-s-chosen.webp',
+    onCast: [
+      { type: 'createToken', tokenId: 'token-hero', count: 4 },
+      { type: 'buffOtherCreaturesYouControl', counterLabel: '+1/+1', counterAmount: 1 },
     ],
   },
-  },
-   {
-  id: 'the-crystal-s-chosen',
-  name: 'The Crystal\u2019s Chosen',
-  costLabel: '{5}{W}{W}',
-  type: 'sorcery',
-  text: 'Create four 1/1 colorless Hero creature tokens. Then put a +1/+1 counter on each creature you control.',
-  imagePath: '/assets/cards/the-crystal-s-chosen.webp',
-  onCast: [
-    { type: 'createToken', tokenId: 'token-hero', count: 4 },
-    { type: 'buffOtherCreaturesYouControl', counterLabel: '+1/+1', counterAmount: 1 },
-  ],
+  {
+    id: 'the-darkness-crystal',
+    name: 'The Darkness Crystal',
+    costLabel: '{2}{B}{B}',
+    type: 'artifact',
+    subtype: 'Legendary Artifact',
+    text: 'Black spells you cast cost {1} less to cast. \n' +
+      'If a nontoken creature an opponent controls would die, instead exile it and you gain 2 life. \n' +
+      '{4}{B}{B}, {T}: Put target creature card exiled with The Darkness Crystal onto the battlefield tapped under your control with two additional +1/+1 counters on it.',
+    imagePath: '/assets/cards/the-darkness-crystal.webp',
+    reducesCastCostForColor: { color: 'B', amount: 1 },
+    // The other two abilities are deferred - a universal "replace EVERY
+    // opponent nontoken creature death with exile+lifegain" watcher plus an
+    // activated ability that tracks and later reanimates specifically the
+    // cards exiled BY THIS SOURCE (not just any exiled creature) are each a
+    // meaningfully larger, single-card mechanism, same category as Cloud/
+    // Town Greeter (deprioritized in an earlier bulk round).
   },
   {
-  id: 'the-darkness-crystal', 
-  name: 'The Darkness Crystal',
-  costLabel: '{2}{B}{B}',
-  type: 'artifact',
-  subtype: 'Legendary Artifact',
-  text: 'Black spells you cast cost {1} less to cast. \n' +
-  'If a nontoken creature an opponent controls would die, instead exile it and you gain 2 life. \n' +
-  '{4}{B}{B}, {T}: Put target creature card exiled with The Darkness Crystal onto the battlefield tapped under your control with two additional +1/+1 counters on it.',
-  imagePath: '/assets/cards/the-darkness-crystal.webp',
-  reducesCastCostForColor: { color: 'B', amount: 1 },
-  // The other two abilities are deferred - a universal "replace EVERY
-  // opponent nontoken creature death with exile+lifegain" watcher plus an
-  // activated ability that tracks and later reanimates specifically the
-  // cards exiled BY THIS SOURCE (not just any exiled creature) are each a
-  // meaningfully larger, single-card mechanism, same category as Cloud/
-  // Town Greeter (deprioritized in an earlier bulk round).
+    id: 'the-earth-crystal',
+    name: 'The Earth Crystal',
+    costLabel: '{2}{G}{G}',
+    type: 'artifact',
+    subtype: 'Legendary Artifact',
+    text: 'Green spells you cast cost {1} less to cast. \n' +
+      'If one or more +1/+1 counters would be put on a creature you control, twice that many +1/+1 counters are put on that creature instead. \n' +
+      '{4}{G}{G}, {T}: Distribute two +1/+1 counters among one or two target creatures you control.',
+    imagePath: '/assets/cards/the-earth-crystal.webp',
+    reducesCastCostForColor: { color: 'G', amount: 1 },
+    // The other two abilities are deferred - doubling EVERY +1/+1 counter
+    // placement across the whole engine is a universal replacement effect
+    // that would need touching every counter-adding effect and combat
+    // trigger, and the distribute-among-1-or-2-targets activated ability is
+    // its own multi-target allocation mechanism - each a larger, single-card
+    // job, same category as Cloud/Town Greeter (deprioritized earlier).
   },
   {
-  id: 'the-earth-crystal',
-  name: 'The Earth Crystal',
-  costLabel: '{2}{G}{G}',
-  type: 'artifact',
-  subtype: 'Legendary Artifact',
-  text: 'Green spells you cast cost {1} less to cast. \n' +
-  'If one or more +1/+1 counters would be put on a creature you control, twice that many +1/+1 counters are put on that creature instead. \n' +
-  '{4}{G}{G}, {T}: Distribute two +1/+1 counters among one or two target creatures you control.',
-  imagePath: '/assets/cards/the-earth-crystal.webp',
-  reducesCastCostForColor: { color: 'G', amount: 1 },
-  // The other two abilities are deferred - doubling EVERY +1/+1 counter
-  // placement across the whole engine is a universal replacement effect
-  // that would need touching every counter-adding effect and combat
-  // trigger, and the distribute-among-1-or-2-targets activated ability is
-  // its own multi-target allocation mechanism - each a larger, single-card
-  // job, same category as Cloud/Town Greeter (deprioritized earlier).
+    id: 'the-emperor-of-palamecia',
+    name: 'The Emperor of Palamecia',
+    costLabel: '{U}{R}',
+    type: 'creature',
+    subtype: 'Legendary Creature Human Noble Warrior',
+    power: 2,
+    toughness: 2,
+    text: '{T}: Add {U} or {R}. Spend this mana only to cast a noncreature spell. \n' +
+      'Whenever you cast a noncreature spell, if at least four mana was spent to cast it, put a +1/+1 counter on The Emperor of Palamecia. ' +
+      'Then if it has three or more +1/+1 counters on it, transform it.',
+    imagePath: '/assets/cards/the-emperor-of-palamecia.webp',
+    transformsInto: 'the-lord-master-of-hell'
   },
   {
-  id: 'the-emperor-of-palamecia',
-  name: 'The Emperor of Palamecia',
-  costLabel: '{U}{R}',
-  type: 'creature',
-  subtype: 'Legendary Creature Human Noble Warrior',
-  power: 2,
-  toughness: 2,
-  text: '{T}: Add {U} or {R}. Spend this mana only to cast a noncreature spell. \n' +
-  'Whenever you cast a noncreature spell, if at least four mana was spent to cast it, put a +1/+1 counter on The Emperor of Palamecia. ' +
-  'Then if it has three or more +1/+1 counters on it, transform it.',
-  imagePath: '/assets/cards/the-emperor-of-palamecia.webp',
-  transformsInto: 'the-lord-master-of-hell'
-  },
-   {
-  id: 'the-lord-master-of-hell',
-  name: 'The Lord Master of Hell',
-  costLabel: '-',
-  type: 'creature',
-  subtype: 'Legendary Creature Demon Noble Wizard',
-  power: 3,
-  toughness: 3,
-  text: 'Starfall — Whenever The Lord Master of Hell attacks, it deals X damage to each opponent, where X is the number of noncreature, nonland cards in your graveyard.',
-  onAttack: [{ type: 'damageEachOpponentEqualToGraveyardNoncreatureNonlandCount' }],
-  imagePath: '/assets/cards/the-lord-master-of-hell.webp'
+    id: 'the-lord-master-of-hell',
+    name: 'The Lord Master of Hell',
+    costLabel: '-',
+    type: 'creature',
+    subtype: 'Legendary Creature Demon Noble Wizard',
+    power: 3,
+    toughness: 3,
+    text: 'Starfall — Whenever The Lord Master of Hell attacks, it deals X damage to each opponent, where X is the number of noncreature, nonland cards in your graveyard.',
+    onAttack: [{ type: 'damageEachOpponentEqualToGraveyardNoncreatureNonlandCount' }],
+    imagePath: '/assets/cards/the-lord-master-of-hell.webp'
   },
   {
-  id: 'the-final-days',
-  name: 'The Final Days', 
-  costLabel: '{2}{B}{B}',
-  type: 'sorcery',
-  text: 'Create two tapped 2/2 black Horror creature tokens. If this spell was cast from a graveyard, instead create X of those tokens, ' +
-  'where X is the number of creature cards in your graveyard. \nFlashback {4}{B}{B}',
-  imagePath: '/assets/cards/the-final-days.webp',
-  onCast: [{ type: 'createToken', tokenId: 'token-horror', count: 2, tapped: true }],
-  flashback: {
-    cost: '{4}{B}{B}',
-    effects: [{ type: 'createToken', tokenId: 'token-horror', count: 'perCreatureCardInYourGraveyard', tapped: true }],
-  },
-  },
-   {
-  id: 'the-fire-crystal',
-  name: 'The Fire Crystal',
-  costLabel: '{2}{R}{R}',
-  type: 'artifact',
-  subtype: 'Legendary Artifact',
-  text: 'Red spells you cast cost {1} less to cast. \n' +
-  'Creatures you control have haste. \n' +
-  '{4}{R}{R}, {T}: Create a token that\u2019s a copy of target creature you control. Sacrifice it at the beginning of the next end step.',
-  imagePath: '/assets/cards/the-fire-crystal.webp',
-  reducesCastCostForColor: { color: 'R', amount: 1 },
-  staticAnthemForControlledSubtype: { subtype: '*', power: 0, toughness: 0, grantKeywords: ['haste'] },
-  // The activated ability ("create a token copy of target creature, then
-  // sacrifice it at the next end step") is still deferred - no existing
-  // copy effect pairs with a delayed "sacrifice at the next end step"
-  // trigger.
-  },
-  {
-  id: 'the-gold-saucer',
-  name: 'The Gold Saucer',
-  costLabel: '-',
-  type: 'land',
-  text: '{T}: Add {M}. \n' +
-  '{2}, {T}: Flip a coin. If you win the flip, create a Treasure token. \n' +
-  '{3}, {T}, Sacrifice two artifacts: Draw a card.',
-  imagePath: '/assets/cards/the-gold-saucer.webp',
-  producesMana: 'C',
-  abilities: [
-    {
-      id: 'the-gold-saucer-flip',
-      label: 'Flip a Coin',
-      cost: { manaLabel: '{2}', tap: true },
-      effects: [{ type: 'coinFlip', ifWinEffects: [{ type: 'createToken', tokenId: 'token-treasure' }] }],
-      effectText: 'Flip a coin. If you win the flip, create a Treasure token.',
+    id: 'the-final-days',
+    name: 'The Final Days',
+    costLabel: '{2}{B}{B}',
+    type: 'sorcery',
+    text: 'Create two tapped 2/2 black Horror creature tokens. If this spell was cast from a graveyard, instead create X of those tokens, ' +
+      'where X is the number of creature cards in your graveyard. \nFlashback {4}{B}{B}',
+    imagePath: '/assets/cards/the-final-days.webp',
+    onCast: [{ type: 'createToken', tokenId: 'token-horror', count: 2, tapped: true }],
+    flashback: {
+      cost: '{4}{B}{B}',
+      effects: [{ type: 'createToken', tokenId: 'token-horror', count: 'perCreatureCardInYourGraveyard', tapped: true }],
     },
-    {
-      id: 'the-gold-saucer-draw',
-      label: 'Draw a Card',
-      cost: { manaLabel: '{3}', tap: true, sacrificeAnother: 'artifact', sacrificeAnotherCount: 2 },
-      effects: [{ type: 'drawCards', amount: 1 }],
-      effectText: 'Sacrifice two artifacts: Draw a card.',
-    },
-  ],
-  },
-   {
-  id: 'the-lunar-whale',
-  name: 'The Lunar Whale',
-  costLabel: '{3}{U}',
-  type: 'artifact',
-  subtype: 'Legendary Artifact Vehicle',
-  text: 'Flying \n' +
-  'You may look at the top card of your library any time.\n' +
-  'As long as The Lunar Whale attacked this turn, you may play the top card of your library.\n' +
-  'Crew 1',
-  // Was missing its `crew` field entirely. The top-of-library play
-  // permissions are deferred - no mechanism tracks "may play from library".
-  crew: 1,
-  imagePath: '/assets/cards/the-lunar-whale.webp'
   },
   {
-  id: 'the-masamune',
-  name: 'The Masamune',
-  costLabel: '{3}',
-  type: 'artifact',
-  subtype: 'Legendary Artifact Equipment',
-  text: 'As long as equipped creature is attacking, it has first strike and must be blocked if able.\n' +
-  'Equipped creature has “If a creature dying causes a triggered ability of this creature or an emblem you own to trigger, that ability triggers an additional time.”\n' +
-  'Equip {2}',
-  // The conditional "while attacking" first-strike grant and the granted
-  // death-trigger-doubling ability are deferred.
-  attachesTo: 'creature',
-  equipCost: '{2}',
-  imagePath: '/assets/cards/the-masamune.webp'
+    id: 'the-fire-crystal',
+    name: 'The Fire Crystal',
+    costLabel: '{2}{R}{R}',
+    type: 'artifact',
+    subtype: 'Legendary Artifact',
+    text: 'Red spells you cast cost {1} less to cast. \n' +
+      'Creatures you control have haste. \n' +
+      '{4}{R}{R}, {T}: Create a token that\u2019s a copy of target creature you control. Sacrifice it at the beginning of the next end step.',
+    imagePath: '/assets/cards/the-fire-crystal.webp',
+    reducesCastCostForColor: { color: 'R', amount: 1 },
+    staticAnthemForControlledSubtype: { subtype: '*', power: 0, toughness: 0, grantKeywords: ['haste'] },
+    // The activated ability ("create a token copy of target creature, then
+    // sacrifice it at the next end step") is still deferred - no existing
+    // copy effect pairs with a delayed "sacrifice at the next end step"
+    // trigger.
   },
   {
-  id: 'the-prima-vista',
-  name: 'The Prima Vista',
-  costLabel: '{4}{U}',
-  type: 'artifact',
-  subtype: 'Legendary Artifact Vehicle',
-  power: 5,
-  toughness: 3,
-  text: 'Flying \n' +
-  'Whenever you cast a noncreature spell, if at least four mana was spent to cast it, The Prima Vista becomes an artifact creature until end of turn.\n' +
-  'Crew 2 (Tap any number of creatures you control with total power 2 or more: This Vehicle becomes an artifact creature until end of turn.)',
-  // Was missing its `crew` field entirely. The alternate "becomes a creature
-  // when you cast an expensive noncreature spell" trigger is deferred.
-  crew: 2,
-  imagePath: '/assets/cards/the-prima-vista.webp'
+    id: 'the-gold-saucer',
+    name: 'The Gold Saucer',
+    costLabel: '-',
+    type: 'land',
+    text: '{T}: Add {M}. \n' +
+      '{2}, {T}: Flip a coin. If you win the flip, create a Treasure token. \n' +
+      '{3}, {T}, Sacrifice two artifacts: Draw a card.',
+    imagePath: '/assets/cards/the-gold-saucer.webp',
+    producesMana: 'C',
+    abilities: [
+      {
+        id: 'the-gold-saucer-flip',
+        label: 'Flip a Coin',
+        cost: { manaLabel: '{2}', tap: true },
+        effects: [{ type: 'coinFlip', ifWinEffects: [{ type: 'createToken', tokenId: 'token-treasure' }] }],
+        effectText: 'Flip a coin. If you win the flip, create a Treasure token.',
+      },
+      {
+        id: 'the-gold-saucer-draw',
+        label: 'Draw a Card',
+        cost: { manaLabel: '{3}', tap: true, sacrificeAnother: 'artifact', sacrificeAnotherCount: 2 },
+        effects: [{ type: 'drawCards', amount: 1 }],
+        effectText: 'Sacrifice two artifacts: Draw a card.',
+      },
+    ],
   },
   {
-  id: 'the-regalia',
-  name: 'The Regalia',
-  costLabel: '{4}',
-  type: 'artifact',
-  subtype: 'Legendary Artifact — Vehicle',
-  power: 4,
-  toughness: 4,
-  text: 'Haste \n' +
-  'Whenever The Regalia attacks, reveal cards from the top of your library until you reveal a land card. ' +
-  'Put that card onto the battlefield tapped and the rest on the bottom of your library in a random order. \n' +
-  'Crew 1',
-  // Was missing its `crew` field entirely. The "reveal until you hit a
-  // land" attack trigger is deferred - no variable-length reveal mechanism
-  // exists (only fixed-count reveals).
-  crew: 1,
-  imagePath: '/assets/cards/the-regalia.webp'
+    id: 'the-lunar-whale',
+    name: 'The Lunar Whale',
+    costLabel: '{3}{U}',
+    type: 'artifact',
+    subtype: 'Legendary Artifact Vehicle',
+    text: 'Flying \n' +
+      'You may look at the top card of your library any time.\n' +
+      'As long as The Lunar Whale attacked this turn, you may play the top card of your library.\n' +
+      'Crew 1',
+    // Was missing its `crew` field entirely. The top-of-library play
+    // permissions are deferred - no mechanism tracks "may play from library".
+    crew: 1,
+    imagePath: '/assets/cards/the-lunar-whale.webp'
   },
   {
-  id: 'the-wandering-minstrel',
-  name: 'The Wandering Minstrel',
-  costLabel: '{G}{U}',
-  type: 'creature',
-  subtype: 'Legendary Creature Human Bird',
-  power: 1,
-  toughness: 3,
-  text: 'Lands you control enter untapped. \n' +
-  'The Minstrel\u2019s Ballad — At the beginning of combat on your turn, if you control five or more Towns, create a 2/2 Elemental creature token thats all colors. \n' +
-  '{3}{W}{U}{B}{R}{G}: Other creatures you control get +X/+X until end of turn, where X is the number of Towns you control.',
-  imagePath: '/assets/cards/the-wandering-minstrel.webp',
-  // "Lands you control enter untapped" is deferred - no replacement effect
-  // overrides CardDefinition.entersTapped for a controller's own lands.
-  onOwnCombatBegin: [{ type: 'createTokenIfControlledSubtypeCountAtLeast', subtype: 'Town', minCount: 5, tokenId: 'token-elemental' }],
-  abilities: [
-    {
-      id: 'the-wandering-minstrel-ballad',
-      label: 'Ballad',
-      cost: { manaLabel: '{3}{W}{U}{B}{R}{G}' },
-      effects: [{ type: 'buffOtherCreaturesYouControlByControlledSubtypeCount', subtype: 'Town' }],
-      effectText: 'Other creatures you control get +X/+X until end of turn, where X is the number of Towns you control.',
-    },
-  ],
+    id: 'the-masamune',
+    name: 'The Masamune',
+    costLabel: '{3}',
+    type: 'artifact',
+    subtype: 'Legendary Artifact Equipment',
+    text: 'As long as equipped creature is attacking, it has first strike and must be blocked if able.\n' +
+      'Equipped creature has “If a creature dying causes a triggered ability of this creature or an emblem you own to trigger, that ability triggers an additional time.”\n' +
+      'Equip {2}',
+    // The conditional "while attacking" first-strike grant and the granted
+    // death-trigger-doubling ability are deferred.
+    attachesTo: 'creature',
+    equipCost: '{2}',
+    imagePath: '/assets/cards/the-masamune.webp'
   },
   {
-  id: 'the-water-crystal',
-  name: 'The Water Crystal',
-  costLabel: '{2}{U}{U}',
-  type: 'artifact',
-  subtype: 'Legendary Artifact',
-  text: 'Blue spells you cast cost {1} less to cast. \n' +
-  'If an opponent would mill one or more cards, they mill that many cards plus four instead. \n' +
-  '{4}{U}{U}, {T}: Each opponent mills cards equal to the number of cards in your hand.',
-  imagePath: '/assets/cards/the-water-crystal.webp',
-  reducesCastCostForColor: { color: 'U', amount: 1 },
-  // The opponent-mill replacement effect ("if an opponent would mill one or
-  // more cards, they mill that many plus four instead") is still deferred -
-  // no general damage/mill/life-gain replacement-effect mechanism exists
-  // yet (only the specific finality-counter and onDeathExileAndCreateTokens
-  // replacement effects, neither of which generalizes to this).
-  abilities: [
-    {
-      id: 'the-water-crystal-mill',
-      label: 'Mill',
-      cost: { manaLabel: '{4}{U}{U}', tap: true },
-      effects: [{ type: 'millEachOpponentByYourHandSize' }],
-      effectText: 'Each opponent mills cards equal to the number of cards in your hand.',
-    },
-  ],
+    id: 'the-prima-vista',
+    name: 'The Prima Vista',
+    costLabel: '{4}{U}',
+    type: 'artifact',
+    subtype: 'Legendary Artifact Vehicle',
+    power: 5,
+    toughness: 3,
+    text: 'Flying \n' +
+      'Whenever you cast a noncreature spell, if at least four mana was spent to cast it, The Prima Vista becomes an artifact creature until end of turn.\n' +
+      'Crew 2 (Tap any number of creatures you control with total power 2 or more: This Vehicle becomes an artifact creature until end of turn.)',
+    // Was missing its `crew` field entirely. The alternate "becomes a creature
+    // when you cast an expensive noncreature spell" trigger is deferred.
+    crew: 2,
+    imagePath: '/assets/cards/the-prima-vista.webp'
   },
   {
-  id: 'the-wind-crystal',
-  name: 'The Wind Crystal',
-  costLabel: '{2}{W}{W}',
-  type: 'artifact',
-  subtype: 'Legendary Artifact',
-  text: 'White spells you cast cost {1} less to cast. \n' +
-  'If you would gain life, you gain twice that much life instead. \n' +
-  '{4}{W}{W}, {T}: Creatures you control gain flying and lifelink until end of turn.',
-  imagePath: '/assets/cards/the-wind-crystal.webp',
-  reducesCastCostForColor: { color: 'W', amount: 1 },
-  // "If you would gain life, you gain twice that much life instead" is
-  // still deferred - no general life-gain replacement-effect mechanism
-  // exists yet (gainLife/addLife always apply the exact requested amount).
-  abilities: [
-    {
-      id: 'the-wind-crystal-empower',
-      label: 'Empower',
-      cost: { manaLabel: '{4}{W}{W}', tap: true },
-      effects: [
-        { type: 'buffOtherCreaturesYouControl', grantKeyword: 'flying' },
-        { type: 'buffOtherCreaturesYouControl', grantKeyword: 'lifelink' },
-      ],
-      effectText: 'Creatures you control gain flying and lifelink until end of turn.',
-    },
-  ],
+    id: 'the-regalia',
+    name: 'The Regalia',
+    costLabel: '{4}',
+    type: 'artifact',
+    subtype: 'Legendary Artifact — Vehicle',
+    power: 4,
+    toughness: 4,
+    text: 'Haste \n' +
+      'Whenever The Regalia attacks, reveal cards from the top of your library until you reveal a land card. ' +
+      'Put that card onto the battlefield tapped and the rest on the bottom of your library in a random order. \n' +
+      'Crew 1',
+    // Was missing its `crew` field entirely. The "reveal until you hit a
+    // land" attack trigger is deferred - no variable-length reveal mechanism
+    // exists (only fixed-count reveals).
+    crew: 1,
+    imagePath: '/assets/cards/the-regalia.webp'
   },
   {
-  id: 'thief-s-knife',
-  name: 'Thief\u2019s Knife',
-  costLabel: '{2}{U}',
-  type: 'artifact',
-  subtype: 'Equipment',
-  text: 'Job select (When this Equipment enters, create a 1/1 colorless Hero creature token, then attach this to it.)\n' +
-  'Equipped creature gets +1/+1, has “Whenever this creature deals combat damage to a player, draw a card,” and is a Rogue in addition to its other types.\n' +
-  'Equip {4}',
-  onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
-  attachesTo: 'creature',
-  equipCost: '{4}',
-  equipBuff: { power: 1, toughness: 1 },
-  equipGrantsSubtype: 'Rogue',
-  equipGrantsOnCombatDamageToPlayer: [{ type: 'drawCards', amount: 1 }],
-  imagePath: '/assets/cards/thief-s-knife.webp'
+    id: 'the-wandering-minstrel',
+    name: 'The Wandering Minstrel',
+    costLabel: '{G}{U}',
+    type: 'creature',
+    subtype: 'Legendary Creature Human Bird',
+    power: 1,
+    toughness: 3,
+    text: 'Lands you control enter untapped. \n' +
+      'The Minstrel\u2019s Ballad — At the beginning of combat on your turn, if you control five or more Towns, create a 2/2 Elemental creature token thats all colors. \n' +
+      '{3}{W}{U}{B}{R}{G}: Other creatures you control get +X/+X until end of turn, where X is the number of Towns you control.',
+    imagePath: '/assets/cards/the-wandering-minstrel.webp',
+    // "Lands you control enter untapped" is deferred - no replacement effect
+    // overrides CardDefinition.entersTapped for a controller's own lands.
+    onOwnCombatBegin: [{ type: 'createTokenIfControlledSubtypeCountAtLeast', subtype: 'Town', minCount: 5, tokenId: 'token-elemental' }],
+    abilities: [
+      {
+        id: 'the-wandering-minstrel-ballad',
+        label: 'Ballad',
+        cost: { manaLabel: '{3}{W}{U}{B}{R}{G}' },
+        effects: [{ type: 'buffOtherCreaturesYouControlByControlledSubtypeCount', subtype: 'Town' }],
+        effectText: 'Other creatures you control get +X/+X until end of turn, where X is the number of Towns you control.',
+      },
+    ],
   },
   {
-  id: 'thunder-magic', 
-  name: 'Thunder Magic',
-  costLabel: '-',
-  type: 'instant',
-  text: 'Tiered (Choose one additional cost.) \n' +
-  '• Thunder — {0} — Thunder Magic deals 2 damage to target creature. \n' +
-  '• Thundara — {3} — Thunder Magic deals 4 damage to target creature. \n' +
-  '• Thundaga — {5}{R} — Thunder Magic deals 8 damage to target creature.',
-  imagePath: '/assets/cards/thunder-magic.webp',
-  tieredModes: [
-    { label: 'Thunder — {0} — 2 damage to target creature', additionalCost: '{0}', effects: [{ type: 'damageTargetCreature', amount: 2 }] },
-    { label: 'Thundara — {3} — 4 damage to target creature', additionalCost: '{3}', effects: [{ type: 'damageTargetCreature', amount: 4 }] },
-    { label: 'Thundaga — {5}{R} — 8 damage to target creature', additionalCost: '{5}{R}', effects: [{ type: 'damageTargetCreature', amount: 8 }] },
-  ],
+    id: 'the-water-crystal',
+    name: 'The Water Crystal',
+    costLabel: '{2}{U}{U}',
+    type: 'artifact',
+    subtype: 'Legendary Artifact',
+    text: 'Blue spells you cast cost {1} less to cast. \n' +
+      'If an opponent would mill one or more cards, they mill that many cards plus four instead. \n' +
+      '{4}{U}{U}, {T}: Each opponent mills cards equal to the number of cards in your hand.',
+    imagePath: '/assets/cards/the-water-crystal.webp',
+    reducesCastCostForColor: { color: 'U', amount: 1 },
+    // The opponent-mill replacement effect ("if an opponent would mill one or
+    // more cards, they mill that many plus four instead") is still deferred -
+    // no general damage/mill/life-gain replacement-effect mechanism exists
+    // yet (only the specific finality-counter and onDeathExileAndCreateTokens
+    // replacement effects, neither of which generalizes to this).
+    abilities: [
+      {
+        id: 'the-water-crystal-mill',
+        label: 'Mill',
+        cost: { manaLabel: '{4}{U}{U}', tap: true },
+        effects: [{ type: 'millEachOpponentByYourHandSize' }],
+        effectText: 'Each opponent mills cards equal to the number of cards in your hand.',
+      },
+    ],
   },
   {
-  id: 'tidus-blitzball-star',
-  name: 'Tidus, Blitzball Star',
-  costLabel: '{1}{W}{U}',
-  type: 'creature',
-  subtype: 'Legendary Creature Human Warrior',
-  power: 2,
-  toughness: 1,
-  text: 'Whenever an artifact you control enters, put a +1/+1 counter on Tidus. \n' +
-  'Whenever Tidus attacks, tap target creature an opponent controls.',
-  imagePath: '/assets/cards/tidus-blitzball-star.webp',
-  onAnyArtifactEnterTrigger: [{ type: 'putCounterOnSelf', counterLabel: '+1/+1', counterAmount: 1 }],
-  onAttack: [{ type: 'tapAndStun', targetController: 'opponent', targetType: 'creature', noStunCounter: true }],
+    id: 'the-wind-crystal',
+    name: 'The Wind Crystal',
+    costLabel: '{2}{W}{W}',
+    type: 'artifact',
+    subtype: 'Legendary Artifact',
+    text: 'White spells you cast cost {1} less to cast. \n' +
+      'If you would gain life, you gain twice that much life instead. \n' +
+      '{4}{W}{W}, {T}: Creatures you control gain flying and lifelink until end of turn.',
+    imagePath: '/assets/cards/the-wind-crystal.webp',
+    reducesCastCostForColor: { color: 'W', amount: 1 },
+    // "If you would gain life, you gain twice that much life instead" is
+    // still deferred - no general life-gain replacement-effect mechanism
+    // exists yet (gainLife/addLife always apply the exact requested amount).
+    abilities: [
+      {
+        id: 'the-wind-crystal-empower',
+        label: 'Empower',
+        cost: { manaLabel: '{4}{W}{W}', tap: true },
+        effects: [
+          { type: 'buffOtherCreaturesYouControl', grantKeyword: 'flying' },
+          { type: 'buffOtherCreaturesYouControl', grantKeyword: 'lifelink' },
+        ],
+        effectText: 'Creatures you control gain flying and lifelink until end of turn.',
+      },
+    ],
   },
   {
-  id: 'tifa-lockhart',
-  name: 'Tifa Lockhart',
-  costLabel: '{1}{G}',
-  type: 'creature',
-  // Was missing power/toughness entirely.
-  power: 2,
-  toughness: 2,
-  text: 'Trample \n' +
-  'Landfall — Whenever a land you control enters, double Tifa Lockhart\u2019s power until end of turn.',
-  imagePath: '/assets/cards/tifa-lockhart.webp',
-  landfall: { doubleSelfPowerUntilEndOfTurn: true },
+    id: 'thief-s-knife',
+    name: 'Thief\u2019s Knife',
+    costLabel: '{2}{U}',
+    type: 'artifact',
+    subtype: 'Equipment',
+    text: 'Job select (When this Equipment enters, create a 1/1 colorless Hero creature token, then attach this to it.)\n' +
+      'Equipped creature gets +1/+1, has “Whenever this creature deals combat damage to a player, draw a card,” and is a Rogue in addition to its other types.\n' +
+      'Equip {4}',
+    onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
+    attachesTo: 'creature',
+    equipCost: '{4}',
+    equipBuff: { power: 1, toughness: 1 },
+    equipGrantsSubtype: 'Rogue',
+    equipGrantsOnCombatDamageToPlayer: [{ type: 'drawCards', amount: 1 }],
+    imagePath: '/assets/cards/thief-s-knife.webp'
   },
   {
-  id: 'tifa-s-limit-break',
-  name: 'Tifa\u2019s Limit Break',
-  costLabel: '{G}',
-  type: 'instant',
-  text: 'Tiered (Choose one additional cost.) \n' +
-  '• Somersault — {0} — Target creature gets +2/+2 until end of turn. \n' +
-  '• Meteor Strikes — {2} — Double target creature’s power and toughness until end of turn. \n' +
-  '• Final Heaven — {6}{G} — Triple target creature’s power and toughness until end of turn.',
-  imagePath: '/assets/cards/tifa-s-limit-break.webp',
-  tieredModes: [{ label: 'Somersault — {0} — Target creature gets +2/+2 until end of turn', additionalCost: '{0}', effects: [{ type: 'pumpTarget', power: 2, toughness: 2 }] }],
-  // Meteor Strikes and Final Heaven ("double"/"triple target creature's
-  // power and toughness") are still deferred - no effect here can scale a
-  // TARGET's stats by a multiplier (only doubleSelfPowerUntilEndOfTurn
-  // exists, which is self-only and power-only); Somersault alone is wired
-  // via the existing pumpTarget effect.
+    id: 'thunder-magic',
+    name: 'Thunder Magic',
+    costLabel: '-',
+    type: 'instant',
+    text: 'Tiered (Choose one additional cost.) \n' +
+      '• Thunder — {0} — Thunder Magic deals 2 damage to target creature. \n' +
+      '• Thundara — {3} — Thunder Magic deals 4 damage to target creature. \n' +
+      '• Thundaga — {5}{R} — Thunder Magic deals 8 damage to target creature.',
+    imagePath: '/assets/cards/thunder-magic.webp',
+    tieredModes: [
+      { label: 'Thunder — {0} — 2 damage to target creature', additionalCost: '{0}', effects: [{ type: 'damageTargetCreature', amount: 2 }] },
+      { label: 'Thundara — {3} — 4 damage to target creature', additionalCost: '{3}', effects: [{ type: 'damageTargetCreature', amount: 4 }] },
+      { label: 'Thundaga — {5}{R} — 8 damage to target creature', additionalCost: '{5}{R}', effects: [{ type: 'damageTargetCreature', amount: 8 }] },
+    ],
   },
   {
-  id: 'tonberry',
-  name: 'Tonberry',
-  costLabel: '{B}',
-  type: 'creature',
-  subtype: 'Creature Salamander Horror',
-  // Was missing power/toughness entirely.
-  power: 2,
-  toughness: 2,
-  text: 'This creature enters tapped with a stun counter on it. (If it would become untapped, remove a stun counter from it instead.) \n' +
-  'Chef\u2019s Knife — During your turn, this creature has first strike and deathtouch.',
-  imagePath: '/assets/cards/tonberry.webp',
-  entersTapped: true,
-  onEnter: [{ type: 'putCounterOnSelf', counterLabel: 'Stun', counterAmount: 1 }],
-  grantsSelfKeywordDuringOwnTurn: ['first strike', 'deathtouch'],
+    id: 'tidus-blitzball-star',
+    name: 'Tidus, Blitzball Star',
+    costLabel: '{1}{W}{U}',
+    type: 'creature',
+    subtype: 'Legendary Creature Human Warrior',
+    power: 2,
+    toughness: 1,
+    text: 'Whenever an artifact you control enters, put a +1/+1 counter on Tidus. \n' +
+      'Whenever Tidus attacks, tap target creature an opponent controls.',
+    imagePath: '/assets/cards/tidus-blitzball-star.webp',
+    onAnyArtifactEnterTrigger: [{ type: 'putCounterOnSelf', counterLabel: '+1/+1', counterAmount: 1 }],
+    onAttack: [{ type: 'tapAndStun', targetController: 'opponent', targetType: 'creature', noStunCounter: true }],
   },
   {
-  id: 'torgal-a-fine-hound',
-  name: 'Torgal, A Fine Hound',
-  costLabel: '{1}{G}',
-  type: 'creature',
-  subtype: 'Legendary Creature Wolf',
-  power: 2,
-  toughness: 2,
-  text: 'Whenever you cast your first Human creature spell each turn, that creature enters with an additional +1/+1 counter on it for each Dog and/or Wolf you control. \n' +
-  '{T}: Add one mana of any color.',
-  imagePath: '/assets/cards/torgal-a-fine-hound.webp',
-  // The "first Human creature spell each turn enters with additional
-  // counters" trigger is deferred - needs a once-per-turn-per-spell-type
-  // tracker plus modifying the ETB of a DIFFERENT permanent than the one
-  // carrying the trigger, neither of which exists.
-  producesMana: 'any',
+    id: 'tifa-lockhart',
+    name: 'Tifa Lockhart',
+    costLabel: '{1}{G}',
+    type: 'creature',
+    // Was missing power/toughness entirely.
+    power: 2,
+    toughness: 2,
+    text: 'Trample \n' +
+      'Landfall — Whenever a land you control enters, double Tifa Lockhart\u2019s power until end of turn.',
+    imagePath: '/assets/cards/tifa-lockhart.webp',
+    landfall: { doubleSelfPowerUntilEndOfTurn: true },
   },
   {
-  id: 'town-greeter',
-  name: 'Town Greeter',
-  costLabel: '{1}{G}',
-  type: 'creature',
-  subtype: 'Creature Human Citizen',
-  power: 1,
-  toughness: 1,
-  text: 'When this creature enters, mill four cards. You may put a land card from among them into your hand. If you put a Town card into your hand this way, you gain 2 life',
-  imagePath: '/assets/cards/town-greeter.webp',
-  onEnter: [{ type: 'millThenPutLandIntoHandGainLifeIfTown', millCount: 4, lifeGainIfTown: 2 }],
+    id: 'tifa-s-limit-break',
+    name: 'Tifa\u2019s Limit Break',
+    costLabel: '{G}',
+    type: 'instant',
+    text: 'Tiered (Choose one additional cost.) \n' +
+      '• Somersault — {0} — Target creature gets +2/+2 until end of turn. \n' +
+      '• Meteor Strikes — {2} — Double target creature’s power and toughness until end of turn. \n' +
+      '• Final Heaven — {6}{G} — Triple target creature’s power and toughness until end of turn.',
+    imagePath: '/assets/cards/tifa-s-limit-break.webp',
+    tieredModes: [{ label: 'Somersault — {0} — Target creature gets +2/+2 until end of turn', additionalCost: '{0}', effects: [{ type: 'pumpTarget', power: 2, toughness: 2 }] }],
+    // Meteor Strikes and Final Heaven ("double"/"triple target creature's
+    // power and toughness") are still deferred - no effect here can scale a
+    // TARGET's stats by a multiplier (only doubleSelfPowerUntilEndOfTurn
+    // exists, which is self-only and power-only); Somersault alone is wired
+    // via the existing pumpTarget effect.
   },
   {
-  id: 'traveling-chocobo',
-  name: 'Traveling Chocobo',
-  costLabel: '{2}{G}',
-  type: 'creature',
-  subtype: 'Bird Creature',
-  power: 3,
-  toughness: 2,
-  text: 'You may look at the top card of your library any time. \n' +
-  'You may play lands and cast Bird spells from the top of your library. \n' +
-  'If a land or Bird you control entering the battlefield causes a triggered ability of a permanent you control to trigger, that ability triggers an additional time.',
-  imagePath: '/assets/cards/traveling-chocobo.webp',
-  // Deferred - "play lands and cast spells from the top of your library"
-  // is a persistent play-from-a-zone-other-than-hand mechanic (an
-  // established gap), and the trigger-doubling clause depends on it.
+    id: 'tonberry',
+    name: 'Tonberry',
+    costLabel: '{B}',
+    type: 'creature',
+    subtype: 'Creature Salamander Horror',
+    // Was missing power/toughness entirely.
+    power: 2,
+    toughness: 2,
+    text: 'This creature enters tapped with a stun counter on it. (If it would become untapped, remove a stun counter from it instead.) \n' +
+      'Chef\u2019s Knife — During your turn, this creature has first strike and deathtouch.',
+    imagePath: '/assets/cards/tonberry.webp',
+    entersTapped: true,
+    onEnter: [{ type: 'putCounterOnSelf', counterLabel: 'Stun', counterAmount: 1 }],
+    grantsSelfKeywordDuringOwnTurn: ['first strike', 'deathtouch'],
   },
   {
-  id: 'travel-the-overworld',
-  name: 'Travel the Overworld',
-  costLabel: '{5}{U}{U}',
-  type: 'sorcery',
-  text: 'Affinity for Towns (This spell costs {1} less to cast for each Town you control.) \n' +
-  'Draw four cards.',
-  imagePath: '/assets/cards/travel-the-overworld.webp',
-  costReductionPerControlledSubtype: { subtype: 'Town', amountPerUnit: 1 },
-  onCast: [{ type: 'drawCards', amount: 4 }],
+    id: 'torgal-a-fine-hound',
+    name: 'Torgal, A Fine Hound',
+    costLabel: '{1}{G}',
+    type: 'creature',
+    subtype: 'Legendary Creature Wolf',
+    power: 2,
+    toughness: 2,
+    text: 'Whenever you cast your first Human creature spell each turn, that creature enters with an additional +1/+1 counter on it for each Dog and/or Wolf you control. \n' +
+      '{T}: Add one mana of any color.',
+    imagePath: '/assets/cards/torgal-a-fine-hound.webp',
+    // The "first Human creature spell each turn enters with additional
+    // counters" trigger is deferred - needs a once-per-turn-per-spell-type
+    // tracker plus modifying the ETB of a DIFFERENT permanent than the one
+    // carrying the trigger, neither of which exists.
+    producesMana: 'any',
   },
   {
-  id: 'treno-dark-city',
-  name: 'Treno, Dark City',
-  costLabel: '-',
-  type: 'land',
-  text:'This land enters tapped. \n' +
-  '{T}: Add {U} or {B}.',
-  imagePath: '/assets/cards/treno-dark-city.webp',
-  entersTapped: true,
-  producesMana: ['U', 'B']
+    id: 'town-greeter',
+    name: 'Town Greeter',
+    costLabel: '{1}{G}',
+    type: 'creature',
+    subtype: 'Creature Human Citizen',
+    power: 1,
+    toughness: 1,
+    text: 'When this creature enters, mill four cards. You may put a land card from among them into your hand. If you put a Town card into your hand this way, you gain 2 life',
+    imagePath: '/assets/cards/town-greeter.webp',
+    onEnter: [{ type: 'millThenPutLandIntoHandGainLifeIfTown', millCount: 4, lifeGainIfTown: 2 }],
   },
   {
-  id: 'triple-triad',
-  name: 'Triple Triad',
-  costLabel: '{3}{R}{R}{R}',
-  type: 'enchantment',
-  text: 'At the beginning of your upkeep, each player exiles the top card of their library. Until end of turn, \n' +
-  'you may play the card you own exiled this way and each other card exiled this way with lesser mana value than it without paying their mana costs.',
-  imagePath: '/assets/cards/triple-triad.webp',
-  // Deferred - simultaneous each-player exile-then-free-cast with a
-  // mana-value comparison across the whole batch is well beyond the
-  // established "play from exile" gap; no mechanism here handles even the
-  // simpler single-player version of this.
+    id: 'traveling-chocobo',
+    name: 'Traveling Chocobo',
+    costLabel: '{2}{G}',
+    type: 'creature',
+    subtype: 'Bird Creature',
+    power: 3,
+    toughness: 2,
+    text: 'You may look at the top card of your library any time. \n' +
+      'You may play lands and cast Bird spells from the top of your library. \n' +
+      'If a land or Bird you control entering the battlefield causes a triggered ability of a permanent you control to trigger, that ability triggers an additional time.',
+    imagePath: '/assets/cards/traveling-chocobo.webp',
+    // Deferred - "play lands and cast spells from the top of your library"
+    // is a persistent play-from-a-zone-other-than-hand mechanic (an
+    // established gap), and the trigger-doubling clause depends on it.
+  },
+  {
+    id: 'travel-the-overworld',
+    name: 'Travel the Overworld',
+    costLabel: '{5}{U}{U}',
+    type: 'sorcery',
+    text: 'Affinity for Towns (This spell costs {1} less to cast for each Town you control.) \n' +
+      'Draw four cards.',
+    imagePath: '/assets/cards/travel-the-overworld.webp',
+    costReductionPerControlledSubtype: { subtype: 'Town', amountPerUnit: 1 },
+    onCast: [{ type: 'drawCards', amount: 4 }],
+  },
+  {
+    id: 'treno-dark-city',
+    name: 'Treno, Dark City',
+    costLabel: '-',
+    type: 'land',
+    text: 'This land enters tapped. \n' +
+      '{T}: Add {U} or {B}.',
+    imagePath: '/assets/cards/treno-dark-city.webp',
+    entersTapped: true,
+    producesMana: ['U', 'B']
+  },
+  {
+    id: 'triple-triad',
+    name: 'Triple Triad',
+    costLabel: '{3}{R}{R}{R}',
+    type: 'enchantment',
+    text: 'At the beginning of your upkeep, each player exiles the top card of their library. Until end of turn, \n' +
+      'you may play the card you own exiled this way and each other card exiled this way with lesser mana value than it without paying their mana costs.',
+    imagePath: '/assets/cards/triple-triad.webp',
+    // Deferred - simultaneous each-player exile-then-free-cast with a
+    // mana-value comparison across the whole batch is well beyond the
+    // established "play from exile" gap; no mechanism here handles even the
+    // simpler single-player version of this.
   },
   {
     id: 'ultima',
@@ -4657,606 +4826,651 @@ export const CARD_POOL: CardDefinition[] = [
     // jump straight to the next player's turn all at once).
   },
   {
-  id: 'ultima-origin-of-oblivion',
-  name: 'Ultima, Origin of Oblivion',
-  costLabel: '{5}',
-  type: 'creature',
-  subtype:'Legendary Creature God',
-  power: 4,
-  toughness: 4,
-  text: 'Flying \n' +
-  'Whenever Ultima attacks, put a blight counter on target land. For as long as that land has a blight counter on it, ' +
-  'it loses all land types and abilities and has “{T}: Add {C}.”\n' +
-  'Whenever you tap a land for {C}, add an additional {C}.',
-  imagePath: '/assets/cards/ultima-origin-of-oblivion.webp',
-  onAttack: [{ type: 'putCounterOnTargetLand', counterLabel: 'blight', counterAmount: 1 }],
-  doublesColorlessManaFromLands: true,
-  // The blight counter's actual effect (losing all land types/abilities,
-  // gaining "{T}: Add {C}") is registered once, globally, in engine/combat.ts:
-  // COUNTER_CHARACTERISTIC_OVERRIDES - it applies to whichever permanent
-  // actually carries the counter (almost always an OPPONENT's land, not
-  // anything Ultima itself controls), not to Ultima's own CardDefinition.
+    id: 'ultima-origin-of-oblivion',
+    name: 'Ultima, Origin of Oblivion',
+    costLabel: '{5}',
+    type: 'creature',
+    subtype: 'Legendary Creature God',
+    power: 4,
+    toughness: 4,
+    text: 'Flying \n' +
+      'Whenever Ultima attacks, put a blight counter on target land. For as long as that land has a blight counter on it, ' +
+      'it loses all land types and abilities and has “{T}: Add {C}.”\n' +
+      'Whenever you tap a land for {C}, add an additional {C}.',
+    imagePath: '/assets/cards/ultima-origin-of-oblivion.webp',
+    onAttack: [{ type: 'putCounterOnTargetLand', counterLabel: 'blight', counterAmount: 1 }],
+    doublesColorlessManaFromLands: true,
+    // The blight counter's actual effect (losing all land types/abilities,
+    // gaining "{T}: Add {C}") is registered once, globally, in engine/combat.ts:
+    // COUNTER_CHARACTERISTIC_OVERRIDES - it applies to whichever permanent
+    // actually carries the counter (almost always an OPPONENT's land, not
+    // anything Ultima itself controls), not to Ultima's own CardDefinition.
   },
   {
-  id: 'ultima-weapon',
-  name: 'Ultima Weapon',
-  costLabel: '{7}',
-  type: 'artifact',
-  subtype: 'Legendary Artifact Equipment',
-  text: 'Whenever equipped creature attacks, destroy target creature an opponent controls. \n' +
-  'Equipped creature gets +7/+7.\n' +
-  'Equip {7}',
-  // The "whenever equipped creature attacks, destroy target creature an
-  // opponent controls" granted trigger is deferred.
-  attachesTo: 'creature',
-  equipCost: '{7}',
-  equipBuff: { power: 7, toughness: 7 },
-  imagePath: '/assets/cards/ultima-weapon.webp'
+    id: 'ultima-weapon',
+    name: 'Ultima Weapon',
+    costLabel: '{7}',
+    type: 'artifact',
+    subtype: 'Legendary Artifact Equipment',
+    text: 'Whenever equipped creature attacks, destroy target creature an opponent controls. \n' +
+      'Equipped creature gets +7/+7.\n' +
+      'Equip {7}',
+    // The "whenever equipped creature attacks, destroy target creature an
+    // opponent controls" granted trigger is deferred.
+    attachesTo: 'creature',
+    equipCost: '{7}',
+    equipBuff: { power: 7, toughness: 7 },
+    imagePath: '/assets/cards/ultima-weapon.webp'
   },
   {
-  id: 'ultimecia-temporal-threat',
-  name: 'Ultimecia, Temporal Threat',
-  costLabel: '{4}{U}{U}',
-  type: 'creature',
-  subtype: 'Legendary Creature Human Warlock',
-  power: 4,
-  toughness: 4,
-  text: 'When Ultimecia enters, tap all creatures your opponents control. \n' +
-  'Whenever a creature you control deals combat damage to a player, draw a card.',
-  imagePath: '/assets/cards/ultimecia-temporal-threat.webp',
-  onEnter: [{ type: 'tapAllOpponentCreatures' }],
-  onAnyControlledCreatureCombatDamageToPlayer: [{ type: 'drawCards', amount: 1 }],
+    id: 'ultimecia-temporal-threat',
+    name: 'Ultimecia, Temporal Threat',
+    costLabel: '{4}{U}{U}',
+    type: 'creature',
+    subtype: 'Legendary Creature Human Warlock',
+    power: 4,
+    toughness: 4,
+    text: 'When Ultimecia enters, tap all creatures your opponents control. \n' +
+      'Whenever a creature you control deals combat damage to a player, draw a card.',
+    imagePath: '/assets/cards/ultimecia-temporal-threat.webp',
+    onEnter: [{ type: 'tapAllOpponentCreatures' }],
+    onAnyControlledCreatureCombatDamageToPlayer: [{ type: 'drawCards', amount: 1 }],
   },
   {
-  id: 'ultimecia-time-sorceress',
-  name: 'Ultimecia, Time Sorceress',
-  costLabel: '{3}{U}{B}',
-  type: 'creature',
-  subtype: 'Legendary Creature Human Warlock',
-  power: 4,
-  toughness: 5,
-  text: 'Whenever Ultimecia enters or attacks, surveil 2. (Look at the top two cards of your library, ' +
-  'then put any number of them into your graveyard and the rest on top of your library in any order.) \n' +
-  'At the beginning of your end step, you may pay {4}{U}{U}{B}{B} and exile eight cards from your graveyard. If you do, transform Ultimecia.',
-  imagePath: '/assets/cards/ultimecia-time-sorceress.webp',
-  transformsInto: 'ultimecia-omnipotent',
-  onEnter: [{ type: 'surveil', count: 2 }],
-  onAttack: [{ type: 'surveil', count: 2 }],
-  abilities: [
-    {
-      id: 'transform',
-      label: 'Transform',
-      cost: { manaLabel: '{4}{U}{U}{B}{B}', exileFromGraveyard: 8 },
-      onlyDuringOwnEndStep: true,
-      transformSelf: true,
-      effectText: 'Exile eight cards from your graveyard. If you do, transform Ultimecia.',
+    id: 'ultimecia-time-sorceress',
+    name: 'Ultimecia, Time Sorceress',
+    costLabel: '{3}{U}{B}',
+    type: 'creature',
+    subtype: 'Legendary Creature Human Warlock',
+    power: 4,
+    toughness: 5,
+    text: 'Whenever Ultimecia enters or attacks, surveil 2. (Look at the top two cards of your library, ' +
+      'then put any number of them into your graveyard and the rest on top of your library in any order.) \n' +
+      'At the beginning of your end step, you may pay {4}{U}{U}{B}{B} and exile eight cards from your graveyard. If you do, transform Ultimecia.',
+    imagePath: '/assets/cards/ultimecia-time-sorceress.webp',
+    transformsInto: 'ultimecia-omnipotent',
+    onEnter: [{ type: 'surveil', count: 2 }],
+    onAttack: [{ type: 'surveil', count: 2 }],
+    abilities: [
+      {
+        id: 'transform',
+        label: 'Transform',
+        cost: { manaLabel: '{4}{U}{U}{B}{B}', exileFromGraveyard: 8 },
+        onlyDuringOwnEndStep: true,
+        transformSelf: true,
+        effectText: 'Exile eight cards from your graveyard. If you do, transform Ultimecia.',
+      },
+    ],
+  },
+  {
+    id: 'ultimecia-omnipotent',
+    name: 'Ultimecia, Omnipotent',
+    costLabel: '-',
+    type: 'creature',
+    subtype: 'Legendary Creature Nightmare Warlock',
+    power: 7,
+    toughness: 7,
+    text: 'Menace (This creature can’t be blocked except by two or more creatures.) \n' +
+      'Time Compression — When this creature transforms into Ultimecia, Omnipotent, take an extra turn after this one.',
+    imagePath: '/assets/cards/ultimecia-omnipotent.webp',
+    grantsExtraTurnOnTransform: true,
+  },
+  {
+    id: 'ultros-obnoxious-octopus',
+    name: 'Ultros, Obnoxious Octopus',
+    costLabel: '{1}{U}',
+    type: 'creature',
+    subtype: 'Legendary Creature Octopus',
+    power: 2,
+    toughness: 1,
+    text: 'Whenever you cast a noncreature spell, if at least four mana was spent to cast it, tap target creature an opponent controls ' +
+      'and put a stun counter on it. (If a permanent with a stun counter would become untapped, remove one from it instead.)\n' +
+      'Whenever you cast a noncreature spell, if at least eight mana was spent to cast it, put eight +1/+1 counters on Ultros.',
+    imagePath: '/assets/cards/ultros-obnoxious-octopus.webp',
+    noncreatureCastTrigger: {
+      tapAndStunOpponentCreatureIfExpensive: { minManaValue: 4 },
+      counterIfExpensive: { minManaValue: 8, counterLabel: '+1/+1', counterAmount: 8 },
     },
-  ],
   },
   {
-  id: 'ultimecia-omnipotent',
-  name: 'Ultimecia, Omnipotent',
-  costLabel: '-',
-  type: 'creature',
-  subtype: 'Legendary Creature Nightmare Warlock',
-  power: 7,
-  toughness: 7,
-  text: 'Menace (This creature can’t be blocked except by two or more creatures.) \n' +
-  'Time Compression — When this creature transforms into Ultimecia, Omnipotent, take an extra turn after this one.',
-  imagePath: '/assets/cards/ultimecia-omnipotent.webp',
-  grantsExtraTurnOnTransform: true,
+    id: 'undercity-dire-rat',
+    name: 'Undercity Dire Rat',
+    costLabel: '{1}{B}',
+    type: 'creature',
+    subtype: 'Creature Rat',
+    power: 2,
+    toughness: 2,
+    text: 'Rat Tail — When this creature dies, create a Treasure token. (It’s an artifact with “{T}, Sacrifice this token: Add one mana of any color.”)',
+    imagePath: '/assets/cards/undercity-dire-rat.webp',
+    onDeath: [{ type: 'createToken', tokenId: 'token-treasure' }],
   },
   {
-  id: 'ultros-obnoxious-octopus',
-  name: 'Ultros, Obnoxious Octopus',
-  costLabel: '{1}{U}',
-  type: 'creature',
-  subtype: 'Legendary Creature Octopus',
-  power: 2,
-  toughness: 1,
-  text: 'Whenever you cast a noncreature spell, if at least four mana was spent to cast it, tap target creature an opponent controls ' +
-  'and put a stun counter on it. (If a permanent with a stun counter would become untapped, remove one from it instead.)\n' +
-  'Whenever you cast a noncreature spell, if at least eight mana was spent to cast it, put eight +1/+1 counters on Ultros.',
-  imagePath: '/assets/cards/ultros-obnoxious-octopus.webp',
-  noncreatureCastTrigger: {
-    tapAndStunOpponentCreatureIfExpensive: { minManaValue: 4 },
-    counterIfExpensive: { minManaValue: 8, counterLabel: '+1/+1', counterAmount: 8 },
-  },
+    id: 'unexpected-request',
+    name: 'Unexpected Request',
+    costLabel: '{2}{R}',
+    type: 'sorcery',
+    text: 'Gain control of target creature until end of turn. Untap that creature. It gains haste until end of turn. ' +
+      'You may attach an Equipment you control to that creature. If you do, unattach it at the beginning of the next end step.',
+    imagePath: '/assets/cards/unexpected-request.webp',
+    onCast: [{ type: 'gainControlOfTargetCreature', untap: true, grantKeywords: ['haste'] }],
+    // The optional "you may attach an Equipment you control to that
+    // creature, unattaching it at the next end step" clause is still
+    // deferred - needs an optional second targeting step plus a delayed
+    // "at the beginning of the next end step" unattach trigger, neither of
+    // which exists yet; the core control-change/untap/haste is wired.
   },
   {
-  id: 'undercity-dire-rat',
-  name: 'Undercity Dire Rat',
-  costLabel: '{1}{B}',
-  type: 'creature',
-  subtype: 'Creature Rat',
-  power: 2,
-  toughness: 2,
-  text: 'Rat Tail — When this creature dies, create a Treasure token. (It’s an artifact with “{T}, Sacrifice this token: Add one mana of any color.”)',
-  imagePath: '/assets/cards/undercity-dire-rat.webp',
-  onDeath: [{ type: 'createToken', tokenId: 'token-treasure' }],
+    id: 'vaan-street-thief',
+    name: 'Vaan, Street Thief',
+    costLabel: '{2}{R}',
+    type: 'creature',
+    subtype: 'Legendary Creature Human Scout',
+    power: 2,
+    toughness: 2,
+    text: 'Whenever one or more Scouts, Pirates, and/or Rogues you control deal combat damage to a player, ' +
+      'exile the top card of that player\u2019s library. You may cast it. If you don\u2019t, create a Treasure token. \n' +
+      'Whenever you cast a spell you don\u2019t own, put a +1/+1 counter on each Scout, Pirate, and Rogue you control.',
+    imagePath: '/assets/cards/vaan-street-thief.webp',
+    // Both deferred - the first ability needs a subtype-filtered combat-damage
+    // watcher (only Scouts/Pirates/Rogues, unlike onAnyControlledCreatureCombatDamageToPlayer's
+    // any-creature watcher) plus an impulse-cast-with-a-fallback mechanism; the
+    // second needs to track "cast a spell you don't own", a condition this
+    // engine (which barely supports casting foreign-owned cards at all) has no
+    // way to detect.
   },
   {
-  id: 'unexpected-request',
-  name: 'Unexpected Request',
-  costLabel: '{2}{R}',
-  type: 'sorcery',
-  text: 'Gain control of target creature until end of turn. Untap that creature. It gains haste until end of turn. ' +
-  'You may attach an Equipment you control to that creature. If you do, unattach it at the beginning of the next end step.',
-  imagePath: '/assets/cards/unexpected-request.webp',
-  onCast: [{ type: 'gainControlOfTargetCreature', untap: true, grantKeywords: ['haste'] }],
-  // The optional "you may attach an Equipment you control to that
-  // creature, unattaching it at the next end step" clause is still
-  // deferred - needs an optional second targeting step plus a delayed
-  // "at the beginning of the next end step" unattach trigger, neither of
-  // which exists yet; the core control-change/untap/haste is wired.
+    id: 'valkyrie-aerial-unit',
+    name: 'Valkyrie Aerial Unit',
+    costLabel: '{5}{U}{U}',
+    type: 'creature',
+    subtype: 'Artifact Creature Construct',
+    power: 5,
+    toughness: 4,
+    text: 'Affinity for artifacts (This spell costs {1} less to cast for each artifact you control.) \n' +
+      'Flying \n' +
+      'When this creature enters, surveil 2.',
+    imagePath: '/assets/cards/valkyrie-aerial-unit.webp',
+    costReductionPerControlledType: { type: 'artifact', amountPerUnit: 1 },
+    onEnter: [{ type: 'surveil', count: 2 }],
   },
   {
-  id: 'vaan-street-thief',
-  name: 'Vaan, Street Thief',
-  costLabel: '{2}{R}',
-  type: 'creature',
-  subtype: 'Legendary Creature Human Scout',
-  power: 2,
-  toughness: 2,
-  text: 'Whenever one or more Scouts, Pirates, and/or Rogues you control deal combat damage to a player, ' +
-  'exile the top card of that player\u2019s library. You may cast it. If you don\u2019t, create a Treasure token. \n' +
-  'Whenever you cast a spell you don\u2019t own, put a +1/+1 counter on each Scout, Pirate, and Rogue you control.',
-  imagePath: '/assets/cards/vaan-street-thief.webp',
-  // Both deferred - the first ability needs a subtype-filtered combat-damage
-  // watcher (only Scouts/Pirates/Rogues, unlike onAnyControlledCreatureCombatDamageToPlayer's
-  // any-creature watcher) plus an impulse-cast-with-a-fallback mechanism; the
-  // second needs to track "cast a spell you don't own", a condition this
-  // engine (which barely supports casting foreign-owned cards at all) has no
-  // way to detect.
+    id: 'vanille-cheerful-l-cie',
+    name: 'Vanille, Cheerful l\u2019Cie',
+    costLabel: '{3}{G}',
+    type: 'creature',
+    subtype: 'Legendary Creature Human Cleric',
+    power: 3,
+    toughness: 2,
+    text: 'When Vanille enters, mill two cards, then return a permanent card from your graveyard to your hand. \n' +
+      'At the beginning of your first main phase, if you both own and control Vanille and a creature named Fang, ' +
+      'Fearless l\u2019Cie, you may pay {3}{B}{G}. If you do, exile them, then meld them into Ragnarok, Divine Deliverance.',
+    imagePath: '/assets/cards/vanille-cheerful-l-cie.webp',
+    onEnter: [{ type: 'millThenReturn', millCount: 2 }],
+    abilities: [
+      {
+        id: 'meld',
+        label: 'Meld into Ragnarok',
+        cost: { manaLabel: '{3}{B}{G}' },
+        onlyDuringOwnFirstMainPhase: true,
+        meldsWith: { partnerDefId: 'fang-fearless-l-cie', resultDefId: 'ragnarok-divine-deliverance' },
+        effectText: "If you own and control Fang, Fearless l’Cie, exile them both and meld into Ragnarok, Divine Deliverance.",
+      },
+    ],
   },
   {
-  id: 'valkyrie-aerial-unit',
-  name: 'Valkyrie Aerial Unit',
-  costLabel: '{5}{U}{U}',
-  type: 'creature',
-  subtype: 'Artifact Creature Construct',
-  power: 5,
-  toughness: 4,
-  text: 'Affinity for artifacts (This spell costs {1} less to cast for each artifact you control.) \n' +
-  'Flying \n' +
-  'When this creature enters, surveil 2.',
-  imagePath: '/assets/cards/valkyrie-aerial-unit.webp',
-  costReductionPerControlledType: { type: 'artifact', amountPerUnit: 1 },
-  onEnter: [{ type: 'surveil', count: 2 }],
+    id: 'vayne-s-treachery',
+    name: 'Vayne\u2019s Treachery',
+    costLabel: '{1}{B}',
+    type: 'instant',
+    text: 'Kicker—Sacrifice an artifact or creature. (You may sacrifice an artifact or creature in addition to any other costs as you cast this spell.) \n' +
+      'Target creature gets -2/-2 until end of turn. If this spell was kicked, that creature gets -6/-6 until end of turn instead.',
+    imagePath: '/assets/cards/vayne-s-treachery.webp',
+    kicker: { cost: 'sacrificeCreatureOrArtifact' },
+    onCast: [
+      {
+        type: 'ifKicked',
+        thenEffects: [{ type: 'pumpTarget', power: -6, toughness: -6 }],
+        elseEffects: [{ type: 'pumpTarget', power: -2, toughness: -2 }],
+      },
+    ],
   },
   {
-  id: 'vanille-cheerful-l-cie',
-  name: 'Vanille, Cheerful l\u2019Cie',
-  costLabel: '{3}{G}',
-  type: 'creature',
-  subtype: 'Legendary Creature Human Cleric',
-  power: 3,
-  toughness: 2,
-  text: 'When Vanille enters, mill two cards, then return a permanent card from your graveyard to your hand. \n' +
-  'At the beginning of your first main phase, if you both own and control Vanille and a creature named Fang, ' +
-  'Fearless l\u2019Cie, you may pay {3}{B}{G}. If you do, exile them, then meld them into Ragnarok, Divine Deliverance.',
-  imagePath: '/assets/cards/vanille-cheerful-l-cie.webp',
-  onEnter: [{ type: 'millThenReturn', millCount: 2 }],
-  abilities: [
-    {
-      id: 'meld',
-      label: 'Meld into Ragnarok',
-      cost: { manaLabel: '{3}{B}{G}' },
-      onlyDuringOwnFirstMainPhase: true,
-      meldsWith: { partnerDefId: 'fang-fearless-l-cie', resultDefId: 'ragnarok-divine-deliverance' },
-      effectText: "If you own and control Fang, Fearless l’Cie, exile them both and meld into Ragnarok, Divine Deliverance.",
-    },
-  ],
+    id: 'vector-imperial-capital',
+    name: 'Vector, Imperial Capital',
+    costLabel: '-',
+    type: 'land',
+    text: 'This land enters tapped. \n' +
+      '{T}: Add {B} or {R}.',
+    imagePath: '/assets/cards/vector-imperial-capital.webp',
+    entersTapped: true,
+    producesMana: ['B', 'R']
   },
   {
-  id: 'vayne-s-treachery',
-  name: 'Vayne\u2019s Treachery',
-  costLabel: '{1}{B}',
-  type: 'instant',
-  text: 'Kicker—Sacrifice an artifact or creature. (You may sacrifice an artifact or creature in addition to any other costs as you cast this spell.) \n' +
-  'Target creature gets -2/-2 until end of turn. If this spell was kicked, that creature gets -6/-6 until end of turn instead.',
-  imagePath: '/assets/cards/vayne-s-treachery.webp',
-  kicker: { cost: 'sacrificeCreatureOrArtifact' },
-  onCast: [
-    {
-      type: 'ifKicked',
-      thenEffects: [{ type: 'pumpTarget', power: -6, toughness: -6 }],
-      elseEffects: [{ type: 'pumpTarget', power: -2, toughness: -2 }],
-    },
-  ],
+    id: 'venat-heart-of-hydaelyn',
+    name: 'Venat, Heart of Hydaelyn',
+    costLabel: '{1}{W}{W}',
+    type: 'creature',
+    subtype: 'Legendary Creature Elder Wizard',
+    power: 3,
+    toughness: 3,
+    text: 'Whenever you cast a legendary spell, draw a card. This ability triggers only once each turn. \n' +
+      'Hero\u2019s Sundering — {7}, {T}: Exile target nonland permanent. Transform Venat. Activate only as a sorcery.',
+    imagePath: '/assets/cards/venat-heart-of-hydaelyn.webp',
+    transformsInto: 'hydaelyn-the-mothercrystal',
   },
   {
-  id: 'vector-imperial-capital',
-  name: 'Vector, Imperial Capital',
-  costLabel: '-',
-  type: 'land',
-  text: 'This land enters tapped. \n' +
-  '{T}: Add {B} or {R}.',
-  imagePath: '/assets/cards/vector-imperial-capital.webp',
-  entersTapped: true,
-  producesMana: ['B', 'R']
+    id: 'hydaelyn-the-mothercrystal',
+    name: 'Hydaelyn, the Mothercrystal',
+    costLabel: '-',
+    type: 'creature',
+    subtype: 'Legendary Creature God',
+    power: 4,
+    toughness: 4,
+    text: 'Indestructible \n' +
+      'Blessing of Light — At the beginning of combat on your turn, put a +1/+1 counter on another target creature you control. \n' +
+      'Until your next turn, it gains indestructible. If that creature is legendary, draw a card.',
+    imagePath: '/assets/cards/hydaelyn-the-mothercrystal.webp',
+    onOwnCombatBegin: [{ type: 'putCounterOnAnotherCreatureGrantsIndestructibleUntilNextTurn', counterLabel: '+1/+1', counterAmount: 1, drawIfLegendary: true }],
   },
   {
-  id: 'venat-heart-of-hydaelyn',
-  name: 'Venat, Heart of Hydaelyn',
-  costLabel: '{1}{W}{W}',
-  type: 'creature',
-  subtype: 'Legendary Creature Elder Wizard',
-  power: 3,
-  toughness: 3,
-  text: 'Whenever you cast a legendary spell, draw a card. This ability triggers only once each turn. \n' +
-  'Hero\u2019s Sundering — {7}, {T}: Exile target nonland permanent. Transform Venat. Activate only as a sorcery.',
-  imagePath: '/assets/cards/venat-heart-of-hydaelyn.webp',
-  transformsInto: 'hydaelyn-the-mothercrystal',
+    id: 'vincent-s-limit-break',
+    name: 'Vincent\u2019s Limit Break',
+    costLabel: '{1}{B}',
+    type: 'instant',
+    text: 'Tiered (Choose one additional cost.) \n ' +
+      'Until end of turn, target creature you control gains “When this creature dies, ' +
+      'return it to the battlefield tapped under its owner’s control” and has the chosen base power and toughness.\n' +
+      '• Galian Beast — {0} — 3/2. \n' +
+      '• Death Gigas — {1} — 5/2. \n' +
+      '• Hellmasker — {3} — 7/2.',
+    imagePath: '/assets/cards/vincent-s-limit-break.webp',
+    tieredModes: [
+      { label: 'Galian Beast — {0} — 3/2', additionalCost: '{0}', effects: [{ type: 'grantTemporaryBaseStatsAndDeathReturn', power: 3, toughness: 2 }] },
+      { label: 'Death Gigas — {1} — 5/2', additionalCost: '{1}', effects: [{ type: 'grantTemporaryBaseStatsAndDeathReturn', power: 5, toughness: 2 }] },
+      { label: 'Hellmasker — {3} — 7/2', additionalCost: '{3}', effects: [{ type: 'grantTemporaryBaseStatsAndDeathReturn', power: 7, toughness: 2 }] }
+    ]
   },
   {
-  id: 'hydaelyn-the-mothercrystal',
-  name: 'Hydaelyn, the Mothercrystal',
-  costLabel: '-',
-  type: 'creature',
-  subtype: 'Legendary Creature God',
-  power: 4,
-  toughness: 4,
-  text: 'Indestructible \n' +
-  'Blessing of Light — At the beginning of combat on your turn, put a +1/+1 counter on another target creature you control. \n' +
-  'Until your next turn, it gains indestructible. If that creature is legendary, draw a card.',
-  imagePath: '/assets/cards/hydaelyn-the-mothercrystal.webp',
-  onOwnCombatBegin: [{ type: 'putCounterOnAnotherCreatureGrantsIndestructibleUntilNextTurn', counterLabel: '+1/+1', counterAmount: 1, drawIfLegendary: true }],
+    id: 'vincent-valentine',
+    name: 'Vincent Valentine',
+    costLabel: '{2}{B}{B}',
+    type: 'creature',
+    subtype: 'Legendary Creature Assassin',
+    power: 2,
+    toughness: 2,
+    text: 'Whenever a creature an opponent controls dies, put a number of +1/+1 counters on Vincent Valentine equal to that creature\u2019s power.\n' +
+      'Whenever Vincent Valentine attacks, you may transform it.',
+    imagePath: '/assets/cards/vincent-valentine.webp',
+    transformsInto: 'galian-beast',
+    onAnyOpponentCreatureDeathPutCounterEqualToPower: { counterLabel: '+1/+1' },
+    onAttackMayTransform: true,
   },
   {
-  id: 'vincent-s-limit-break',
-  name: 'Vincent\u2019s Limit Break',
-  costLabel: '{1}{B}',
-  type: 'instant',
-  text: 'Tiered (Choose one additional cost.) \n ' +
-  'Until end of turn, target creature you control gains “When this creature dies, ' +
-  'return it to the battlefield tapped under its owner’s control” and has the chosen base power and toughness.\n' +
-  '• Galian Beast — {0} — 3/2. \n' +
-  '• Death Gigas — {1} — 5/2. \n' +
-  '• Hellmasker — {3} — 7/2.',
-  imagePath: '/assets/cards/vincent-s-limit-break.webp',
-  tieredModes: [
-    { label: 'Galian Beast — {0} — 3/2', additionalCost: '{0}', effects: [{ type: 'grantTemporaryBaseStatsAndDeathReturn', power: 3, toughness: 2 }] },
-    { label: 'Death Gigas — {1} — 5/2', additionalCost: '{1}', effects: [{ type: 'grantTemporaryBaseStatsAndDeathReturn', power: 5, toughness: 2 }] },
-    { label: 'Hellmasker — {3} — 7/2', additionalCost: '{3}', effects: [{ type: 'grantTemporaryBaseStatsAndDeathReturn', power: 7, toughness: 2 }] }
-  ]
+    id: 'galian-beast',
+    name: 'Galian Beast',
+    costLabel: '-',
+    power: 3,
+    toughness: 2,
+    type: 'creature',
+    subtype: 'Legendary Creature Werewolf Beast',
+    text: 'Trample, lifelink \n' +
+      'When Galian Beast dies, return it to the battlefield tapped (front face up).',
+    onDeathReturnToBattlefieldTapped: true,
+    imagePath: '/assets/cards/galian-beast.webp'
   },
   {
-  id: 'vincent-valentine',
-  name: 'Vincent Valentine',
-  costLabel: '{2}{B}{B}',
-  type: 'creature',
-  subtype: 'Legendary Creature Assassin',
-  power: 2,
-  toughness: 2,
-  text: 'Whenever a creature an opponent controls dies, put a number of +1/+1 counters on Vincent Valentine equal to that creature\u2019s power.\n' +
-  'Whenever Vincent Valentine attacks, you may transform it.',
-  imagePath: '/assets/cards/vincent-valentine.webp',
-  transformsInto: 'galian-beast',
-  onAnyOpponentCreatureDeathPutCounterEqualToPower: { counterLabel: '+1/+1' },
-  onAttackMayTransform: true,
+    id: 'vivi-ornitier',
+    name: 'Vivi Ornitier',
+    costLabel: '{1}{U}{R}',
+    type: 'creature',
+    subtype: 'Legendary Creature Wizard',
+    power: 0,
+    toughness: 3,
+    text: '{0}: Add X mana in any combination of {U} and/or {R}, where X is Vivi Ornitier\u2019s power. Activate only during your turn and only once each turn. \n' +
+      'Whenever you cast a noncreature spell, put a +1/+1 counter on Vivi Ornitier and it deals 1 damage to each opponent',
+    imagePath: '/assets/cards/vivi-ornitier.webp'
   },
   {
-  id: 'galian-beast',
-  name: 'Galian Beast',
-  costLabel: '-',
-  power: 3,
-  toughness:2,
-  type: 'creature',
-  subtype: 'Legendary Creature Werewolf Beast',
-  text: 'Trample, lifelink \n' +
-  'When Galian Beast dies, return it to the battlefield tapped (front face up).',
-  onDeathReturnToBattlefieldTapped: true,
-  imagePath: '/assets/cards/galian-beast.webp'
+    id: 'warrior-s-sword',
+    name: 'Warrior\u2019s Sword',
+    costLabel: '{3}{R}',
+    type: 'artifact',
+    subtype: 'Equipment',
+    text: 'Job select (When this Equipment enters, create a 1/1 colorless Hero creature token, then attach this to it.) \n' +
+      'Equipped creature gets +3/+2 and is a Warrior in addition to its other types. \n' +
+      'Equip {5} ({5}: Attach to target creature you control. Equip only as a sorcery.)',
+    onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
+    attachesTo: 'creature',
+    equipCost: '{5}',
+    equipBuff: { power: 3, toughness: 2 },
+    equipGrantsSubtype: 'Warrior',
+    imagePath: '/assets/cards/warrior-s-sword.webp'
   },
   {
-  id: 'vivi-ornitier',
-  name: 'Vivi Ornitier',
-  costLabel: '{1}{U}{R}',
-  type: 'creature',
-  subtype: 'Legendary Creature Wizard',
-  power: 0,
-  toughness: 3,
-  text: '{0}: Add X mana in any combination of {U} and/or {R}, where X is Vivi Ornitier\u2019s power. Activate only during your turn and only once each turn. \n' +
-  'Whenever you cast a noncreature spell, put a +1/+1 counter on Vivi Ornitier and it deals 1 damage to each opponent',
-  imagePath: '/assets/cards/vivi-ornitier.webp'
+    id: 'wastes',
+    name: 'Wastes',
+    costLabel: '-',
+    type: 'land',
+    text: 'Tap Add M',
+    imagePath: '/assets/cards/wastes.webp',
+    producesMana: 'C'
   },
   {
-  id: 'warrior-s-sword',
-  name: 'Warrior\u2019s Sword',
-  costLabel: '{3}{R}',
-  type: 'artifact',
-  subtype: 'Equipment',
-  text: 'Job select (When this Equipment enters, create a 1/1 colorless Hero creature token, then attach this to it.) \n' +
-  'Equipped creature gets +3/+2 and is a Warrior in addition to its other types. \n' +
-  'Equip {5} ({5}: Attach to target creature you control. Equip only as a sorcery.)',
-  onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
-  attachesTo: 'creature',
-  equipCost: '{5}',
-  equipBuff: { power: 3, toughness: 2 },
-  equipGrantsSubtype: 'Warrior',
-  imagePath: '/assets/cards/warrior-s-sword.webp'
+    id: 'weapons-vendor',
+    name: 'Weapons Vendor',
+    costLabel: '{3}{W}',
+    type: 'creature',
+    subtype: 'Creature Human Artificer',
+    power: 2,
+    toughness: 2,
+    text: 'When this creature enters, draw a card. \n' +
+      'At the beginning of combat on your turn, if you control an Equipment, you may pay {1}. ' +
+      'When you do, attach target Equipment you control to target creature you control.',
+    imagePath: '/assets/cards/weapons-vendor.webp',
+    onEnter: [{ type: 'drawCards', amount: 1 }],
+    // The combat-begin optional-pay-to-attach trigger is deferred - the
+    // established optional-cost-for-benefit gap.
   },
   {
-  id: 'wastes',
-  name: 'Wastes',
-  costLabel: '-',
-  type: 'land',
-  text: 'Tap Add M',
-  imagePath: '/assets/cards/wastes.webp',
-  producesMana: 'C'
+    id: 'white-auracite',
+    name: 'White Auracite',
+    costLabel: '{2}{W}{W}',
+    type: 'artifact',
+    text: 'When this artifact enters, exile target nonland permanent an opponent controls until this artifact leaves the battlefield. \n' +
+      '{T}: Add {W}.',
+    imagePath: '/assets/cards/white-auracite.webp',
+    producesMana: 'W',
+    // The ETB exile is deferred - "until this artifact leaves the
+    // battlefield" needs a linked exile that returns the card when a specific
+    // OTHER permanent leaves play, a hook no exile effect here has.
   },
   {
-  id: 'weapons-vendor',
-  name: 'Weapons Vendor',
-  costLabel: '{3}{W}',
-  type: 'creature',
-  subtype: 'Creature Human Artificer',
-  power: 2,
-  toughness: 2,
-  text: 'When this creature enters, draw a card. \n' +
-  'At the beginning of combat on your turn, if you control an Equipment, you may pay {1}. ' +
-  'When you do, attach target Equipment you control to target creature you control.',
-  imagePath: '/assets/cards/weapons-vendor.webp',
-  onEnter: [{ type: 'drawCards', amount: 1 }],
-  // The combat-begin optional-pay-to-attach trigger is deferred - the
-  // established optional-cost-for-benefit gap.
+    id: 'white-mage-s-staff',
+    name: 'White Mage\u2019s Staff',
+    costLabel: '{1}{W}',
+    type: 'artifact',
+    subtype: 'Equipment',
+    text: 'Job select (When this Equipment enters, create a 1/1 colorless Hero creature token, then attach this to it.) \n ' +
+      'Equipped creature gets +1/+1, has “Whenever this creature attacks, you gain 1 life,” and is a Cleric in addition to its other types.\n' +
+      'Equip {3} ({3}: Attach to target creature you control. Equip only as a sorcery.)',
+    onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
+    attachesTo: 'creature',
+    equipCost: '{3}',
+    equipBuff: { power: 1, toughness: 1 },
+    equipGrantsSubtype: 'Cleric',
+    equipGrantsOnAttack: [{ type: 'gainLife', amount: 1 }],
+    imagePath: '/assets/cards/white-mage-s-staff.webp'
   },
   {
-  id: 'white-auracite',
-  name: 'White Auracite',
-  costLabel: '{2}{W}{W}',
-  type: 'artifact',
-  text: 'When this artifact enters, exile target nonland permanent an opponent controls until this artifact leaves the battlefield. \n' +
-  '{T}: Add {W}.',
-  imagePath: '/assets/cards/white-auracite.webp',
-  producesMana: 'W',
-  // The ETB exile is deferred - "until this artifact leaves the
-  // battlefield" needs a linked exile that returns the card when a specific
-  // OTHER permanent leaves play, a hook no exile effect here has.
+    id: 'windurst-federation-center',
+    name: 'Windurst, Federation Center',
+    costLabel: '-',
+    type: 'land',
+    subtype: 'Town',
+    text: 'This land enters tapped. \n{T}: Add {G} or {W}.',
+    imagePath: '/assets/cards/windurst-federation-center.webp',
+    entersTapped: true,
+    producesMana: ['G', 'W']
   },
   {
-  id: 'white-mage-s-staff',
-  name: 'White Mage\u2019s Staff',
-  costLabel: '{1}{W}',
-  type: 'artifact',
-  subtype: 'Equipment',
-  text: 'Job select (When this Equipment enters, create a 1/1 colorless Hero creature token, then attach this to it.) \n ' +
-  'Equipped creature gets +1/+1, has “Whenever this creature attacks, you gain 1 life,” and is a Cleric in addition to its other types.\n' +
-  'Equip {3} ({3}: Attach to target creature you control. Equip only as a sorcery.)',
-  onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
-  attachesTo: 'creature',
-  equipCost: '{3}',
-  equipBuff: { power: 1, toughness: 1 },
-  equipGrantsSubtype: 'Cleric',
-  equipGrantsOnAttack: [{ type: 'gainLife', amount: 1 }],
-  imagePath: '/assets/cards/white-mage-s-staff.webp'
+    id: 'world-map',
+    name: 'World Map',
+    costLabel: '{1}',
+    type: 'artifact',
+    text: '{1}, {T}, Sacrifice this artifact: Search your library for a basic land card, reveal it, put it into your hand, then shuffle. \n' +
+      '{3}, {T}, Sacrifice this artifact: Search your library for a land card, reveal it, put it into your hand, then shuffle.',
+    abilities: [
+      {
+        id: 'world-map-basic',
+        label: 'Search for a basic land',
+        cost: { manaLabel: '{1}', tap: true, sacrificeSelf: true },
+        effects: [{ type: 'searchLibraryForBasicLand' }],
+        effectText: 'Search your library for a basic land card, reveal it, put it into your hand, then shuffle.',
+      },
+      {
+        id: 'world-map-any',
+        label: 'Search for any land',
+        cost: { manaLabel: '{3}', tap: true, sacrificeSelf: true },
+        effects: [{ type: 'searchLibraryForAnyLand' }],
+        effectText: 'Search your library for a land card, reveal it, put it into your hand, then shuffle.',
+      },
+    ],
+    imagePath: '/assets/cards/world-map.webp'
   },
   {
-  id: 'windurst-federation-center',
-  name: 'Windurst, Federation Center',
-  costLabel: '-',
-  type: 'land',
-  subtype: 'Town',
-  text: 'This land enters tapped. \n{T}: Add {G} or {W}.',
-  imagePath: '/assets/cards/windurst-federation-center.webp',
-  entersTapped: true,
-  producesMana: ['G', 'W']
+    id: 'xande-dark-mage',
+    name: 'Xande, Dark Mage',
+    costLabel: '{2}{U}{B}',
+    type: 'creature',
+    subtype: 'Legendary Creature Human Wizard',
+    power: 3,
+    toughness: 3,
+    text: 'Menace (This creature can\u2019t be blocked except by two or more creatures.) \n' +
+      'Xande gets +1/+1 for each noncreature, nonland card in your graveyard.',
+    imagePath: '/assets/cards/xande-dark-mage.webp',
+    powerBonusPerGraveyardNoncreatureNonland: 1,
   },
   {
-  id: 'world-map',
-  name: 'World Map',
-  costLabel: '{1}',
-  type: 'artifact',
-  text: '{1}, {T}, Sacrifice this artifact: Search your library for a basic land card, reveal it, put it into your hand, then shuffle. \n' +
-  '{3}, {T}, Sacrifice this artifact: Search your library for a land card, reveal it, put it into your hand, then shuffle.',
-  abilities: [
-    {
-      id: 'world-map-basic',
-      label: 'Search for a basic land',
-      cost: { manaLabel: '{1}', tap: true, sacrificeSelf: true },
-      effects: [{ type: 'searchLibraryForBasicLand' }],
-      effectText: 'Search your library for a basic land card, reveal it, put it into your hand, then shuffle.',
-    },
-    {
-      id: 'world-map-any',
-      label: 'Search for any land',
-      cost: { manaLabel: '{3}', tap: true, sacrificeSelf: true },
-      effects: [{ type: 'searchLibraryForAnyLand' }],
-      effectText: 'Search your library for a land card, reveal it, put it into your hand, then shuffle.',
-    },
-  ],
-  imagePath: '/assets/cards/world-map.webp'
+    id: 'you-re-not-alone',
+    name: 'You\u2019re Not Alone',
+    costLabel: '{W}',
+    type: 'instant',
+    text: 'Target creature gets +2/+2 until end of turn. If you control three or more creatures, it gets +4/+4 until end of turn instead.',
+    imagePath: '/assets/cards/you-re-not-alone.webp',
+    onCast: [
+      {
+        type: 'ifControlAtLeastCreatures',
+        count: 3,
+        thenEffects: [{ type: 'pumpTarget', power: 4, toughness: 4 }],
+        elseEffects: [{ type: 'pumpTarget', power: 2, toughness: 2 }],
+      },
+    ],
   },
   {
-  id: 'xande-dark-mage',
-  name: 'Xande, Dark Mage',
-  costLabel: '{2}{U}{B}',
-  type: 'creature',
-  subtype: 'Legendary Creature Human Wizard',
-  power: 3,
-  toughness: 3,
-  text: 'Menace (This creature can\u2019t be blocked except by two or more creatures.) \n' +
-  'Xande gets +1/+1 for each noncreature, nonland card in your graveyard.',
-  imagePath: '/assets/cards/xande-dark-mage.webp',
-  powerBonusPerGraveyardNoncreatureNonland: 1,
+    id: 'y-shtola-rhul',
+    name: 'Y\u2019shtola Rhul',
+    costLabel: '{4}{U}{U}',
+    type: 'creature',
+    subtype: 'Legendary Creature Cat Druid',
+    power: 3,
+    toughness: 5,
+    text: 'At the beginning of your end step, exile target creature you control, then return it to the battlefield under ' +
+      'its owner\u2019s control. Then if it\u2019s the first end step of the turn, there is an additional end step after this step.',
+    imagePath: '/assets/cards/y-shtola-rhul.webp',
+    onOwnEndStep: [{ type: 'exileThenReturnTargetOwnCreature' }, { type: 'queueExtraEndStepIfFirstEndStepOfTurn' }],
   },
   {
-  id: 'you-re-not-alone',
-  name: 'You\u2019re Not Alone',
-  costLabel: '{W}',
-  type: 'instant',
-  text: 'Target creature gets +2/+2 until end of turn. If you control three or more creatures, it gets +4/+4 until end of turn instead.',
-  imagePath: '/assets/cards/you-re-not-alone.webp',
-  onCast: [
-    {
-      type: 'ifControlAtLeastCreatures',
-      count: 3,
-      thenEffects: [{ type: 'pumpTarget', power: 4, toughness: 4 }],
-      elseEffects: [{ type: 'pumpTarget', power: 2, toughness: 2 }],
-    },
-  ],
+    id: 'yuna-s-decision',
+    name: 'Yuna\u2019s Decision',
+    costLabel: '{3}{G}',
+    type: 'sorcery',
+    text: 'Choose one —\n' +
+      '• Continue the Pilgrimage — Sacrifice a creature. If you do, draw a card, then you may put a creature card and/or a land card from your hand onto the battlefield. \n' +
+      '• Find Another Way — Return one or two target permanent cards from your graveyard to your hand.',
+    imagePath: '/assets/cards/yuna-s-decision.webp',
+    chooseModes: [
+      {
+        label: 'Continue the Pilgrimage — Sacrifice a creature. If you do, draw a card, then you may put a creature card and/or a land card from your hand onto the battlefield.',
+        effects: [{ type: 'sacrificeOwnCreatureThenDraw', thenPutCreatureAndOrLandFromHand: true }],
+      },
+      { label: 'Find Another Way — Return one or two target permanent cards from your graveyard to your hand.', effects: [{ type: 'returnUpToTwoTargetPermanentsFromGraveyardToHand' }] },
+    ],
   },
   {
-  id: 'y-shtola-rhul',
-  name: 'Y\u2019shtola Rhul',
-  costLabel: '{4}{U}{U}',
-  type: 'creature',
-  subtype: 'Legendary Creature Cat Druid',
-  power: 3,
-  toughness: 5,
-  text: 'At the beginning of your end step, exile target creature you control, then return it to the battlefield under ' +
-  'its owner\u2019s control. Then if it\u2019s the first end step of the turn, there is an additional end step after this step.',
-  imagePath: '/assets/cards/y-shtola-rhul.webp',
-  onOwnEndStep: [{ type: 'exileThenReturnTargetOwnCreature' }, { type: 'queueExtraEndStepIfFirstEndStepOfTurn' }],
+    id: 'yuna-grand-summoner',
+    name: 'Yuna, Grand Summoner',
+    costLabel: '{1}{G}{W}{U}',
+    type: 'creature',
+    subtype: 'Legendary Creature Human Cleric',
+    power: 1,
+    toughness: 5,
+    text: 'Grand Summon — {T}: Add one mana of any color. When you next cast a creature spell this turn, ' +
+      'that creature enters with two additional +1/+1 counters on it.\n' +
+      'Whenever another permanent you control is put into a graveyard from the battlefield, ' +
+      'if it had one or more counters on it, you may put that number of +1/+1 counters on target creature.',
+    imagePath: '/assets/cards/yuna-grand-summoner.webp',
+    producesMana: 'any',
+    onTapForManaEffects: [{ type: 'setPendingNextCreatureSpellBonus', counterLabel: '+1/+1', counterAmount: 2 }],
+    onOtherPermanentDeathTransferCounters: true,
   },
   {
-  id: 'yuna-hope-of-spira',
-  name: 'Yuna, Hope of Spira',
-  costLabel: '{3}{G}{W}',
-  type: 'creature',
-  subtype: 'Legendary Creature Human Cleric',
-  power: 3,
-  toughness: 5,
-  text: 'During your turn, Yuna and enchantment creatures you control have trample, lifelink, and ward {2}.\n' +
-  'At the beginning of your end step, return up to one target enchantment card from your graveyard to the battlefield with a finality counter on it.',
-  imagePath: '/assets/cards/yuna-hope-of-spira.webp',
-  grantsControlledGroupKeywordsDuringOwnTurn: { subtypeMatch: 'enchantment', includeSelf: true, keywords: ['trample', 'lifelink'], ward: { mana: '{2}' } },
-  // The end-step "return target enchantment card from your graveyard to
-  // the battlefield with a finality counter" is deferred - the existing
-  // reanimateTargetFromGraveyard effect defaults to a creature-card filter
-  // (or, via nonlegendaryPermanentInsteadOfCreature, any nonlegendary
-  // permanent), neither of which matches "an enchantment card" specifically,
-  // and finality counters aren't mechanically implemented anywhere in this
-  // engine yet either (currently just flavor text on several cards).
+    id: 'yuna-hope-of-spira',
+    name: 'Yuna, Hope of Spira',
+    costLabel: '{3}{G}{W}',
+    type: 'creature',
+    subtype: 'Legendary Creature Human Cleric',
+    power: 3,
+    toughness: 5,
+    text: 'During your turn, Yuna and enchantment creatures you control have trample, lifelink, and ward {2}.\n' +
+      'At the beginning of your end step, return up to one target enchantment card from your graveyard to the battlefield with a finality counter on it.',
+    imagePath: '/assets/cards/yuna-hope-of-spira.webp',
+    grantsControlledGroupKeywordsDuringOwnTurn: { subtypeMatch: 'enchantment', includeSelf: true, keywords: ['trample', 'lifelink'], ward: { mana: '{2}' } },
+    // The end-step "return target enchantment card from your graveyard to
+    // the battlefield with a finality counter" is deferred - the existing
+    // reanimateTargetFromGraveyard effect defaults to a creature-card filter
+    // (or, via nonlegendaryPermanentInsteadOfCreature, any nonlegendary
+    // permanent), neither of which matches "an enchantment card" specifically,
+    // and finality counters aren't mechanically implemented anywhere in this
+    // engine yet either (currently just flavor text on several cards).
   },
   {
-  id: 'zack-fair',
-  name: 'Zack Fair',
-  costLabel: '{W}',
-  type: 'creature',
-  subtype: 'Legendary Creature Human Soldier',
-  power: 0,
-  toughness: 1,
-  text: 'Zack Fair enters with a +1/+1 counter on it. \n' +
-  '{1}, Sacrifice Zack Fair: Target creature you control gains indestructible until end of turn. Put Zack Fair\u2019s ' +
-  'counters on that creature and attach an Equipment that was attached to Zack Fair to that creature.',
-  imagePath: '/assets/cards/zack-fair.webp',
-  // Was missing both the ETB counter and the sacrifice ability entirely.
-  onEnter: [{ type: 'putCounterOnSelf', counterLabel: '+1/+1', counterAmount: 1 }],
-  // Zack Fair never keeps indestructible himself - he's sacrificed as part
-  // of the ability's own cost before the target could ever benefit from it
-  // being on him. Without this, his own text would falsely self-apply
-  // indestructible via the plain substring keyword check.
-  excludeSelfKeywords: ['indestructible'],
-  abilities: [
-    {
-      id: 'zack-fair-sacrifice',
-      label: 'Sacrifice',
-      cost: { manaLabel: '{1}', sacrificeSelf: true },
-      effects: [{ type: 'pumpTarget', power: 0, toughness: 0, grantKeyword: 'indestructible' }],
-      effectText: 'Target creature you control gains indestructible until end of turn.',
-      // "Put Zack Fair's counters on that creature and attach an Equipment
-      // that was attached to Zack Fair to that creature" is deferred - no
-      // effect moves counters/attachments from a just-sacrificed source to
-      // a separately-chosen target.
-    },
-  ],
+    id: 'yuna-s-whistle',
+    name: 'Yuna\u2019s Whistle',
+    costLabel: '{1}{G}{G}',
+    type: 'instant',
+    text: 'Reveal cards from the top of your library until you reveal a creature card. Put that card into your hand ' +
+      'and the rest on the bottom of your library in a random order. When you reveal a creature card this way, ' +
+      'put X +1/+1 counters on target creature you control, where X is the mana value of that card.',
+    imagePath: '/assets/cards/yuna-s-whistle.webp',
+    onCast: [{ type: 'revealUntilCreatureThenPutCountersEqualToManaValue' }],
   },
   {
-  id: 'zanarkand-ancient-metropolis',
-  name: 'Zanarkand, Ancient Metropolis',
-  costLabel: '-',
-  type: 'land',
-  text: 'This land enters tapped. \n ' +
-  '{T}: Add {G}. \n' +
-  'A city dead for a thousand years. The end of Yuna\u2019s journey.\n' +
-  'Lasting Fayth {4}{G}{G} \n' +
-  'Sorcery — Adventure \n' +
-  'Create a 1/1 colorless Hero creature token. Put a +1/+1 counter on it for each land you control. (Then exile this card. You may play the land later from exile.)',
-  imagePath: '/assets/cards/zanarkand-ancient-metropolis.webp',
-  entersTapped: true,
-  producesMana: 'G'
+    id: 'zack-fair',
+    name: 'Zack Fair',
+    costLabel: '{W}',
+    type: 'creature',
+    subtype: 'Legendary Creature Human Soldier',
+    power: 0,
+    toughness: 1,
+    text: 'Zack Fair enters with a +1/+1 counter on it. \n' +
+      '{1}, Sacrifice Zack Fair: Target creature you control gains indestructible until end of turn. Put Zack Fair\u2019s ' +
+      'counters on that creature and attach an Equipment that was attached to Zack Fair to that creature.',
+    imagePath: '/assets/cards/zack-fair.webp',
+    // Was missing both the ETB counter and the sacrifice ability entirely.
+    onEnter: [{ type: 'putCounterOnSelf', counterLabel: '+1/+1', counterAmount: 1 }],
+    // Zack Fair never keeps indestructible himself - he's sacrificed as part
+    // of the ability's own cost before the target could ever benefit from it
+    // being on him. Without this, his own text would falsely self-apply
+    // indestructible via the plain substring keyword check.
+    excludeSelfKeywords: ['indestructible'],
+    abilities: [
+      {
+        id: 'zack-fair-sacrifice',
+        label: 'Sacrifice',
+        cost: { manaLabel: '{1}', sacrificeSelf: true },
+        effects: [{ type: 'pumpTarget', power: 0, toughness: 0, grantKeyword: 'indestructible' }],
+        effectText: 'Target creature you control gains indestructible until end of turn.',
+        // "Put Zack Fair's counters on that creature and attach an Equipment
+        // that was attached to Zack Fair to that creature" is deferred - no
+        // effect moves counters/attachments from a just-sacrificed source to
+        // a separately-chosen target.
+      },
+    ],
   },
   {
-  id: 'zell-dincht',
-  name: 'Zell Dincht',
-  costLabel: '{2}{R}',
-  type: 'creature',
-  subtype: 'Legendary Creature Human Monk',
-  power: 0,
-  toughness: 3,
-  text: 'You may play an additional land on each of your turns. \n' +
-  'Zell Dincht gets +1/+0 for each land you control. \n' +
-  'At the beginning of your end step, return a land you control to its owner\u2019s hand.',
-  imagePath: '/assets/cards/zell-dincht.webp',
-  extraLandsPerTurn: 1,
-  powerBonusPerControlledLand: 1,
-  onOwnEndStep: [{ type: 'returnControlledLandToHand' }],
+    id: 'zanarkand-ancient-metropolis',
+    name: 'Zanarkand, Ancient Metropolis',
+    costLabel: '-',
+    type: 'land',
+    text: 'This land enters tapped. \n ' +
+      '{T}: Add {G}. \n' +
+      'A city dead for a thousand years. The end of Yuna\u2019s journey.\n' +
+      'Lasting Fayth {4}{G}{G} \n' +
+      'Sorcery — Adventure \n' +
+      'Create a 1/1 colorless Hero creature token. Put a +1/+1 counter on it for each land you control. (Then exile this card. You may play the land later from exile.)',
+    imagePath: '/assets/cards/zanarkand-ancient-metropolis.webp',
+    entersTapped: true,
+    producesMana: 'G'
   },
   {
-  id: 'zenos-yae-galvus',
-  name: 'Zenos yae Galvus',
-  costLabel: '{3}{B}{B}',
-  type: 'creature',
-  subtype: 'Legendary Creature Human Noble Soldier Warrior',
-  power: 4,
-  toughness: 4,
-  text: 'My First Friend — When Zenos yae Galvus enters, choose a creature an opponent controls. Until end of turn, '+
-  'creatures other than Zenos yae Galvus and the chosen creature get -2/-2. \n' +
-  'When the chosen creature leaves the battlefield, transform Zenos yae Galvus.',
-  imagePath: '/assets/cards/zenos-yae-galvus.webp',
-  transformsInto:'shinryu-transcendent-rival',
-  onEnter: [{ type: 'chooseCreatureDebuffOthersAndWatchLeave', power: -2, toughness: -2, onWatchedLeaveEffects: [{ type: 'transformSelf' }] }],
+    id: 'zell-dincht',
+    name: 'Zell Dincht',
+    costLabel: '{2}{R}',
+    type: 'creature',
+    subtype: 'Legendary Creature Human Monk',
+    power: 0,
+    toughness: 3,
+    text: 'You may play an additional land on each of your turns. \n' +
+      'Zell Dincht gets +1/+0 for each land you control. \n' +
+      'At the beginning of your end step, return a land you control to its owner\u2019s hand.',
+    imagePath: '/assets/cards/zell-dincht.webp',
+    extraLandsPerTurn: 1,
+    powerBonusPerControlledLand: 1,
+    onOwnEndStep: [{ type: 'returnControlledLandToHand' }],
   },
   {
-  id: 'shinryu-transcendent-rival',
-  name: 'Shinryu, Transcendent Rival',
-  costLabel: '-',
-  type: 'creature',
-  subtype:'Legendary Creature Dragon',
-  power: 8,
-  toughness: 8,
-  text: 'Flying \n' +
-  'As this creature transforms into Shinryu, choose an opponent. \n' +
-  'Burning Chains — When the chosen player loses the game, you win the game.',
-  imagePath: '/assets/cards/shinryu-transcendent-rival.webp',
-  onTransformInto: [{ type: 'chooseOpponent' }],
-  winsGameIfChosenOpponentLoses: true,
+    id: 'zenos-yae-galvus',
+    name: 'Zenos yae Galvus',
+    costLabel: '{3}{B}{B}',
+    type: 'creature',
+    subtype: 'Legendary Creature Human Noble Soldier Warrior',
+    power: 4,
+    toughness: 4,
+    text: 'My First Friend — When Zenos yae Galvus enters, choose a creature an opponent controls. Until end of turn, ' +
+      'creatures other than Zenos yae Galvus and the chosen creature get -2/-2. \n' +
+      'When the chosen creature leaves the battlefield, transform Zenos yae Galvus.',
+    imagePath: '/assets/cards/zenos-yae-galvus.webp',
+    transformsInto: 'shinryu-transcendent-rival',
+    onEnter: [{ type: 'chooseCreatureDebuffOthersAndWatchLeave', power: -2, toughness: -2, onWatchedLeaveEffects: [{ type: 'transformSelf' }] }],
   },
   {
-  id: 'zidane-tantalus-thief',
-  name: 'Zidane, Tantalus Thief',
-  costLabel: '{3}{R}{W}',
-  type: 'creature',
-  subtype: 'Legendary Creature Human Mutant Scout',
-  power: 3,
-  toughness: 3,
-  text: 'When Zidane enters, gain control of target creature an opponent controls until end of turn. Untap it. It gains lifelink and haste until end of turn. \n' +
-  'Whenever an opponent gains control of a permanent from you, you create a Treasure token.',
-  imagePath: '/assets/cards/zidane-tantalus-thief.webp',
-  onEnter: [{ type: 'gainControlOfTargetCreature', opponentControlledOnly: true, untap: true, grantKeywords: ['lifelink', 'haste'] }],
-  onOpponentGainsControlFromYouTrigger: [{ type: 'createToken', tokenId: 'token-treasure' }],
+    id: 'shinryu-transcendent-rival',
+    name: 'Shinryu, Transcendent Rival',
+    costLabel: '-',
+    type: 'creature',
+    subtype: 'Legendary Creature Dragon',
+    power: 8,
+    toughness: 8,
+    text: 'Flying \n' +
+      'As this creature transforms into Shinryu, choose an opponent. \n' +
+      'Burning Chains — When the chosen player loses the game, you win the game.',
+    imagePath: '/assets/cards/shinryu-transcendent-rival.webp',
+    onTransformInto: [{ type: 'chooseOpponent' }],
+    winsGameIfChosenOpponentLoses: true,
   },
- {
-  id: 'zodiark-umbral-god',
-  name: 'Zodiark, Umbral God',
-  costLabel: '{B}{B}{B}{B}{B}',
-  type: 'creature',
-  subtype: 'Legendary Creature God',
-  power: 5,
-  toughness: 5,
-  text: 'Indestructible \n' +
-  'When Zodiark enters, each player sacrifices half the non-God creatures they control of their choice, rounded down. \n' +
-  'Whenever a player sacrifices another creature, put a +1/+1 counter on Zodiark.',
-  imagePath: '/assets/cards/zodiark-umbral-god.webp',
-  onEnter: [{ type: 'eachPlayerSacrificesHalfRoundedDown', filter: 'nonGodCreature' }],
-  // "Whenever a player sacrifices another creature, put a +1/+1 counter on
-  // Zodiark" is still deferred - a truly universal "any sacrifice, by
-  // either player, from ANY source" watcher would need hooking into every
-  // sacrifice-resolution path across the whole engine (resolveSacrificeQueue,
-  // chooseSacrifice, and every ad hoc sacrificeSelf cost), not just this
-  // one ETB effect.
+  {
+    id: 'zidane-tantalus-thief',
+    name: 'Zidane, Tantalus Thief',
+    costLabel: '{3}{R}{W}',
+    type: 'creature',
+    subtype: 'Legendary Creature Human Mutant Scout',
+    power: 3,
+    toughness: 3,
+    text: 'When Zidane enters, gain control of target creature an opponent controls until end of turn. Untap it. It gains lifelink and haste until end of turn. \n' +
+      'Whenever an opponent gains control of a permanent from you, you create a Treasure token.',
+    imagePath: '/assets/cards/zidane-tantalus-thief.webp',
+    onEnter: [{ type: 'gainControlOfTargetCreature', opponentControlledOnly: true, untap: true, grantKeywords: ['lifelink', 'haste'] }],
+    onOpponentGainsControlFromYouTrigger: [{ type: 'createToken', tokenId: 'token-treasure' }],
+  },
+  {
+    id: 'zodiark-umbral-god',
+    name: 'Zodiark, Umbral God',
+    costLabel: '{B}{B}{B}{B}{B}',
+    type: 'creature',
+    subtype: 'Legendary Creature God',
+    power: 5,
+    toughness: 5,
+    text: 'Indestructible \n' +
+      'When Zodiark enters, each player sacrifices half the non-God creatures they control of their choice, rounded down. \n' +
+      'Whenever a player sacrifices another creature, put a +1/+1 counter on Zodiark.',
+    imagePath: '/assets/cards/zodiark-umbral-god.webp',
+    onEnter: [{ type: 'eachPlayerSacrificesHalfRoundedDown', filter: 'nonGodCreature' }],
+    // "Whenever a player sacrifices another creature, put a +1/+1 counter on
+    // Zodiark" is still deferred - a truly universal "any sacrifice, by
+    // either player, from ANY source" watcher would need hooking into every
+    // sacrifice-resolution path across the whole engine (resolveSacrificeQueue,
+    // chooseSacrifice, and every ad hoc sacrificeSelf cost), not just this
+    // one ETB effect.
   },
 ];
 
