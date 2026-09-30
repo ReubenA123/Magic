@@ -205,6 +205,20 @@ export const CARD_POOL: CardDefinition[] = [
     // needs a damage-redirection replacement effect; neither exists yet.
   },
   {
+    id: 'arcane-signet',
+    name: 'Arcane Signet',
+    type: 'artifact',
+    costLabel: '{2}',
+    text: '{T}: Add one mana of any color in your commander’s color identity.',
+    imagePath: '/assets/cards/arcane-signet.webp',
+    // Color identity here is approximated as just the commander's own
+    // printed mana cost colors (see engine/actions.ts: toggleTap's
+    // 'commanderColorIdentity' resolution) - real color identity also
+    // includes any mana symbols in the commander's rules/reminder text,
+    // which this engine has no generic way to derive from CardDefinition.
+    producesMana: 'commanderColorIdentity',
+  },
+  {
     id: 'ardyn-the-usurper',
     name: 'Ardyn, the Usurper',
     type: 'creature',
@@ -229,6 +243,16 @@ export const CARD_POOL: CardDefinition[] = [
     // a-stat/type override, which no existing copy effect supports
     // (createTokenCopyOfTarget only copies a battlefield permanent,
     // unchanged).
+  },
+  {
+    id: 'ash-barrens',
+    name: 'Ash Barrens',
+    type: 'land',
+    costLabel: '-',
+    text: '{T}: Add {C}.\nBasic landcycling {1} ({1}, Discard this card: Search your library for a basic land card, reveal it, put it into your hand, then shuffle.)',
+    imagePath: '/assets/cards/ash-barrens.webp',
+    producesMana: 'C',
+    cycling: { cost: '{1}', searchAnyBasicLand: true },
   },
   {
     id: 'ashe-princess-of-dalmasca',
@@ -359,6 +383,19 @@ export const CARD_POOL: CardDefinition[] = [
     // deferred (see ardyn-the-usurper for why), and the extra-combat-phase
     // trigger is deferred - there's no "additional combat phase" mechanism
     // (only whole extra TURNS are supported, via extraTurnsQueued).
+  },
+  {
+    id: 'bane-of-progress',
+    name: 'Bane of Progress',
+    type: 'creature',
+    subtype: 'Creature Elemental',
+    costLabel: '{4}{G}{G}',
+    power: 2,
+    toughness: 2,
+    text: 'When this creature enters, destroy all artifacts and enchantments. Put a +1/+1 counter ' +
+      'on this creature for each permanent destroyed this way.',
+    imagePath: '/assets/cards/bane-of-progress.webp',
+    onEnter: [{ type: 'destroyAll', targetFilter: 'artifactAndEnchantment', thenCounterSelfLabel: '+1/+1' }],
   },
   {
     id: 'bards-bow',
@@ -515,6 +552,41 @@ export const CARD_POOL: CardDefinition[] = [
     imagePath: '/assets/cards/blitzball-shot.webp',
   },
   {
+    id: 'blitzball-stadium',
+    name: 'Blitzball Stadium',
+    type: 'artifact',
+    costLabel: '{X}{U}',
+    text: 'When this artifact enters, support X. (Put a +1/+1 counter on each of up to X target creatures.)\n' +
+      'Go for the Goal! — {3}, {T}: Until end of turn, target creature can’t be blocked this turn.',
+    imagePath: '/assets/cards/blitzball-stadium.webp',
+    onEnter: [{ type: 'support', counterLabel: '+1/+1', counterAmount: 1 }],
+    abilities: [
+      {
+        id: 'blitzball-stadium-goal',
+        label: 'Go for the Goal!',
+        cost: { manaLabel: '{3}', tap: true },
+        effects: [{ type: 'grantKeywordsToTargetPermanent', keywords: ['unblockable'], creatureOnly: true }],
+        effectText: "Until end of turn, target creature can't be blocked this turn.",
+        // The granted "draws a card for each kind of counter on it" trigger
+        // is deferred - it would need a whole new per-creature GRANTED
+        // triggered-ability shape (fire on ITS combat damage to a player,
+        // for the rest of the turn only, counting distinct counter LABELS
+        // rather than a total count), which nothing else in this engine
+        // needs yet. Only the unblockable half is implemented.
+      },
+    ],
+  },
+  {
+    id: 'brushland',
+    name: 'Brushland',
+    type: 'land',
+    costLabel: '-',
+    text: '{T}: Add {C}.\n{T}: Add {G} or {W}. This land deals 1 damage to you.',
+    imagePath: '/assets/cards/brushland.webp',
+    producesMana: 'C',
+    altProducesMana: { colors: ['G', 'W'], payLife: 1 },
+  },
+  {
     id: 'buster-sword',
     name: 'Buster Sword',
     type: 'artifact',
@@ -609,6 +681,21 @@ export const CARD_POOL: CardDefinition[] = [
     imagePath: '/assets/cards/cecil-redeemed-paladin.webp',
   },
   {
+    id: 'chasm-skulker',
+    name: 'Chasm Skulker',
+    type: 'creature',
+    subtype: 'Creature Squid Horror',
+    costLabel: '{2}{U}',
+    power: 1,
+    toughness: 1,
+    text: 'Whenever you draw a card, put a +1/+1 counter on this creature.\n' +
+      'When this creature dies, create X 1/1 blue Squid creature tokens with islandwalk, where X is the number ' +
+      'of +1/+1 counters on this creature. (They can\u2019t be blocked as long as defending player controls an Island.)',
+    imagePath: '/assets/cards/chasm-skulker.webp',
+    onDrawTrigger: { counterLabel: '+1/+1', counterAmount: 1 },
+    onDeathCreateTokensEqualToOwnCounters: { counterLabel: '+1/+1', tokenId: 'token-squid' },
+  },
+  {
     id: 'chocobo-kick',
     name: 'Chocobo Kick',
     type: 'sorcery',
@@ -626,6 +713,19 @@ export const CARD_POOL: CardDefinition[] = [
         elseEffects: [{ type: 'chooseCreatureDealsDamageToOpponentCreature' }],
       },
     ],
+  },
+  {
+    id: 'chocobo-knights',
+    name: 'Chocobo Knights',
+    type: 'creature',
+    subtype: 'Creature Human Knight',
+    costLabel: '{3}{W}',
+    power: 3,
+    toughness: 3,
+    text: 'Whenever you attack, creatures you control with counters on them gain double strike until end of turn.\n' +
+      'Only a select few can become Chocobo Knights. You have to be a skilled rider or achieve some combat merit to become one.',
+    imagePath: '/assets/cards/chocobo-knights.webp',
+    grantsKeywordToOwnCreaturesWithCountersOnAttack: 'double strike',
   },
   {
     id: 'chocobo-racetrack',
@@ -865,6 +965,38 @@ export const CARD_POOL: CardDefinition[] = [
     imagePath: '/assets/cards/coliseum-behemoth.webp',
   },
   {
+    id: 'collective-effort',
+    name: 'Collective Effort',
+    type: 'sorcery',
+    costLabel: '{1}{W}{W}',
+    text: 'Escalate—Tap an untapped creature you control. (Pay this cost for each mode chosen beyond the first.)\n' +
+      'Choose one or more —\n' +
+      '• Destroy target creature with power 4 or greater.\n' +
+      '• Destroy target enchantment. \n' +
+      '• Put a +1/+1 counter on each creature target player controls.',
+    imagePath: '/assets/cards/collective-effort.webp',
+    escalateCost: 'tapCreature',
+    // Modes 1 and 2 (both destroyTarget) share pendingTarget - if BOTH are
+    // chosen together, only the second one actually ends up resolvable, same
+    // known limitation as the pre-existing Clash of the Eikons: chooseModes
+    // resolves every selected mode's effects through one flat
+    // resolveCardEffects call, and the second destroyTarget's arming
+    // silently clobbers the first's before the player ever acts on it.
+    // Mode 3 is unaffected (it arms the separate pendingPlayerTarget), so
+    // 1+3 or 2+3 together both work correctly - only choosing 1 AND 2 in the
+    // same cast loses one of them. Fixing the general case would need a
+    // mode-effect queue (like pendingCounterTransferQueue) shared across
+    // every chooseModes card, out of scope here.
+    chooseModes: [
+      { label: 'Destroy target creature with power 4 or greater.', effects: [{ type: 'destroyTarget', targetFilter: 'creatureWithMinPower', minPower: 4 }] },
+      { label: 'Destroy target enchantment.', effects: [{ type: 'destroyTarget', targetFilter: 'enchantment' }] },
+      {
+        label: 'Put a +1/+1 counter on each creature target player controls.',
+        effects: [{ type: 'putCounterOnEachCreatureTargetPlayerControls', counterLabel: '+1/+1', counterAmount: 1 }],
+      },
+    ],
+  },
+  {
     id: 'combat-tutorial',
     name: 'Combat Tutorial',
     type: 'sorcery',
@@ -930,6 +1062,16 @@ export const CARD_POOL: CardDefinition[] = [
     equipCost: '{1}',
     equipBuff: { power: 1, toughness: 1 },
     imagePath: '/assets/cards/crystal-fragments.webp'
+  },
+  {
+    id: 'damning-verdict',
+    name: 'Damning Verdict',
+    type: 'sorcery',
+    costLabel: '{3}{W}{W}',
+    text: 'Destroy all creatures with no counters on them.\n' +
+      '“Yevon is embodied by eternal, unchanging continuity, summoner. Those who question these truths—they are traitors!”',
+    imagePath: '/assets/cards/damning-verdict.webp',
+    onCast: [{ type: 'destroyAll', targetFilter: 'creatureWithNoCounters' }],
   },
   {
     id: 'dark-confidant',
@@ -1236,6 +1378,20 @@ export const CARD_POOL: CardDefinition[] = [
     imagePath: "/assets/cards/ether.webp"
   },
   {
+    id: 'everflowing-chalice',
+    name: 'Everflowing Chalice',
+    type: 'artifact',
+    costLabel: '{0}',
+    text: 'Multikicker {2} (You may pay an additional {2} any number of times as you cast this spell.)\n' +
+      'This artifact enters with a charge counter on it for each time it was kicked.\n' +
+      '{T}: Add {C} for each charge counter on this artifact.',
+    imagePath: '/assets/cards/everflowing-chalice.webp',
+    multikickerCost: '{2}',
+    onEnter: [{ type: 'putCounterOnSelf', counterLabel: 'charge', counterAmount: 'chosenX' }],
+    producesMana: 'C',
+    producesManaAmountEqualToOwnCounterLabel: 'charge',
+  },
+  {
     id: 'evil-reawakened',
     name: "Evil Reawakened",
     type: "sorcery",
@@ -1297,6 +1453,34 @@ export const CARD_POOL: CardDefinition[] = [
     // zone move, not routed through one place a watcher could hook.
     text: "Whenever one or more cards leave your graveyard, you draw a card and you lose 1 life. This ability triggers only once each turn.",
     imagePath: '/assets/cards/fang-fearless-l-cie.webp'
+  },
+  {
+    id: 'farewell',
+    name: 'Farewell',
+    type: 'sorcery',
+    costLabel: '{4}{W}{W}',
+    text: 'Choose one or more — \n' +
+      '• Exile all artifacts. \n' +
+      '• Exile all creatures. \n' +
+      '• Exile all enchantments. \n' +
+      '• Exile all graveyards. \n' +
+      '“Stay with me until the end. Please.”',
+    imagePath: '/assets/cards/farewell.webp',
+    chooseModes: [
+      { label: 'Exile all artifacts.', effects: [{ type: 'exileAll', targetFilter: 'artifact' }] },
+      { label: 'Exile all creatures.', effects: [{ type: 'exileAll', targetFilter: 'creature' }] },
+      { label: 'Exile all enchantments.', effects: [{ type: 'exileAll', targetFilter: 'enchantment' }] },
+      { label: 'Exile all graveyards.', effects: [{ type: 'exileAllGraveyards' }] },
+    ],
+  },
+  {
+    id: 'farseek',
+    name: 'Farseek',
+    type: 'sorcery',
+    costLabel: '{1}{G}',
+    text: 'Search your library for a Plains, Island, Swamp, or Mountain card, put it onto the battlefield tapped, then shuffle.',
+    imagePath: '/assets/cards/farseek.webp',
+    onCast: [{ type: 'searchLibraryForBasicLand', toBattlefieldTapped: true, excludeNames: ['Forest'] }],
   },
   {
     id: 'fate-of-the-sun-cryst',
@@ -2730,6 +2914,17 @@ export const CARD_POOL: CardDefinition[] = [
     // library-search flow doesn't hand off to a second pending state).
   },
   {
+    id: 'promise-of-loyalty',
+    name: 'Promise of Loyalty',
+    costLabel: '{4}{W}',
+    type: 'sorcery',
+    text: 'Each player puts a vow counter on a creature they control and sacrifices the rest. Each of those creatures can’t attack you or planeswalkers you control for as long as it has a vow counter on it.\n' +
+      '“Listen to my story. This may be our last chance.”\n' +
+      '—Tidus',
+    imagePath: '/assets/cards/promise-of-loyalty.webp',
+    onCast: [{ type: 'eachPlayerKeepOneCreatureSacrificeRest' }],
+  },
+  {
     id: 'prompto-argentum',
     name: 'Prompto Argentum',
     costLabel: '{1}{R}',
@@ -2866,6 +3061,18 @@ export const CARD_POOL: CardDefinition[] = [
     imagePath: '/assets/cards/rabanastre-royal-city.webp',
     entersTapped: true,
     producesMana: ['R', 'W']
+  },
+  {
+    id: 'radiant-grove',
+    name: 'Radiant Grove',
+    costLabel: '-',
+    type: 'land',
+    text: '({T}: Add {G} or {W}.) \nThis land enters tapped. \n' +
+      '“You’re not really going to see the dead, more like your memories of them. They take on the form of the dead person—an illusion, nothing else.”\n' +
+      '—Rikku',
+    imagePath: '/assets/cards/radiant-grove.webp',
+    entersTapped: true,
+    producesMana: ['G', 'W'],
   },
   {
     id: 'ragnarok-divine-deliverance',
@@ -3654,6 +3861,16 @@ export const CARD_POOL: CardDefinition[] = [
     basePowerEqualsControlledCreatureCount: true,
   },
   {
+    id: 'sol-ring',
+    name: 'Sol Ring',
+    costLabel: '{1}',
+    type: 'artifact',
+    text: '{T}: Add {C}{C}.',
+    imagePath: '/assets/cards/sol-ring.webp',
+    producesMana: 'C',
+    producesManaAmount: 2,
+  },
+  {
     id: 'sorceress-s-schemes',
     name: 'Sorceress\u2019s Schemes',
     costLabel: '{3}{R}',
@@ -4236,6 +4453,35 @@ export const CARD_POOL: CardDefinition[] = [
     },
   },
   {
+    id: 'summoner-s-sending',
+    name: 'Summoner’s Sending',
+    costLabel: '{1}{W}',
+    type: 'enchantment',
+    text: 'At the beginning of your end step, you may exile target creature card from a graveyard. If you do, create a 1/1 white Spirit creature token with flying. Put a +1/+1 counter on it if the exiled card’s mana value is 4 or greater.',
+    imagePath: '/assets/cards/summoner-s-sending.webp',
+    onOwnEndStep: [
+      {
+        type: 'exileTargetGraveyardCard',
+        optional: true,
+        creatureOnly: true,
+        thenCreateToken: { tokenId: 'token-spirit', counterIfManaValueAtLeast: { value: 4, counterLabel: '+1/+1', counterAmount: 1 } },
+      },
+    ],
+  },
+  {
+    id: 'sunscorch-regent',
+    name: 'Sunscorch Regent',
+    costLabel: '{3}{W}{W}',
+    type: 'creature',
+    subtype: 'Creature Dragon',
+    power: 4,
+    toughness: 3,
+    text: 'Flying\n' +
+      'Whenever an opponent casts a spell, put a +1/+1 counter on this creature and you gain 1 life.',
+    imagePath: '/assets/cards/sunscorch-regent.webp',
+    onOpponentCastsSpell: { counterLabel: '+1/+1', counterAmount: 1, alsoGainLife: 1 },
+  },
+  {
   id: 'suplex',
   name: 'Suplex',
   costLabel: '{1}{R}',
@@ -4306,6 +4552,19 @@ export const CARD_POOL: CardDefinition[] = [
     sacrificeSelfAndDealDamageEqualToManaSpentIfExpensive: { minManaValue: 8 },
   },
   imagePath: '/assets/cards/tellah-great-sage.webp'
+  },
+  {
+    id: 'temple-of-the-false-god',
+    name: 'Temple of the False God',
+    costLabel: '-',
+    type: 'land',
+    text: '{T}: Add {C}{C}. Activate only if you control five or more lands.\n' +
+      '“It is better for you to die in hope than to live in despair. Let me be your liberator.”\n' +
+      '—Lady Yunalesca',
+    imagePath: '/assets/cards/temple-of-the-false-god.webp',
+    producesMana: 'C',
+    producesManaAmount: 2,
+    producesManaOnlyIfControlLandCount: 5,
   },
   {
   id: 'terra-magical-adept',
@@ -4659,7 +4918,18 @@ export const CARD_POOL: CardDefinition[] = [
   imagePath: '/assets/cards/thief-s-knife.webp'
   },
   {
-  id: 'thunder-magic', 
+    id: 'three-visits',
+    name: 'Three Visits',
+    costLabel: '{1}{G}',
+    type: 'sorcery',
+    text: 'Search your library for a Forest card, put it onto the battlefield, then shuffle.\n' +
+      '“If I give up now, I could do anything I wanted to, and yet … even if I was with you, I could never forget.”\n' +
+      '—Yuna',
+    imagePath: '/assets/cards/three-visits.webp',
+    onCast: [{ type: 'searchLibraryForLand', landName: 'Forest', toBattlefieldUntapped: true }],
+  },
+  {
+  id: 'thunder-magic',
   name: 'Thunder Magic',
   costLabel: '-',
   type: 'instant',
@@ -4687,6 +4957,22 @@ export const CARD_POOL: CardDefinition[] = [
   imagePath: '/assets/cards/tidus-blitzball-star.webp',
   onAnyArtifactEnterTrigger: [{ type: 'putCounterOnSelf', counterLabel: '+1/+1', counterAmount: 1 }],
   onAttack: [{ type: 'tapAndStun', targetController: 'opponent', targetType: 'creature', noStunCounter: true }],
+  },
+  {
+    id: 'tidus-yuna-s-guardian',
+    name: 'Tidus, Yuna’s Guardian',
+    costLabel: '{G}{W}{U}',
+    type: 'creature',
+    subtype: 'Legendary Creature Human Warrior',
+    power: 3,
+    toughness: 3,
+    text: 'At the beginning of combat on your turn, you may move a counter from target creature you control ' +
+      'onto a second target creature you control.\n' +
+      'Cheer — Whenever one or more creatures you control with counters on them deal combat damage to a player, ' +
+      'you may draw a card and proliferate. Do this only once each turn.',
+    imagePath: '/assets/cards/tidus-yuna-s-guardian.webp',
+    onOwnCombatBegin: [{ type: 'mayEffect', effects: [{ type: 'moveCounterBetweenTargetCreatures' }] }],
+    onAnyControlledCreatureWithCountersCombatDamageToPlayer: [{ type: 'mayEffect', effects: [{ type: 'drawCards', amount: 1 }, { type: 'proliferate' }] }],
   },
   {
   id: 'tifa-lockhart',
@@ -4717,6 +5003,25 @@ export const CARD_POOL: CardDefinition[] = [
   // TARGET's stats by a multiplier (only doubleSelfPowerUntilEndOfTurn
   // exists, which is self-only and power-only); Somersault alone is wired
   // via the existing pumpTarget effect.
+  },
+  {
+    id: 'together-forever',
+    name: 'Together Forever',
+    costLabel: '{W}{W}',
+    type: 'enchantment',
+    text: 'When this enchantment enters, support 2. (Put a +1/+1 counter on each of up to two target creatures.)\n' +
+      '{1}: Choose target creature with a counter on it. When that creature dies this turn, return that card to its owner’s hand.',
+    imagePath: '/assets/cards/together-forever.webp',
+    onEnter: [{ type: 'support', counterLabel: '+1/+1', counterAmount: 1, count: 2 }],
+    abilities: [
+      {
+        id: 'together-forever-bind',
+        label: 'Bind Fate',
+        cost: { manaLabel: '{1}' },
+        effects: [{ type: 'grantOnDeathReturnToHandToTarget' }],
+        effectText: "Choose target creature with a counter on it. When that creature dies this turn, return that card to its owner's hand.",
+      },
+    ],
   },
   {
   id: 'tonberry',
@@ -5120,6 +5425,17 @@ export const CARD_POOL: CardDefinition[] = [
   imagePath: '/assets/cards/galian-beast.webp'
   },
   {
+    id: 'vineglimmer-snarl',
+    name: 'Vineglimmer Snarl',
+    costLabel: '-',
+    type: 'land',
+    text: 'As this land enters, you may reveal a Forest or Island card from your hand. If you don’t, this land enters tapped.\n' +
+      '{T}: Add {G} or {U}.',
+    imagePath: '/assets/cards/vineglimmer-snarl.webp',
+    entersTappedUnlessRevealLandNames: ['Forest', 'Island'],
+    producesMana: ['G', 'U'],
+  },
+  {
   id: 'vivi-ornitier',
   name: 'Vivi Ornitier',
   costLabel: '{1}{U}{R}',
@@ -5130,6 +5446,51 @@ export const CARD_POOL: CardDefinition[] = [
   text: '{0}: Add X mana in any combination of {U} and/or {R}, where X is Vivi Ornitier\u2019s power. Activate only during your turn and only once each turn. \n' +
   'Whenever you cast a noncreature spell, put a +1/+1 counter on Vivi Ornitier and it deals 1 damage to each opponent',
   imagePath: '/assets/cards/vivi-ornitier.webp'
+  },
+  {
+    id: 'wakka-devoted-guardian',
+    name: 'Wakka, Devoted Guardian',
+    costLabel: '{2}{G}{W}',
+    type: 'creature',
+    subtype: 'Legendary Creature Human Warrior',
+    power: 4,
+    toughness: 4,
+    text: 'Reach, trample\n' +
+      'Whenever Wakka deals combat damage to a player, destroy up to one target artifact that player controls and put a +1/+1 counter on Wakka.\n' +
+      'Blitzball Captain — At the beginning of your end step, if a counter was put on Wakka this turn, put a +1/+1 counter on each other creature you control.',
+    imagePath: '/assets/cards/wakka-devoted-guardian.webp',
+    onCombatDamageToPlayer: [{ type: 'destroyUpToOneOpponentArtifactThenPutCounterOnSelf', counterLabel: '+1/+1', counterAmount: 1 }],
+    onOwnEndStep: [{ type: 'ifCounterPutOnSelfThisTurn', thenEffects: [{ type: 'buffOtherCreaturesYouControl', counterLabel: '+1/+1', counterAmount: 1 }], elseEffects: [] }],
+  },
+  {
+    id: 'walking-ballista',
+    name: 'Walking Ballista',
+    costLabel: '{X}{X}',
+    type: 'creature',
+    subtype: 'Artifact Creature Construct',
+    power: 0,
+    toughness: 0,
+    text: 'This creature enters with X +1/+1 counters on it.\n' +
+      '{4}: Put a +1/+1 counter on this creature.\n' +
+      'Remove a +1/+1 counter from this creature: It deals 1 damage to any target.',
+    imagePath: '/assets/cards/walking-ballista.webp',
+    onEnter: [{ type: 'putCounterOnSelf', counterLabel: '+1/+1', counterAmount: 'chosenX' }],
+    abilities: [
+      {
+        id: 'walking-ballista-grow',
+        label: 'Grow',
+        cost: { manaLabel: '{4}' },
+        effects: [{ type: 'putCounterOnSelf', counterLabel: '+1/+1', counterAmount: 1 }],
+        effectText: 'Put a +1/+1 counter on this creature.',
+      },
+      {
+        id: 'walking-ballista-shoot',
+        label: 'Shoot',
+        cost: { removeCounterFromSelf: { label: '+1/+1' } },
+        effects: [{ type: 'damageAnyTarget', amount: 1 }],
+        effectText: 'It deals 1 damage to any target.',
+      },
+    ],
   },
   {
   id: 'warrior-s-sword',
@@ -5494,6 +5855,28 @@ export const TOKEN_POOL: CardDefinition[] = [
     toughness: 1,
     text: '',
     imagePath: '/assets/cards/token-hero.webp',
+  },
+  {
+    id: 'token-spirit',
+    name: 'Spirit',
+    type: 'creature',
+    subtype: 'Spirit Token',
+    costLabel: '-',
+    power: 1,
+    toughness: 1,
+    text: 'Flying',
+    imagePath: '/assets/cards/token-spirit.webp',
+  },
+  {
+    id: 'token-squid',
+    name: 'Squid',
+    type: 'creature',
+    subtype: 'Squid Token',
+    costLabel: '-',
+    power: 1,
+    toughness: 1,
+    text: 'Islandwalk (This creature can’t be blocked as long as defending player controls an Island.)',
+    imagePath: '/assets/cards/token-squid.webp',
   },
   {
     id: 'token-wizard',

@@ -361,6 +361,22 @@ export function useLocalGame(initialState: GameState) {
     return () => clearTimeout(timer);
   }, [state, dispatch]);
 
+  // --- AI: resolve its own pending may-effect (Tidus, Yuna's Guardian) ----
+  // Same "nobody else can choose for it" problem again - a no-cost "you
+  // may" is always at worst neutral for the controller, so the AI just
+  // always accepts.
+  useEffect(() => {
+    if (state.winnerId) return;
+    if (state.mutualAdjustment.status !== 'inactive') return;
+    const pending = state.pendingMayEffect;
+    if (!pending || pending.controllerId !== AI_PLAYER_ID) return;
+
+    const timer = setTimeout(() => {
+      dispatch({ type: 'RESOLVE_MAY_EFFECT', accept: true }, AI_PLAYER_ID);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [state, dispatch]);
+
   // --- AI: pick up its own pending revealed card (Dark Confidant) ---------
   // Same "nobody else can choose for it" problem again - without this, the
   // AI's Dark Confidant only ever seemed to work the one time a human
@@ -451,6 +467,7 @@ export function useLocalGame(initialState: GameState) {
     if (state.pendingPutCreatureAndOrLandFromHand?.controllerId === AI_PLAYER_ID) return;
     if (state.pendingRevealLandTypeFromHand?.controllerId === AI_PLAYER_ID) return;
     if (state.pendingOptionalPayLife?.controllerId === AI_PLAYER_ID) return;
+    if (state.pendingMayEffect?.controllerId === AI_PLAYER_ID) return;
     if (state.pendingRevealPickup?.controllerId === AI_PLAYER_ID) return;
     if (state.pendingCommanderZoneChoice?.ownerId === AI_PLAYER_ID) return;
 
@@ -495,7 +512,13 @@ export function useLocalGame(initialState: GameState) {
             const d = getCardDefinition(untappedLand.defId);
             let color: ManaColor = 'C';
             if (Array.isArray(d.producesMana)) color = d.producesMana[0];
-            else if (d.producesMana && d.producesMana !== 'any') color = d.producesMana;
+            // 'commanderColorIdentity' (Arcane Signet) resolves server-side
+            // in engine/actions.ts: toggleTap - the AI has no simple static
+            // color to guess here, so it just falls through to the 'C'
+            // default above (harmless: a single-color identity ignores
+            // chosenColor entirely, and this is only ever a fallback tap
+            // anyway, not a strategic choice).
+            else if (d.producesMana && d.producesMana !== 'any' && d.producesMana !== 'commanderColorIdentity') color = d.producesMana;
             dispatch({ type: 'TOGGLE_TAP', instanceId: untappedLand.instanceId, chosenColor: color }, AI_PLAYER_ID);
             break;
           }

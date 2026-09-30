@@ -241,8 +241,11 @@ function untappableCardsInGroup(group: CardInstance[], manaPool: Record<ManaColo
     const color = c.producedManaColor;
     const remaining = remainingByColor.has(color) ? remainingByColor.get(color)! : manaPool[color];
     // Ring of the Lucii's "T: Add MM" needs the full 2 colorless still
-    // unspent to be refundable - everything else defaults to 1.
-    const producedAmount = getCardDefinition(c.defId).producesManaAmount ?? 1;
+    // unspent to be refundable - everything else defaults to 1. Everflowing
+    // Chalice's producesManaAmountEqualToOwnCounterLabel is read live off
+    // this specific card instance instead of a fixed printed number.
+    const def = getCardDefinition(c.defId);
+    const producedAmount = def.producesManaAmountEqualToOwnCounterLabel ? c.counters.find((ctr) => ctr.label === def.producesManaAmountEqualToOwnCounterLabel)?.amount ?? 0 : def.producesManaAmount ?? 1;
     if (remaining >= producedAmount) {
       result.push(c);
       remainingByColor.set(color, remaining - producedAmount);
@@ -487,6 +490,8 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     state.pendingTarget && !state.pendingWardPayment && (state.pendingTarget.controllerId === yourPlayerId || soloControl) ? state.pendingTarget : null;
   const pendingTargetSourceName = pendingTargetForYou ? getCardDefinition(findCard(state, pendingTargetForYou.sourceInstanceId)?.card.defId ?? '')?.name ?? 'Ability' : '';
   const pendingSacrificeForYou = state.pendingSacrifice && (state.pendingSacrifice.remainingPlayerIds[0] === yourPlayerId || soloControl) ? state.pendingSacrifice : null;
+  const pendingKeepOneSacrificeRestForYou =
+    state.pendingKeepOneSacrificeRest && (state.pendingKeepOneSacrificeRest.remainingPlayerIds[0] === yourPlayerId || soloControl) ? state.pendingKeepOneSacrificeRest : null;
   const pendingCounterTransfer = state.pendingCounterTransferQueue[0];
   const pendingCounterTransferForYou = pendingCounterTransfer && (pendingCounterTransfer.controllerId === yourPlayerId || soloControl) ? pendingCounterTransfer : null;
 
@@ -547,6 +552,20 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   // to pay the kicker cost with (dispatching CAST_CARD with
   // kickerPaymentInstanceId), or skips to cast unkicked.
   const [pendingKickerCast, setPendingKickerCast] = useState<CardInstance | null>(null);
+  // Set while a CardDefinition.escalateCost spell (Collective Effort) is
+  // waiting on the player to click which untapped creature(s) to tap as its
+  // Escalate payment - only armed when 2+ modes were checked in
+  // ModalSpellModal (a single mode is always free). Same click-accumulation
+  // shape as pendingSacrificeCost just below, but the eventual dispatch is
+  // CAST_CARD (with the already-chosen chosenModeIndices carried along)
+  // rather than ACTIVATE_ABILITY.
+  const [pendingEscalateCost, setPendingEscalateCost] = useState<{
+    instanceId: string;
+    ownerId: string;
+    chosenModeIndices: number[];
+    count: number;
+    selected: string[];
+  } | null>(null);
   // Set while an ability with a sacrificeAnother cost (e.g. Ahriman, or The
   // Gold Saucer's "Sacrifice two artifacts") is waiting on the player to
   // click which OTHER permanent(s) to sacrifice - the choice is
@@ -1061,6 +1080,16 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     return def.type === 'enchantment';
   }
 
+  /** Is this creature a legal pick for pendingKeepOneSacrificeRestForYou -
+   * the front-queue player's OWN creature (any of them; picking it keeps it
+   * and sacrifices the rest, see CHOOSE_KEEP_ONE_SACRIFICE_REST). */
+  function isLegalKeepOneChoice(card: CardInstance, ownerId: string): boolean {
+    if (!pendingKeepOneSacrificeRestForYou) return false;
+    if (pendingKeepOneSacrificeRestForYou.remainingPlayerIds[0] !== ownerId) return false;
+    if (ownerId !== yourPlayerId && !soloControl) return false;
+    return getCardDefinition(card.defId).type === 'creature';
+  }
+
   /** Is this permanent a legal pick for an ability's sacrificeAnother cost
    * currently awaiting a click (e.g. Ahriman's "3, Sacrifice another
    * creature or artifact: Draw a card.", or The Gold Saucer's "Sacrifice two
@@ -1094,6 +1123,32 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     });
   }
 
+  /** Is this permanent a legal pick for pendingEscalateCost's running
+   * selection - an untapped creature the same controller controls, not
+   * already picked. */
+  function isLegalEscalateCostChoice(card: CardInstance, ownerId: string): boolean {
+    if (!pendingEscalateCost) return false;
+    if (ownerId !== pendingEscalateCost.ownerId) return false;
+    if (card.tapped) return false;
+    if (pendingEscalateCost.selected.includes(card.instanceId)) return false;
+    return getCardDefinition(card.defId).type === 'creature';
+  }
+
+  /** Click handler for isLegalEscalateCostChoice - once `selected` reaches
+   * the required count, fires the actual CAST_CARD (carrying the
+   * already-chosen chosenModeIndices along) and clears pendingEscalateCost. */
+  function handleEscalateCostClick(instanceId: string) {
+    setPendingEscalateCost((prev) => {
+      if (!prev) return prev;
+      const selected = [...prev.selected, instanceId];
+      if (selected.length >= prev.count) {
+        onAction({ type: 'CAST_CARD', instanceId: prev.instanceId, chosenModeIndices: prev.chosenModeIndices, escalateCostInstanceIds: selected });
+        return null;
+      }
+      return { ...prev, selected };
+    });
+  }
+
   /** Is this permanent a legal (untapped, other, actual creature) pick to
    * add to the running Crew selection? See pendingCrew - clicking a card
    * that already matches toggles it back off instead. */
@@ -1116,15 +1171,33 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     return granter ? getCardDefinition(granter.defId).grantsManaAbilityToOthers : undefined;
   }
 
+  /** def.producesMana (or a granted mana ability), fully expanded into a
+   * concrete ManaColor[] - resolves 'commanderColorIdentity' against the
+   * controller's actual commander (see engine/actions.ts: toggleTap's own
+   * resolution, mirrored here for the UI) and 'any'/array/single-color into
+   * their real color lists. Never includes CardDefinition.altProducesMana -
+   * callers that care about the "pain land" alt colors add those in themselves. */
+  function resolvedPrimaryManaColors(def: CardDefinition, instance: CardInstance): ManaColor[] {
+    let producesMana = def.producesMana ?? grantedManaAbility(instance);
+    if (producesMana === 'commanderColorIdentity') {
+      const owner = state.players.find((p) => p.id === instance.ownerId);
+      const commanderDef = owner?.commanderDefId ? getCardDefinition(owner.commanderDefId) : null;
+      const identity = commanderDef ? ([...new Set(Object.keys(parseCostLabel(commanderDef.costLabel).colors))] as ManaColor[]) : [];
+      producesMana = identity.length > 1 ? identity : identity.length === 1 ? identity[0] : 'C';
+    }
+    return !producesMana ? [] : Array.isArray(producesMana) ? producesMana : producesMana === 'any' ? ALL_MANA_COLORS : [producesMana];
+  }
+
   /** The color choices an untapped mana source offers, or null if it only
    * ever makes one color. Not land-specific - a mana creature like Goobbue
    * Gardener ("Tap: Add G.") uses the exact same producesMana field. */
   function manaTapOptions(def: CardDefinition, instance: CardInstance): ManaColor[] | null {
-    const producesMana = def.producesMana ?? grantedManaAbility(instance);
-    if (!producesMana) return null;
-    if (Array.isArray(producesMana)) return producesMana;
-    if (producesMana === 'any') return ALL_MANA_COLORS;
-    return null;
+    const primary = resolvedPrimaryManaColors(def, instance);
+    // "Pain land" alt mode (Brushland: "{T}: Add {C}." / "{T}: Add {G} or {W}.
+    // This deals 1 damage to you.") offers its colors alongside the primary
+    // one, all as a single combined choice - mirrors toggleTap's resolution.
+    const combined = [...new Set([...primary, ...(def.altProducesMana?.colors ?? [])])];
+    return combined.length > 1 ? combined : null;
   }
 
   /**
@@ -1138,11 +1211,8 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   function manaPipOptions(def: CardDefinition, instance: CardInstance): ManaColor[] | null {
     const ambiguous = manaTapOptions(def, instance);
     if (ambiguous) return ambiguous;
-    const producesMana = def.producesMana ?? grantedManaAbility(instance);
-    if (producesMana && !Array.isArray(producesMana) && producesMana !== 'any') {
-      return [producesMana];
-    }
-    return null;
+    const primary = resolvedPrimaryManaColors(def, instance);
+    return primary.length === 1 ? primary : null;
   }
 
   /** Why the Tap/Untap button in CardActionsPanel should be disabled for this
@@ -1712,6 +1782,8 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     const isAttachTarget = isLegalAttachTarget(c, ownerId);
     const isSacrificeChoice = isLegalSacrifice(c, ownerId);
     const isSacrificeCostChoice = isLegalSacrificeCostChoice(c, ownerId);
+    const isEscalateCostChoice = isLegalEscalateCostChoice(c, ownerId);
+    const isKeepOneChoice = isLegalKeepOneChoice(c, ownerId);
     const isCrewChoice = isLegalCrewChoice(c, ownerId);
     const isCrewSelected = !!pendingCrew?.selected.includes(c.instanceId);
     const selected =
@@ -1722,6 +1794,8 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
       isAttachTarget ||
       isSacrificeChoice ||
       isSacrificeCostChoice ||
+      isEscalateCostChoice ||
+      isKeepOneChoice ||
       isCrewSelected;
 
     // Attached Equipment/Auras stack literally UNDERNEATH the creature they're
@@ -1783,6 +1857,10 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                 onAction({ type: 'CHOOSE_SACRIFICE', instanceId: c.instanceId });
               } else if (isSacrificeCostChoice) {
                 handleSacrificeCostClick(c.instanceId);
+              } else if (isEscalateCostChoice) {
+                handleEscalateCostClick(c.instanceId);
+              } else if (isKeepOneChoice) {
+                onAction({ type: 'CHOOSE_KEEP_ONE_SACRIFICE_REST', instanceId: c.instanceId }, ownerId);
               } else if (isCrewChoice) {
                 setPendingCrew((prev) =>
                   prev
@@ -2771,8 +2849,22 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                                   ? `Choose a creature you control for ${pendingTargetSourceName}'s ability to put +1/+1 counters on.`
                                   : effect.type === 'putCounterOnTargetCommanderEnteredThisTurn'
                                   ? `Choose a commander that entered the battlefield this turn (either player's) for ${pendingTargetSourceName}'s ability.`
+                                  : effect.type === 'moveCounterBetweenTargetCreatures'
+                                  ? pendingTargetForYou.firstInstanceId
+                                    ? `Choose a second creature you control for ${pendingTargetSourceName}'s ability to move the counter onto.`
+                                    : `Choose a creature you control with a counter on it for ${pendingTargetSourceName}'s ability to move a counter from.`
+                                  : effect.type === 'damageAnyTarget'
+                                  ? `Choose any target (a creature or a player) for ${pendingTargetSourceName} to deal ${effect.amount} damage to.`
+                                  : effect.type === 'support'
+                                  ? `Choose a creature (either player's) for ${pendingTargetSourceName}'s Support to put a +1/+1 counter on (${pendingTargetForYou.remainingPicks ?? 1} left to choose) - or Skip to stop.`
+                                  : effect.type === 'grantOnDeathReturnToHandToTarget'
+                                  ? `Choose target creature with a counter on it for ${pendingTargetSourceName}'s ability - if it dies this turn, it returns to its owner's hand.`
+                                  : effect.type === 'destroyUpToOneOpponentArtifactThenPutCounterOnSelf'
+                                  ? `Choose up to one artifact the defending player controls for ${pendingTargetSourceName} to destroy - or Skip.`
                                   : effect.targetFilter === 'artifactOrEnchantment'
                                   ? `Choose an artifact or enchantment for ${pendingTargetSourceName}'s ability (either player's).`
+                                  : effect.targetFilter === 'enchantment'
+                                  ? `Choose an enchantment for ${pendingTargetSourceName}'s ability (either player's).`
                                   : effect.targetFilter === 'anyPermanent'
                                     ? `Choose any permanent for ${pendingTargetSourceName}'s ability (either player's).`
                                     : effect.targetFilter === 'nonlandPermanent'
@@ -2817,6 +2909,12 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           );
         })()}
 
+      {pendingKeepOneSacrificeRestForYou && (
+        <div className="pending-target-banner">
+          <span>Choose a creature you control to keep - the rest will be sacrificed and it gets a vow counter.</span>
+        </div>
+      )}
+
       {pendingSacrificeCost && (
         <div className="pending-target-banner">
           <span>
@@ -2825,6 +2923,17 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
             {pendingSacrificeCost.count > 1 ? ` (${pendingSacrificeCost.selected.length}/${pendingSacrificeCost.count} chosen)` : ''}.
           </span>
           <button className="opponent-view-exit-button" onClick={() => setPendingSacrificeCost(null)}>
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {pendingEscalateCost && (
+        <div className="pending-target-banner">
+          <span>
+            Escalate: tap {pendingEscalateCost.count} untapped creature(s) you control ({pendingEscalateCost.selected.length}/{pendingEscalateCost.count} chosen).
+          </span>
+          <button className="opponent-view-exit-button" onClick={() => setPendingEscalateCost(null)}>
             Cancel
           </button>
         </div>
@@ -2969,6 +3078,25 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           );
         })()}
 
+      {state.pendingMayEffect &&
+        (state.pendingMayEffect.controllerId === yourPlayerId || soloControl) &&
+        (() => {
+          const pending = state.pendingMayEffect;
+          const sourceFound = findCard(state, pending.sourceInstanceId);
+          const sourceName = sourceFound ? getCardDefinition(sourceFound.card.defId).name : 'This permanent';
+          return (
+            <div className="pending-target-banner">
+              <span>{sourceName}: you may.</span>
+              <button className="opponent-view-exit-button" onClick={() => onAction({ type: 'RESOLVE_MAY_EFFECT', accept: true }, pending.controllerId)}>
+                Yes
+              </button>
+              <button className="opponent-view-exit-button" onClick={() => onAction({ type: 'RESOLVE_MAY_EFFECT', accept: false }, pending.controllerId)}>
+                Skip
+              </button>
+            </div>
+          );
+        })()}
+
       {state.pendingCommanderZoneChoice &&
         (state.pendingCommanderZoneChoice.ownerId === yourPlayerId || soloControl) &&
         (() => {
@@ -2995,14 +3123,17 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           const pending = state.pendingGraveyardExile;
           const sourceFound = findCard(state, pending.sourceInstanceId);
           const sourceName = sourceFound ? getCardDefinition(sourceFound.card.defId).name : 'This ability';
-          const eligible = state.players.flatMap((p) => p.zones.graveyard);
+          const eligible = state.players
+            .flatMap((p) => p.zones.graveyard)
+            .filter((c) => !pending.creatureOnly || getCardDefinition(c.defId).type === 'creature');
           return (
             <ReturnFromGraveyardModal
               sourceName={sourceName}
               title="Exile a card"
-              description="Choose a card in either graveyard to exile."
+              description={pending.creatureOnly ? "Choose a creature card in either graveyard to exile, or Skip." : "Choose a card in either graveyard to exile."}
               cards={eligible.map((c) => ({ definition: getCardDefinition(c.defId), instance: c }))}
               onChoose={(instanceId) => onAction({ type: 'RESOLVE_GRAVEYARD_EXILE', instanceId }, pending.controllerId)}
+              onCancel={pending.optional ? () => onAction({ type: 'RESOLVE_GRAVEYARD_EXILE', instanceId: null }, pending.controllerId) : undefined}
             />
           );
         })()}
@@ -3890,7 +4021,17 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
             <ModalSpellModal
               definition={def}
               onConfirm={(chosenModeIndices) => {
-                onAction({ type: 'CAST_CARD', instanceId: pendingModalCast.instanceId, chosenModeIndices });
+                if (def.escalateCost && chosenModeIndices.length > 1) {
+                  setPendingEscalateCost({
+                    instanceId: pendingModalCast.instanceId,
+                    ownerId: pendingModalCast.ownerId,
+                    chosenModeIndices,
+                    count: chosenModeIndices.length - 1,
+                    selected: [],
+                  });
+                } else {
+                  onAction({ type: 'CAST_CARD', instanceId: pendingModalCast.instanceId, chosenModeIndices });
+                }
                 setPendingModalCast(null);
                 setOpenPanelId(null);
               }}
@@ -4006,7 +4147,11 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                   <strong>{sourceName} - choose a player</strong>
                 </div>
                 <div className="card-actions-section">
-                  <span className="card-actions-hint">Target player draws {pending.effect.count} card(s).</span>
+                  <span className="card-actions-hint">
+                    {pending.effect.type === 'drawCardsFromTargetPlayer'
+                      ? `Target player draws ${pending.effect.count} card(s).`
+                      : `Put a ${pending.effect.counterLabel} counter on each creature target player controls.`}
+                  </span>
                 </div>
                 <div className="card-actions-spacer" />
                 <div className="card-actions-bottom-row">

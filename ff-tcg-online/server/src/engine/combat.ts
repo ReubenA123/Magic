@@ -429,7 +429,7 @@ export function isLegalPendingTarget(state: GameState, pendingTarget: NonNullabl
     return def.type === 'creature' && (!effect.restrictToOwnCreature || ownerId === pendingTarget.controllerId);
   }
   if (effect.type === 'grantKeywordsToTargetPermanent') {
-    return true;
+    return !effect.creatureOnly || def.type === 'creature';
   }
   if (effect.type === 'gainControlOfTargetCreature') {
     if (def.type !== 'creature') return false;
@@ -554,6 +554,23 @@ export function isLegalPendingTarget(state: GameState, pendingTarget: NonNullabl
   if (effect.type === 'putCounterOnUpToTwoOwnCreatures') {
     return def.type === 'creature' && ownerId === pendingTarget.controllerId && card.instanceId !== pendingTarget.firstInstanceId;
   }
+  if (effect.type === 'moveCounterBetweenTargetCreatures') {
+    if (def.type !== 'creature' || ownerId !== pendingTarget.controllerId) return false;
+    if (!pendingTarget.firstInstanceId) return card.counters.length > 0;
+    return card.instanceId !== pendingTarget.firstInstanceId;
+  }
+  if (effect.type === 'support') {
+    return def.type === 'creature' && !(pendingTarget.chosenInstanceIds ?? []).includes(card.instanceId);
+  }
+  if (effect.type === 'damageAnyTarget') {
+    return def.type === 'creature';
+  }
+  if (effect.type === 'grantOnDeathReturnToHandToTarget') {
+    return def.type === 'creature' && card.counters.length > 0;
+  }
+  if (effect.type === 'destroyUpToOneOpponentArtifactThenPutCounterOnSelf') {
+    return def.type === 'artifact' && ownerId !== pendingTarget.controllerId;
+  }
   if (effect.type === 'sacrificeOwnCreatureThenDraw') {
     return def.type === 'creature' && ownerId === pendingTarget.controllerId;
   }
@@ -578,6 +595,7 @@ export function isLegalPendingTarget(state: GameState, pendingTarget: NonNullabl
     (effect.targetFilter === 'creatureWithMinPower' && def.type === 'creature' && effectivePower(def, card, state, ownerId) >= (effect.minPower ?? 0)) ||
     (effect.targetFilter === 'artifactEnchantmentOrFlyingCreature' && (def.type === 'artifact' || def.type === 'enchantment' || isFlyingCreature)) ||
     (effect.targetFilter === 'artifactOrEnchantment' && (def.type === 'artifact' || def.type === 'enchantment')) ||
+    (effect.targetFilter === 'enchantment' && def.type === 'enchantment') ||
     (effect.targetFilter === 'creatureWithDamageMarked' && def.type === 'creature' && card.damageMarked > 0) ||
     (effect.targetFilter === 'land' && def.type === 'land') ||
     (effect.targetFilter === 'creature' && def.type === 'creature')
@@ -740,6 +758,40 @@ export function applyGainLifeTriggers(state: GameState, playerId: string): GameS
     }));
     const targetNote = subtypeFilter ? `each ${subtypeFilter} you control` : def.name;
     next = { ...next, log: [...next.log, `${def.name} triggers: ${targetNote} gets a ${counterLabel} counter.`] };
+  }
+  return next;
+}
+
+/** Checks every permanent playerId controls for an onDrawTrigger and applies
+ * it. Unlike applyGainLifeTriggers, this is NOT called from every single
+ * place a card could be drawn in this engine (there's no single choke point
+ * the way addLife is for life gain) - only the two most central draw paths
+ * call this: the normal per-turn draw (engine/actions.ts: drawCard) and the
+ * generic DrawCardsEffect (engine/effects.ts). See CardDefinition.
+ * onDrawTrigger's own comment for why. */
+export function applyDrawTriggers(state: GameState, playerId: string, count: number): GameState {
+  if (count <= 0) return state;
+  let next = state;
+  for (const card of getPlayerBattlefield(next, playerId)) {
+    const def = getCardDefinition(card.defId);
+    if (!def.onDrawTrigger) continue;
+    const { counterLabel, counterAmount } = def.onDrawTrigger;
+    const totalAmount = counterAmount * count;
+    next = updatePlayer(next, playerId, (p) => ({
+      ...p,
+      zones: {
+        ...p.zones,
+        battlefield: p.zones.battlefield.map((c) => {
+          if (c.instanceId !== card.instanceId) return c;
+          const hasCounter = c.counters.some((ctr) => ctr.label === counterLabel);
+          const counters = hasCounter
+            ? c.counters.map((ctr) => (ctr.label === counterLabel ? { ...ctr, amount: ctr.amount + totalAmount } : ctr))
+            : [...c.counters, { label: counterLabel, amount: totalAmount }];
+          return { ...c, counters };
+        }),
+      },
+    }));
+    next = { ...next, log: [...next.log, `${def.name} triggers: gets ${totalAmount} ${counterLabel} counter(s).`] };
   }
   return next;
 }
@@ -1244,6 +1296,31 @@ export function moveCreaturesToGraveyard(state: GameState, deadIds: string[], ve
         },
       }));
       next = { ...next, log: [...next.log, `${def.name}'s death puts ${x} ${counterLabel} counter(s) on each legendary creature ${player.name} controls.`] };
+    }
+
+    // "When this creature dies, create X 1/1 [tokenId] creature tokens,
+    // where X is the number of [counterLabel] counters on this creature"
+    // (Chasm Skulker) - X read from the dying creature's OWN counters,
+    // same timing as onDeathDistributeCounters just above.
+    for (const d of dead) {
+      const def = getCardDefinition(d.defId);
+      if (!def.onDeathCreateTokensEqualToOwnCounters) continue;
+      const { counterLabel, tokenId } = def.onDeathCreateTokensEqualToOwnCounters;
+      const x = d.counters.find((c) => c.label === counterLabel)?.amount ?? 0;
+      if (x <= 0) continue;
+      const tokenDef = getCardDefinition(tokenId);
+      const tokens: CardInstance[] = Array.from({ length: x }, () => ({
+        instanceId: nextInstanceId(),
+        defId: tokenId,
+        ownerId: player.id,
+        tapped: false,
+        counters: [],
+        damageMarked: 0,
+        summoningSick: true,
+        isToken: true,
+      }));
+      next = updatePlayer(next, player.id, (p) => ({ ...p, zones: { ...p.zones, battlefield: [...p.zones.battlefield, ...tokens] } }));
+      next = { ...next, log: [...next.log, `${def.name}'s death creates ${x} ${tokenDef.name} token(s).`] };
     }
 
     // "Whenever another permanent you control is put into a graveyard from
