@@ -185,6 +185,8 @@ export function createStateFromDeck(deck: SavedDeck, humanName: string): GameSta
     pendingReanimate: null,
     pendingReturnCreaturesFromGraveyard: null,
     pendingOptionalTransform: null,
+    pendingOptionalBecomeCopy: null,
+    pendingLibraryPlacementChoice: null,
     pendingOptionalPayLife: null,
     pendingMayEffect: null,
     pendingCommanderZoneChoice: null,

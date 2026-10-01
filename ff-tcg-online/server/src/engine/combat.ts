@@ -147,6 +147,12 @@ export function hasBoardGrantedKeyword(state: GameState, controllerId: string, i
     return anthem.subtype === '*' ? def.type === 'creature' : hasSubtype(anthem.subtype);
   });
   if (viaStaticAnthem) return true;
+  const viaCounterAnthem = controller.zones.battlefield.some((c) => {
+    const anthem = getCardDefinition(c.defId).staticAnthemForCreaturesWithCounter;
+    if (!anthem?.grantKeywords?.includes(keyword)) return false;
+    return def.type === 'creature' && instance.counters.some((ctr) => ctr.label === anthem.counterLabel && ctr.amount > 0);
+  });
+  if (viaCounterAnthem) return true;
   if (state.activePlayerId !== controllerId) return false;
   const viaEquipped =
     !!def.hasKeywordsWhileEquipped?.includes(keyword) && controller.zones.battlefield.some((c) => c.attachedToInstanceId === instance.instanceId);
@@ -350,6 +356,7 @@ function anthemBuffBonus(state: GameState, controllerId: string, def: CardDefini
 export function effectivePower(def: CardDefinition, instance: CardInstance, state: GameState, controllerId: string): number {
   const base =
     instance.temporaryBaseStats?.power ??
+    (instance.copiedStatsFromDefId ? getCardDefinition(instance.copiedStatsFromDefId).power ?? 0 : undefined) ??
     lifeBasedBaseStat(state, controllerId, instance.instanceId) ??
     creatureCountBaseStat(state, controllerId, def) ??
     (def.power ?? 0);
@@ -368,7 +375,11 @@ export function effectivePower(def: CardDefinition, instance: CardInstance, stat
 }
 
 export function effectiveToughness(def: CardDefinition, instance: CardInstance, state: GameState, controllerId: string): number {
-  const base = instance.temporaryBaseStats?.toughness ?? lifeBasedBaseStat(state, controllerId, instance.instanceId) ?? (def.toughness ?? 0);
+  const base =
+    instance.temporaryBaseStats?.toughness ??
+    (instance.copiedStatsFromDefId ? getCardDefinition(instance.copiedStatsFromDefId).toughness ?? 0 : undefined) ??
+    lifeBasedBaseStat(state, controllerId, instance.instanceId) ??
+    (def.toughness ?? 0);
   const plus = instance.counters.find((c) => c.label === '+1/+1')?.amount ?? 0;
   const minus = instance.counters.find((c) => c.label === '-1/-1')?.amount ?? 0;
   const buff = hasActiveLandCountBuff(def, state, controllerId) ? def.landCountBuff!.toughness : 0;
@@ -424,6 +435,12 @@ export function isLegalPendingTarget(state: GameState, pendingTarget: NonNullabl
   }
   if (effect.type === 'grantTemporaryBaseStatsAndDeathReturn') {
     return def.type === 'creature' && ownerId === pendingTarget.controllerId;
+  }
+  if (effect.type === 'grantPreventCombatDamageConvertToCounterToTargetOwnCreature') {
+    return def.type === 'creature' && ownerId === pendingTarget.controllerId;
+  }
+  if (effect.type === 'mayMoveAllCountersToTargetCreature') {
+    return def.type === 'creature' && card.instanceId !== pendingTarget.sourceInstanceId;
   }
   if (effect.type === 'pumpTarget') {
     return def.type === 'creature' && (!effect.restrictToOwnCreature || ownerId === pendingTarget.controllerId);
@@ -505,7 +522,7 @@ export function isLegalPendingTarget(state: GameState, pendingTarget: NonNullabl
     return def.type !== 'land' && card.instanceId !== pendingTarget.sourceInstanceId;
   }
   if (effect.type === 'putCounterOnUpToOneOtherCreatureEqualToOwnPower') {
-    return def.type === 'creature' && card.instanceId !== pendingTarget.sourceInstanceId;
+    return def.type === 'creature' && card.instanceId !== pendingTarget.sourceInstanceId && (!effect.restrictToOwnCreature || ownerId === pendingTarget.controllerId);
   }
   if (effect.type === 'damageTargetAndControllerByEquipmentCount') {
     return def.type === 'creature';
@@ -560,6 +577,7 @@ export function isLegalPendingTarget(state: GameState, pendingTarget: NonNullabl
     return card.instanceId !== pendingTarget.firstInstanceId;
   }
   if (effect.type === 'support') {
+    if (effect.excludeSelf && card.instanceId === pendingTarget.sourceInstanceId) return false;
     return def.type === 'creature' && !(pendingTarget.chosenInstanceIds ?? []).includes(card.instanceId);
   }
   if (effect.type === 'damageAnyTarget') {
@@ -570,6 +588,9 @@ export function isLegalPendingTarget(state: GameState, pendingTarget: NonNullabl
   }
   if (effect.type === 'destroyUpToOneOpponentArtifactThenPutCounterOnSelf') {
     return def.type === 'artifact' && ownerId !== pendingTarget.controllerId;
+  }
+  if (effect.type === 'ronsoRage') {
+    return def.type === 'creature' && ownerId !== pendingTarget.controllerId;
   }
   if (effect.type === 'sacrificeOwnCreatureThenDraw') {
     return def.type === 'creature' && ownerId === pendingTarget.controllerId;
@@ -588,11 +609,21 @@ export function isLegalPendingTarget(state: GameState, pendingTarget: NonNullabl
   if (effect.type === 'sweepDamageFromChosenCreature') {
     return def.type === 'creature' && ownerId === pendingTarget.controllerId;
   }
+  if (effect.type === 'putOwnCountersOnTargetThenShuffleSelfIntoLibrary') {
+    return def.type === 'creature' && ownerId === pendingTarget.controllerId;
+  }
+  if (effect.type === 'exileTargetCreatureThenControllerMaySearchBasicLand') {
+    return def.type === 'creature';
+  }
+  if (effect.type === 'putTargetNonlandPermanentInLibraryOwnersChoice') {
+    return def.type !== 'land';
+  }
   const isFlyingCreature = def.type === 'creature' && hasKeyword(def, 'flying');
   return (
     effect.targetFilter === 'anyPermanent' ||
     (effect.targetFilter === 'nonlandPermanent' && def.type !== 'land') ||
     (effect.targetFilter === 'creatureWithMinPower' && def.type === 'creature' && effectivePower(def, card, state, ownerId) >= (effect.minPower ?? 0)) ||
+    (effect.targetFilter === 'creatureWithMinToughness' && def.type === 'creature' && effectiveToughness(def, card, state, ownerId) >= (effect.minToughness ?? 0)) ||
     (effect.targetFilter === 'artifactEnchantmentOrFlyingCreature' && (def.type === 'artifact' || def.type === 'enchantment' || isFlyingCreature)) ||
     (effect.targetFilter === 'artifactOrEnchantment' && (def.type === 'artifact' || def.type === 'enchantment')) ||
     (effect.targetFilter === 'enchantment' && def.type === 'enchantment') ||
@@ -633,6 +664,23 @@ function markDamage(state: GameState, instanceId: string, amount: number, isDeat
   const found = findInstance(state, instanceId);
   if (!found) return state;
   if (getCardDefinition(found.instance.defId).preventsAllCombatDamage) return state;
+  const convertLabel = found.instance.temporaryPreventCombatDamageConvertToCounterLabel;
+  if (convertLabel && amount > 0) {
+    return updatePlayer(state, found.controllerId, (p) => ({
+      ...p,
+      zones: {
+        ...p.zones,
+        battlefield: p.zones.battlefield.map((c) => {
+          if (c.instanceId !== instanceId) return c;
+          const hasCounter = c.counters.some((ctr) => ctr.label === convertLabel);
+          const counters = hasCounter
+            ? c.counters.map((ctr) => (ctr.label === convertLabel ? { ...ctr, amount: ctr.amount + amount } : ctr))
+            : [...c.counters, { label: convertLabel, amount }];
+          return { ...c, counters };
+        }),
+      },
+    }));
+  }
   return updatePlayer(state, found.controllerId, (p) => ({
     ...p,
     zones: {
@@ -1267,6 +1315,37 @@ export function moveCreaturesToGraveyard(state: GameState, deadIds: string[], ve
           },
         }));
         next = { ...next, log: [...next.log, `${watcherDef.name} triggers: puts ${totalAmount} ${counterLabel} counter(s) on itself.`] };
+      }
+    }
+
+    // "Whenever a creature you control without flying dies, return it to
+    // the battlefield under its owner's control with a flying counter on
+    // it." (Luminous Broodmoth) - a fresh instance (real zone change, same
+    // "genuine re-entry" convention as onDeathReturnToBattlefieldTapped),
+    // gated on the dying creature itself lacking flying at the moment it
+    // died (printed or temporarily granted only - board-anthem-granted
+    // flying isn't rechecked here, a minor known gap). Only fires once per
+    // dying creature regardless of how many Broodmoths are out, to avoid
+    // returning the same creature twice.
+    const flyingReturnWatchers = player.zones.battlefield.filter((c) => getCardDefinition(c.defId).onAnyControlledCreatureWithoutFlyingDeathReturnWithFlyingCounter);
+    if (flyingReturnWatchers.length > 0) {
+      const noFlyingCreatureDeaths = dead.filter((d) => {
+        const dDef = getCardDefinition(d.defId);
+        return dDef.type === 'creature' && !hasKeywordEffective(dDef, d, 'flying');
+      });
+      for (const d of noFlyingCreatureDeaths) {
+        const dDef = getCardDefinition(d.defId);
+        const newCard: CardInstance = {
+          instanceId: nextInstanceId(),
+          defId: d.defId,
+          ownerId: d.ownerId,
+          tapped: false,
+          counters: [{ label: 'Flying', amount: 1 }],
+          damageMarked: 0,
+          summoningSick: true,
+        };
+        next = updatePlayer(next, d.ownerId, (p) => ({ ...p, zones: { ...p.zones, battlefield: [...p.zones.battlefield, newCard] } }));
+        next = { ...next, log: [...next.log, `${dDef.name} returns to the battlefield with a flying counter on it (Luminous Broodmoth).`] };
       }
     }
 

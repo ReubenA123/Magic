@@ -434,6 +434,38 @@ export function useLocalGame(initialState: GameState) {
     return () => clearTimeout(timer);
   }, [state, dispatch]);
 
+  // AI: Kimahri's Ronso Rage "you may have it become a copy" - same
+  // always-accept, same combat-phase deferral reasoning as pendingOptionalTransform
+  // just above (the tap half already resolved through pendingTarget by the
+  // time this is reachable, so there's no combat-visibility issue here in
+  // practice, but the guard is kept for consistency).
+  useEffect(() => {
+    if (state.winnerId) return;
+    if (state.mutualAdjustment.status !== 'inactive') return;
+    const pending = state.pendingOptionalBecomeCopy;
+    if (!pending || pending.controllerId !== AI_PLAYER_ID) return;
+
+    const timer = setTimeout(() => {
+      dispatch({ type: 'RESOLVE_OPTIONAL_BECOME_COPY', accept: true }, AI_PLAYER_ID);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [state, dispatch]);
+
+  // AI: Endless Detour's "owner chooses top or bottom" - always picks
+  // bottom, the safer default (top would let the AI itself draw the exact
+  // same card again on its very next draw).
+  useEffect(() => {
+    if (state.winnerId) return;
+    if (state.mutualAdjustment.status !== 'inactive') return;
+    const pending = state.pendingLibraryPlacementChoice;
+    if (!pending || pending.ownerId !== AI_PLAYER_ID) return;
+
+    const timer = setTimeout(() => {
+      dispatch({ type: 'RESOLVE_LIBRARY_PLACEMENT_CHOICE', toTop: false }, AI_PLAYER_ID);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [state, dispatch]);
+
   // --- AI: step through its own turn -----------------------------------
   // Main phase logic: play a land if it hasn't yet, then tap untapped
   // lands one at a time (building its mana pool over several ticks) and
@@ -457,6 +489,8 @@ export function useLocalGame(initialState: GameState) {
     // racing to advance the phase (or cast something else) out from under
     // them on the same stale state.
     if (state.pendingOptionalTransform?.controllerId === AI_PLAYER_ID) return;
+    if (state.pendingOptionalBecomeCopy?.controllerId === AI_PLAYER_ID) return;
+    if (state.pendingLibraryPlacementChoice?.ownerId === AI_PLAYER_ID) return;
     if (state.pendingFreeCastFromHand?.controllerId === AI_PLAYER_ID) return;
     if (state.pendingDiscard?.controllerId === AI_PLAYER_ID) return;
     if (state.pendingLibrarySearch?.controllerId === AI_PLAYER_ID) return;
@@ -512,13 +546,13 @@ export function useLocalGame(initialState: GameState) {
             const d = getCardDefinition(untappedLand.defId);
             let color: ManaColor = 'C';
             if (Array.isArray(d.producesMana)) color = d.producesMana[0];
-            // 'commanderColorIdentity' (Arcane Signet) resolves server-side
-            // in engine/actions.ts: toggleTap - the AI has no simple static
-            // color to guess here, so it just falls through to the 'C'
-            // default above (harmless: a single-color identity ignores
-            // chosenColor entirely, and this is only ever a fallback tap
-            // anyway, not a strategic choice).
-            else if (d.producesMana && d.producesMana !== 'any' && d.producesMana !== 'commanderColorIdentity') color = d.producesMana;
+            // 'commanderColorIdentity' (Arcane Signet) / 'opponentLandColors'
+            // (Exotic Orchard) both resolve server-side in engine/actions.ts:
+            // toggleTap - the AI has no simple static color to guess here, so
+            // it just falls through to the 'C' default above (harmless: a
+            // single-color resolution ignores chosenColor entirely, and this
+            // is only ever a fallback tap anyway, not a strategic choice).
+            else if (d.producesMana && d.producesMana !== 'any' && d.producesMana !== 'commanderColorIdentity' && d.producesMana !== 'opponentLandColors') color = d.producesMana;
             dispatch({ type: 'TOGGLE_TAP', instanceId: untappedLand.instanceId, chosenColor: color }, AI_PLAYER_ID);
             break;
           }

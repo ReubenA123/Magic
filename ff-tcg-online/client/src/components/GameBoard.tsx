@@ -582,6 +582,11 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     count: number;
     selected: string[];
   } | null>(null);
+  // Same single-pick, choice-arrives-baked-in-costTargetInstanceIds shape as
+  // pendingSacrificeCost above, for CardAbility.cost.removeCounterFromAnotherPermanent
+  // (O'aka, Traveling Merchant's "remove a counter from a nonland permanent
+  // you control") - always count 1, so a click dispatches immediately.
+  const [pendingCounterRemovalCost, setPendingCounterRemovalCost] = useState<{ instanceId: string; abilityId: string; ownerId: string } | null>(null);
   // Whether to currently show CoinFlipModal's animated reveal for
   // state.lastCoinFlip (The Gold Saucer) - purely local/client-side, since
   // the actual flip already resolved server-side the instant it was called
@@ -1123,6 +1128,27 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     });
   }
 
+  /** Is this permanent a legal pick for pendingCounterRemovalCost - a
+   * nonland permanent the SAME controller controls with at least one
+   * counter on it already (any label; which one actually gets removed is
+   * auto-picked server-side - see CardAbility.cost.removeCounterFromAnotherPermanent). */
+  function isLegalCounterRemovalCostChoice(card: CardInstance, ownerId: string): boolean {
+    if (!pendingCounterRemovalCost) return false;
+    if (ownerId !== pendingCounterRemovalCost.ownerId) return false;
+    if (getCardDefinition(card.defId).type === 'land') return false;
+    return card.counters.length > 0;
+  }
+
+  /** Click handler for isLegalCounterRemovalCostChoice - always a single
+   * pick, so it dispatches immediately. */
+  function handleCounterRemovalCostClick(instanceId: string) {
+    setPendingCounterRemovalCost((prev) => {
+      if (!prev) return prev;
+      onAction({ type: 'ACTIVATE_ABILITY', instanceId: prev.instanceId, abilityId: prev.abilityId, costTargetInstanceIds: [instanceId] });
+      return null;
+    });
+  }
+
   /** Is this permanent a legal pick for pendingEscalateCost's running
    * selection - an untapped creature the same controller controls, not
    * already picked. */
@@ -1184,6 +1210,23 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
       const commanderDef = owner?.commanderDefId ? getCardDefinition(owner.commanderDefId) : null;
       const identity = commanderDef ? ([...new Set(Object.keys(parseCostLabel(commanderDef.costLabel).colors))] as ManaColor[]) : [];
       producesMana = identity.length > 1 ? identity : identity.length === 1 ? identity[0] : 'C';
+    }
+    if (producesMana === 'opponentLandColors') {
+      // Mirrors engine/actions.ts: toggleTap's own opponentLandColors
+      // resolution (see that function's doc comment for the full reasoning).
+      const opponent = state.players.find((p) => p.id !== instance.ownerId);
+      const colors = new Set<ManaColor>();
+      for (const c of opponent?.zones.battlefield ?? []) {
+        const d = getCardDefinition(c.defId);
+        if (d.type !== 'land') continue;
+        if (d.producesMana === 'any') ALL_MANA_COLORS.forEach((x) => colors.add(x));
+        else if (Array.isArray(d.producesMana)) d.producesMana.forEach((x) => colors.add(x));
+        else if (d.producesMana && d.producesMana !== 'commanderColorIdentity' && d.producesMana !== 'opponentLandColors') colors.add(d.producesMana);
+        if (d.altProducesMana) d.altProducesMana.colors.forEach((x) => colors.add(x));
+      }
+      colors.delete('C');
+      const union = [...colors];
+      producesMana = union.length > 1 ? union : union.length === 1 ? union[0] : 'C';
     }
     return !producesMana ? [] : Array.isArray(producesMana) ? producesMana : producesMana === 'any' ? ALL_MANA_COLORS : [producesMana];
   }
@@ -1782,6 +1825,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     const isAttachTarget = isLegalAttachTarget(c, ownerId);
     const isSacrificeChoice = isLegalSacrifice(c, ownerId);
     const isSacrificeCostChoice = isLegalSacrificeCostChoice(c, ownerId);
+    const isCounterRemovalCostChoice = isLegalCounterRemovalCostChoice(c, ownerId);
     const isEscalateCostChoice = isLegalEscalateCostChoice(c, ownerId);
     const isKeepOneChoice = isLegalKeepOneChoice(c, ownerId);
     const isCrewChoice = isLegalCrewChoice(c, ownerId);
@@ -1794,6 +1838,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
       isAttachTarget ||
       isSacrificeChoice ||
       isSacrificeCostChoice ||
+      isCounterRemovalCostChoice ||
       isEscalateCostChoice ||
       isKeepOneChoice ||
       isCrewSelected;
@@ -1857,6 +1902,8 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                 onAction({ type: 'CHOOSE_SACRIFICE', instanceId: c.instanceId });
               } else if (isSacrificeCostChoice) {
                 handleSacrificeCostClick(c.instanceId);
+              } else if (isCounterRemovalCostChoice) {
+                handleCounterRemovalCostClick(c.instanceId);
               } else if (isEscalateCostChoice) {
                 handleEscalateCostClick(c.instanceId);
               } else if (isKeepOneChoice) {
@@ -1957,6 +2004,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     const canReorder = reorderAllowed && stackCount === 1;
     const isLegalTarget = isLegalPendingTarget(c, playerId);
     const isSacrificeCostChoice = isLegalSacrificeCostChoice(c, playerId);
+    const isCounterRemovalCostChoice = isLegalCounterRemovalCostChoice(c, playerId);
     const canControl = canControlCard(playerId);
     return (
       <div key={c.instanceId} ref={(el) => registerCardRef(c.instanceId, el)}>
@@ -1970,10 +2018,12 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
             group,
             c,
             {
-              selected: multiSelected.has(c.instanceId) || isPendingManaChoice || isLegalTarget || isSacrificeCostChoice,
+              selected: multiSelected.has(c.instanceId) || isPendingManaChoice || isLegalTarget || isSacrificeCostChoice || isCounterRemovalCostChoice,
               onClick: () => {
                 if (isSacrificeCostChoice) {
                   handleSacrificeCostClick(c.instanceId);
+                } else if (isCounterRemovalCostChoice) {
+                  handleCounterRemovalCostClick(c.instanceId);
                 } else if (isLegalTarget) onAction({ type: 'CHOOSE_TARGET', targetInstanceId: c.instanceId });
                 else setOpenPanelId(c.instanceId);
               },
@@ -2861,6 +2911,18 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                                   ? `Choose target creature with a counter on it for ${pendingTargetSourceName}'s ability - if it dies this turn, it returns to its owner's hand.`
                                   : effect.type === 'destroyUpToOneOpponentArtifactThenPutCounterOnSelf'
                                   ? `Choose up to one artifact the defending player controls for ${pendingTargetSourceName} to destroy - or Skip.`
+                                  : effect.type === 'putOwnCountersOnTargetThenShuffleSelfIntoLibrary'
+                                  ? `Choose a creature you control for ${pendingTargetSourceName}'s counters to move onto before it's shuffled into its owner's library.`
+                                  : effect.type === 'ronsoRage'
+                                  ? `Choose target creature an opponent controls for ${pendingTargetSourceName} to tap.`
+                                  : effect.type === 'exileTargetCreatureThenControllerMaySearchBasicLand'
+                                  ? `Choose target creature for ${pendingTargetSourceName} to exile.`
+                                  : effect.type === 'putTargetNonlandPermanentInLibraryOwnersChoice'
+                                  ? `Choose target nonland permanent (either player's) for ${pendingTargetSourceName}'s ability - its owner will choose top or bottom of their library.`
+                                  : effect.type === 'grantPreventCombatDamageConvertToCounterToTargetOwnCreature'
+                                  ? `Choose a creature you control for ${pendingTargetSourceName}'s ability.`
+                                  : effect.type === 'mayMoveAllCountersToTargetCreature'
+                                  ? `Choose another creature for ${pendingTargetSourceName}'s ability to move its counters onto - or Skip.`
                                   : effect.targetFilter === 'artifactOrEnchantment'
                                   ? `Choose an artifact or enchantment for ${pendingTargetSourceName}'s ability (either player's).`
                                   : effect.targetFilter === 'enchantment'
@@ -2871,6 +2933,8 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                                     ? `Choose a nonland permanent for ${pendingTargetSourceName}'s ability (either player's).`
                                     : effect.targetFilter === 'creatureWithMinPower'
                                     ? `Choose a creature with power ${effect.minPower ?? 0} or greater for ${pendingTargetSourceName}'s ability.`
+                                    : effect.targetFilter === 'creatureWithMinToughness'
+                                    ? `Choose a creature with toughness ${effect.minToughness ?? 0} or greater for ${pendingTargetSourceName}'s ability.`
                                     : effect.targetFilter === 'creatureWithDamageMarked'
                                     ? `Choose a creature that was dealt damage this turn for ${pendingTargetSourceName}'s ability.`
                                     : effect.targetFilter === 'land'
@@ -2923,6 +2987,15 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
             {pendingSacrificeCost.count > 1 ? ` (${pendingSacrificeCost.selected.length}/${pendingSacrificeCost.count} chosen)` : ''}.
           </span>
           <button className="opponent-view-exit-button" onClick={() => setPendingSacrificeCost(null)}>
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {pendingCounterRemovalCost && (
+        <div className="pending-target-banner">
+          <span>Choose a nonland permanent you control with a counter on it to remove one from.</span>
+          <button className="opponent-view-exit-button" onClick={() => setPendingCounterRemovalCost(null)}>
             Cancel
           </button>
         </div>
@@ -2994,6 +3067,47 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
               </button>
               <button className="opponent-view-exit-button" onClick={() => onAction({ type: 'RESOLVE_OPTIONAL_TRANSFORM', accept: false }, pending.controllerId)}>
                 Skip
+              </button>
+            </div>
+          );
+        })()}
+
+      {state.pendingOptionalBecomeCopy &&
+        !showCombatZones &&
+        (state.pendingOptionalBecomeCopy.controllerId === yourPlayerId || soloControl) &&
+        (() => {
+          const pending = state.pendingOptionalBecomeCopy;
+          const sourceFound = findCard(state, pending.sourceInstanceId);
+          const sourceName = sourceFound ? getCardDefinition(sourceFound.card.defId).name : 'This creature';
+          const copyName = getCardDefinition(pending.copyDefId).name;
+          return (
+            <div className="pending-target-banner">
+              <span>You may have {sourceName} become a copy of {copyName}'s power and toughness (it keeps its own name and abilities).</span>
+              <button className="opponent-view-exit-button" onClick={() => onAction({ type: 'RESOLVE_OPTIONAL_BECOME_COPY', accept: true }, pending.controllerId)}>
+                Become a Copy
+              </button>
+              <button className="opponent-view-exit-button" onClick={() => onAction({ type: 'RESOLVE_OPTIONAL_BECOME_COPY', accept: false }, pending.controllerId)}>
+                Skip
+              </button>
+            </div>
+          );
+        })()}
+
+      {state.pendingLibraryPlacementChoice &&
+        !showCombatZones &&
+        (state.pendingLibraryPlacementChoice.ownerId === yourPlayerId || soloControl) &&
+        (() => {
+          const pending = state.pendingLibraryPlacementChoice;
+          const targetFound = findCard(state, pending.targetInstanceId);
+          const targetName = targetFound ? getCardDefinition(targetFound.card.defId).name : 'This permanent';
+          return (
+            <div className="pending-target-banner">
+              <span>Put {targetName} on the top or bottom of your library.</span>
+              <button className="opponent-view-exit-button" onClick={() => onAction({ type: 'RESOLVE_LIBRARY_PLACEMENT_CHOICE', toTop: true }, pending.ownerId)}>
+                Top
+              </button>
+              <button className="opponent-view-exit-button" onClick={() => onAction({ type: 'RESOLVE_LIBRARY_PLACEMENT_CHOICE', toTop: false }, pending.ownerId)}>
+                Bottom
               </button>
             </div>
           );
@@ -3462,6 +3576,9 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                 count: ability.cost.sacrificeAnotherCount ?? 1,
                 selected: [],
               });
+              setOpenPanelId(null);
+            } else if (ability?.cost.removeCounterFromAnotherPermanent) {
+              setPendingCounterRemovalCost({ instanceId: openCard.card.instanceId, abilityId, ownerId: openCard.player.id });
               setOpenPanelId(null);
             } else {
               onAction({ type: 'ACTIVATE_ABILITY', instanceId: openCard.card.instanceId, abilityId });

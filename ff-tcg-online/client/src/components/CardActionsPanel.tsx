@@ -56,6 +56,7 @@ function abilityButtonLabel(ability: CardAbility, def: CardDefinition): string {
     const noun = ability.cost.sacrificeAnother === 'artifactOrCreature' ? 'creature(s)/artifact(s)' : `${ability.cost.sacrificeAnother}(s)`;
     rest.push(`Sacrifice ${count > 1 ? count : 'another'} ${noun}`);
   }
+  if (ability.cost.removeCounterFromAnotherPermanent) rest.push('Remove a counter from a nonland permanent');
   if (ability.cost.payLife) rest.push(`Pay ${ability.cost.payLife} life`);
   if (ability.cost.discardCards) rest.push(`Discard ${ability.cost.discardCards}`);
   if (ability.cost.exileFromGraveyard) rest.push(`Exile ${ability.cost.exileFromGraveyard} from graveyard`);

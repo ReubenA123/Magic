@@ -96,6 +96,8 @@ export function createInitialState(player1Name: string, player2Name: string, pla
     pendingMillThenPutLandIntoHand: null,
     pendingReturnCreaturesFromGraveyard: null,
     pendingOptionalTransform: null,
+    pendingOptionalBecomeCopy: null,
+    pendingLibraryPlacementChoice: null,
     pendingOptionalPayLife: null,
     pendingMayEffect: null,
     pendingCommanderZoneChoice: null,

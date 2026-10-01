@@ -576,6 +576,17 @@ export const CARD_POOL: CardDefinition[] = [
     ],
   },
   {
+    id:'bred-for-the-hunt',
+    name:'Bred for the Hunt',
+    type:'enchantment',
+    costLabel:'{1}{G}{U}',
+    text:'Whenever a creature you control with a +1/+1 counter on it deals combat damage to a player, you may draw a card.\n'+
+    '“Think you will win? You not forget who took your horn! Never forget!”\n'+
+    '—Biran Ronso',
+    imagePath:'/assets/cards/bred-for-the-hunt.webp',
+    onAnyControlledCreatureWithCounterCombatDamageToPlayer: [{ type: 'mayEffect', effects: [{ type: 'drawCards', amount: 1 }] }],
+  },
+  {
     id:'brushland',
     name:'Brushland',
     type:'land',
@@ -625,6 +636,19 @@ export const CARD_POOL: CardDefinition[] = [
     onCast: [{ type: 'searchLibraryForLand', landName: 'Mountain' }, { type: 'createToken', tokenId: 'token-bird' }],
     flashback: { cost: '{5}{R}' },
     imagePath: '/assets/cards/call-the-mountain-chocobo.webp',
+  },
+  {
+    id:'canopy-vista',
+    name:'Canopy Vista',
+    type:'land',
+    costLabel:'-',
+    text:'({T}: Add {G} or {W}.)\n'+
+    'This land enters tapped unless you control two or more basic lands.\n'+
+    '“This here\u2019s Mideel. It\u2019s a quiet little hot springs town. Just the perfect place for old folks like us to live out our lives.”\n'+
+    '—Mideel resident',
+    imagePath:'/assets/cards/canopy-vista.webp',
+    entersTappedUnlessControlBasicLandCount: 2,
+    producesMana: ['G', 'W'],
   },
   {
     id: 'capital-city',
@@ -1010,6 +1034,17 @@ export const CARD_POOL: CardDefinition[] = [
     imagePath: '/assets/cards/combat-tutorial.webp'
   },
   {
+    id:'command-tower',
+    name:'Command Tower',
+    type:'land',
+    costLabel:'-',
+    text:'{T}: Add one mana of any color in your commander\u2019s color identity.\n'+
+    '“Kefka’s practically a god now, sitting up in that tower of his with the power of the Warring Triad at his command…”\n'+
+    '—Albrook citizen',
+    imagePath:'/assets/cards/command-tower.webp',
+    producesMana: 'commanderColorIdentity',
+  },
+  {
     id: 'commune-with-beavers',
     name: 'Commune with Beavers',
     type: 'sorcery',
@@ -1143,7 +1178,24 @@ export const CARD_POOL: CardDefinition[] = [
         effectText: 'Put two +1/+1 counters on this creature.',
       },
     ],
-    imagePath: '/assets/cards/demon-wall.webp'
+    imagePath:'/assets/cards/demon-wall.webp'
+  },
+  {
+    id:'destroy-evil',
+    name:'Destroy Evil',
+    type:'instant',
+    costLabel:'{1}{W}',
+    text:'Choose one —\n' +
+    '• Destroy target creature with toughness 4 or greater.\n'+
+    '• Destroy target enchantment.\n'+
+    '“So it is you, after all, who will send me. But even after I am gone, Spira\u2019s sorrow will prevail.”\n'+
+    '—Seymour, to Yuna',
+    imagePath:'/assets/cards/destroy-evil.webp',
+    chooseModes: [
+      { label: 'Destroy target creature with toughness 4 or greater', effects: [{ type: 'destroyTarget', targetFilter: 'creatureWithMinToughness', minToughness: 4 }] },
+      { label: 'Destroy target enchantment', effects: [{ type: 'destroyTarget', targetFilter: 'enchantment' }] },
+    ],
+    chooseExactlyOneMode: true,
   },
   {
     id: 'diamond-weapon',
@@ -1255,6 +1307,21 @@ export const CARD_POOL: CardDefinition[] = [
     imagePath: '/assets/cards/dreams-of-laguna.webp'
   },
   {
+    id:'duskshell-crawler',
+    name:'Duskshell Crawler',
+    type:'creature',
+    subtype:'Creature Insect',
+    costLabel:'{1}{G}',
+    power: 0,
+    toughness: 3,
+    text:'When this creature enters, put a +1/+1 counter on target creature.\n'+
+    'Each creature you control with a +1/+1 counter on it has trample. (It can deal excess combat damage to the player or planeswalker it\u2019s attacking.)\n'+
+    '“Hah! That one looks slow,” scoffed Tidus. “It\u2019s also tough. Let me handle this,” replied Auron.',
+    imagePath:'/assets/cards/duskshell-crawler.webp',
+    onEnter: [{ type: 'putCounterOnTarget', counterLabel: '+1/+1', counterAmount: 1 }],
+    staticAnthemForCreaturesWithCounter: { counterLabel: '+1/+1', grantKeywords: ['trample'] },
+  },
+  {
     id: 'dwarven-castel-guard',
     name: 'Dwarven Castle Guard',
     type: 'creature',
@@ -1342,6 +1409,19 @@ export const CARD_POOL: CardDefinition[] = [
     ],
   },
   {
+    id:'endless-detour',
+    name:'Endless Detour',
+    type:'instant',
+    costLabel:'{G}{W}{U}',
+    text:'The owner of target spell, nonland permanent, or card in a graveyard puts it on their choice of the top or bottom of their library.\n'+
+    '“I\u2019m scared of lightning! Let\u2019s rest, please? Pretty please?”\n'+
+    '—Rikku',
+    imagePath:'/assets/cards/endless-detour.webp',
+    onCast: [{ type: 'putTargetNonlandPermanentInLibraryOwnersChoice' }],
+    // "Target spell" and "card in a graveyard" are deferred - see
+    // PutTargetNonlandPermanentInLibraryOwnersChoiceEffect's own doc comment.
+  },
+  {
     id: 'hades-sorcerer-of-eld',
     name: 'Hades, Sorcerer of Eld',
     type: 'creature',
@@ -1402,6 +1482,25 @@ export const CARD_POOL: CardDefinition[] = [
     imagePath: "/assets/cards/evil-reawakened.webp"
   },
   {
+    id:'evolving-wilds',
+    name:'Evolving Wilds',
+    type:'land',
+    costLabel:'-',
+    text:'{T}, Sacrifice this land: Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.\n'+
+    '“Both the Crusaders and the Al Bhed truly wish peace for Spira. This Operation Mi\u2019hen was born from that wish they share.”\n'+
+    '—Seymour Guado',
+    imagePath:'/assets/cards/evolving-wilds.webp',
+    abilities: [
+      {
+        id: 'evolving-wilds-fetch',
+        label: 'Fetch',
+        cost: { tap: true, sacrificeSelf: true },
+        effects: [{ type: 'searchLibraryForBasicLand', toBattlefieldTapped: true }],
+        effectText: 'Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.',
+      },
+    ],
+  },
+  {
     id: "excalibur-ii",
     name: "Excalibur II",
     type: 'artifact',
@@ -1441,6 +1540,17 @@ export const CARD_POOL: CardDefinition[] = [
     imagePath: '/assets/cards/neo-exdeath-dimension-s-end.webp'
   },
   {
+    id:'exotic-orchard',
+    name:'Exotic Orchard',
+    type:'land',
+    costLabel:'-',
+    text:'{T}: Add one mana of any color that a land an opponent controls could produce.\n'+
+    '“We have been expecting you, Lady Yuna. Welcome to Guadosalam.”\n'+
+    '—Tromell, Seymour\u2019s butler',
+    imagePath:'/assets/cards/exotic-orchard.webp',
+    producesMana: 'opponentLandColors',
+  },
+  {
     id: 'fang-fearless-l-cie',
     name: "Fang, Fearless I'Cie",
     type: 'creature',
@@ -1466,6 +1576,20 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'This spell costs 2 less to cast if it targets a tapped creature.\nDestroy target nonland permanent.',
     imagePath: '/assets/cards/fate-of-the-sun-cryst.webp',
     onCast: [{ type: 'destroyTarget', targetFilter: 'nonlandPermanent' }],
+  },
+  {
+    id:'fathom-mage',
+    name:'Fathom Mage',
+    type:'creature',
+    subtype:'Creature Human Wizard',
+    costLabel:'{2}{G}{U}',
+    power: 1,
+    toughness: 1,
+    text:'Evolve (Whenever a creature you control enters, if that creature has greater power or toughness than this creature, put a +1/+1 counter on this creature.)\n'+
+    'Whenever a +1/+1 counter is put on this creature, you may draw a card.',
+    imagePath:'/assets/cards/fathom-mage.webp',
+    evolve: true,
+    onOwnCounterAddedTrigger: { counterLabel: '+1/+1', effects: [{ type: 'mayEffect', effects: [{ type: 'drawCards', amount: 1 }] }] },
   },
   {
     id:'farseek',
@@ -1588,6 +1712,22 @@ export const CARD_POOL: CardDefinition[] = [
         effectText: 'Choose target commander that entered this turn. Put a +1/+1 counter on it.',
       },
     ],
+  },
+  {
+    id:'forgotten-ancient',
+    name:'Forgotten Ancient',
+    type:'creature',
+    subtype:'Creature Elemental',
+    costLabel:'{3}{G}',
+    power: 0,
+    toughness: 3,
+    text:'Whenever a player casts a spell, you may put a +1/+1 counter on this creature.\n'+
+    'At the beginning of your upkeep, you may move any number of +1/+1 counters from this creature onto other creatures.\n'+
+    '“Find your peace on the Farplane. Leave Spira to the living.”\n'+
+    '—Auron',
+    imagePath:'/assets/cards/forgotten-ancient.webp',
+    onAnyPlayerCastsSpellTrigger: [{ type: 'mayEffect', effects: [{ type: 'putCounterOnSelf', counterLabel: '+1/+1', counterAmount: 1 }] }],
+    onOwnUpkeep: [{ type: 'mayMoveAllCountersToTargetCreature', counterLabel: '+1/+1' }],
   },
   {
     id:'fortified-village',
@@ -1722,7 +1862,37 @@ export const CARD_POOL: CardDefinition[] = [
     text: "Lifelink \n Whenever Garnet attacks, you may remove a lore counter from each of any number of Sagas you control. " +
       "Put a +1/+1 counter on Garnet for each lore counter removed this way.",
     imagePath: '/assets/cards/garnet-princess-of-alexandria.webp'
-  }, {
+  }, 
+  {
+    id:'gatta-and-luzzu',
+    name:'Gatta and Luzzu',
+    type:'creature',
+    subtype:'Legendary Creature Human Soldier',
+    costLabel:'{2}{W}',
+    power: 1,
+    toughness: 1,
+    text:'Flash\n'+
+    'When Gatta and Luzzu enters, choose target creature you control. If damage would be dealt to that creature this turn, prevent that damage and put that many +1/+1 counters on it.',
+    imagePath:'/assets/cards/gatta-and-luzzu.webp',
+    onEnter: [{ type: 'grantPreventCombatDamageConvertToCounterToTargetOwnCreature', counterLabel: '+1/+1' }],
+  },
+  {
+    id:'generous-patron',
+    name:'Generous Patron',
+    type:'creature',
+    subtype:'Creature Elf Advisor',
+    costLabel:'{2}{G}',
+    power: 1,
+    toughness: 4,
+    text:'When this creature enters, support 2. (Put a +1/+1 counter on each of up to two other target creatures.)\n'+
+    'Whenever you put one or more counters on a creature you don\u2019t control, draw a card.\n'+
+    '“Look at the crowd, folks!”\n'+
+    '—Blitzball announcer',
+    imagePath:'/assets/cards/generous-patron.webp',
+    onEnter: [{ type: 'support', counterLabel: '+1/+1', counterAmount: 1, count: 2, excludeSelf: true }],
+    onOwnCounterPlacedOnOpponentCreatureTrigger: [{ type: 'drawCards', amount: 1 }],
+  },
+  {
     id: 'genji-glove',
     name: 'Genji Glove',
     costLabel: '{5}',
@@ -1795,6 +1965,18 @@ export const CARD_POOL: CardDefinition[] = [
       "Landfall — Whenever a land you control enters, another target creature you control gets +2/+2 and gains trample until end of turn.",
     imagePath: '/assets/cards/gladiolus-amicitia.webp',
     landfall: { pumpAnotherControlledCreature: { power: 2, toughness: 2, grantKeyword: 'trample' } },
+  },
+  {
+    id:'glacial-fortress',
+    name:'Glacial Fortress',
+    type:'land',
+    costLabel:'-',
+    text:'This land enters tapped unless you control a Plains or an Island.\n'+
+    '{T}: Add {W} or {U}.\n' +
+    'For as long as their nation has warred with Dravania, there have been Ishgardians who instead chose to ally themselves with the dragons. Shiva is said to have been among the first, hence why the heretics revere her as a saint.',
+    imagePath:'/assets/cards/glacial-fortress.webp',
+    entersTappedUnlessControlLandNames: ['Plains', 'Island'],
+    producesMana: ['W', 'U'],
   },
   {
     id: "gogo-master-of-mimicry",
@@ -1887,6 +2069,19 @@ export const CARD_POOL: CardDefinition[] = [
       },
     ],
     imagePath: '/assets/cards/gran-pulse-ochu.webp'
+  },
+  {
+    id:'grateful-apparition',
+    name:'Grateful Apparition',
+    type:'creature',
+    subtype:'Creature Spirit',
+    costLabel:'{1}{W}',
+    power: 1,
+    toughness: 1,
+    text:'Flying\n'+
+    'Whenever this creature deals combat damage to a player or planeswalker, proliferate. (Choose any number of permanents and/or players, then give each another counter of each kind already there.)',
+    imagePath:'/assets/cards/grateful-apparition.webp',
+    onCombatDamageToPlayer: [{ type: 'proliferate' }],
   },
   {
     id: 'guadosalam-farplane-gateway',
@@ -2025,6 +2220,16 @@ export const CARD_POOL: CardDefinition[] = [
     imagePath: '/assets/cards/insomnia-crown-city.webp',
     entersTapped: true,
     producesMana: ['W', 'B']
+  },
+  {
+    id:'inspiring-call',
+    name:'Inspiring Call',
+    costLabel:'{2}{G}',
+    type:'instant',
+    text:'Draw a card for each creature you control with a +1/+1 counter on it. Those creatures gain indestructible until end of turn. (Damage and effects that say “destroy” don\u2019t destroy them.)\n'+
+    '“Hahahahaha!”',
+    imagePath:'/assets/cards/inspiring-call.webp',
+    onCast: [{ type: 'drawForCreaturesWithCounterThenGrantIndestructible', counterLabel: '+1/+1' }],
   },
   {
     id: 'instant-ramen',
@@ -2329,6 +2534,23 @@ export const CARD_POOL: CardDefinition[] = [
     onOpponentLifeLossDuringYourTurn: true,
   },
   {
+    id:'kimahri-valiant-guardian',
+    name:'Kimahri Valiant Guardian',
+    costLabel:'{2}{G}{U}',
+    type:'creature',
+    subtype:'Legendary Creature Cat Warrior',
+    power: 3,
+    toughness: 3,
+    text:'Vigilance\n'+
+    'Ronso Rage — At the beginning of combat on your turn, put a +1/+1 counter on Kimahri and tap target creature an opponent controls. '+
+    'Then you may have Kimahri become a copy of that creature, except its name is Kimahri, Valiant Guardian and it has vigilance and this ability.',
+    imagePath:'/assets/cards/kimahri-valiant-guardian.webp',
+    onOwnCombatBegin: [{ type: 'ronsoRage', counterLabel: '+1/+1', counterAmount: 1 }],
+    // The "become a copy" half only copies power/toughness (see
+    // CardInstance.copiedStatsFromDefId's own doc comment) - it does not
+    // grant the copied creature's other keywords/abilities/types.
+  },
+  {
     id: 'kuja-genome-sorcerer',
     name: 'Kuja, Genome Sorcerer',
     costLabel: '{2}{B}{R}',
@@ -2458,12 +2680,41 @@ export const CARD_POOL: CardDefinition[] = [
     imagePath: '/assets/cards/loporrit-scout.webp'
   },
   {
+    id:'lord-jyscal-guado',
+    name:'Lord Jyscal Guado',
+    costLabel:'{1}{W}',
+    type: 'creature',
+    subtype:'Legendary Creature Spirit Cleric',
+    power: 2,
+    toughness: 1,
+    text:'Flying\n'+
+    'At the beginning of each end step, if you put a counter on a creature this turn, investigate. (Create a Clue token. It\u2019s an artifact with “{2}, Sacrifice this token: Draw a card.”)\n'+
+    '“Listen to me very carefully, for I shall tell you the truth about my son, Seymour.”',
+    imagePath:'/assets/cards/lord-jyscal-guado.webp',
+    onAnyEndStep: [{ type: 'ifCounterPutOnOwnCreatureThisTurn', thenEffects: [{ type: 'createToken', tokenId: 'token-clue' }], elseEffects: [] }],
+  },
+  {
     id: 'louisoix-s-sacrifice',
     name: "Louisoix's Sacrifice",
     costLabel: '{U}',
     type: 'instant',
     text: 'As an additional cost to cast this spell, sacrifice a legendary creature or pay 2. Counter target activated ability, triggered ability, or noncreature spell.',
     imagePath: '/assets/cards/louisoix-s-sacrifice.webp'
+  },
+  {
+    id:'luminous-broodmoth',
+    name:'Luminous Broodmoth',
+    costLabel:'{2}{W}{W}',
+    type:'creature',
+    subtype:'Creature Insect',
+    power: 3,
+    toughness: 4,
+    text:'Flying\n'+
+    'Whenever a creature you control without flying dies, return it to the battlefield under its owner\u2019s control with a flying counter on it.\n'+
+    '“Don\u2019t bother going after all of them. Cut the ones that matter, and run!”\n'+
+    '—Auron',
+    imagePath:'/assets/cards/luminous-broodmoth.webp',
+    onAnyControlledCreatureWithoutFlyingDeathReturnWithFlyingCounter: true,
   },
   {
     id: 'lunatic-pandora',
@@ -2625,6 +2876,31 @@ export const CARD_POOL: CardDefinition[] = [
     onEnter: [{ type: 'eachOpponentDiscards', count: 1 }, { type: 'dealDamageToEachOpponent', amount: 2 }, { type: 'exileTopOfEachOpponentLibrary', count: 3 }],
   },
   {
+    id:'maester-seymour',
+    name:'Maester Seymour',
+    costLabel:'{2}{G}',
+    type:'creature',
+    subtype:'Legendary Creature Human Elf Cleric',
+    power: 1,
+    toughness: 3,
+    text:'At the beginning of combat on your turn, put a number of +1/+1 counters equal to Maester Seymour\u2019s power on another target creature you control.\n'+
+    '{3}{G}{G}: Monstrosity X, where X is the number of counters among creatures you control. (If this creature isn\u2019t monstrous, put X +1/+1 counters on it and it becomes monstrous.)',
+    imagePath:'/assets/cards/maester-seymour.webp',
+    onOwnCombatBegin: [
+      { type: 'putCounterOnUpToOneOtherCreatureEqualToOwnPower', counterLabel: '+1/+1', restrictToOwnCreature: true, mandatory: true },
+    ],
+    abilities: [
+      {
+        id: 'maester-seymour-monstrosity',
+        label: 'Monstrosity',
+        cost: { manaLabel: '{3}{G}{G}' },
+        requiresNotMonstrous: true,
+        effects: [{ type: 'monstrosityByControlledCreatureCounterCount', counterLabel: '+1/+1' }],
+        effectText: "Monstrosity X, where X is the number of counters among creatures you control.",
+      },
+    ],
+  },
+  {
     id: 'matoya-archon-elder',
     name: 'Matoya, Archon Elder',
     costLabel: '{2}{U}',
@@ -2781,6 +3057,27 @@ export const CARD_POOL: CardDefinition[] = [
     grantsCastArtifactsFromGraveyardForLife: 3,
   },
   {
+    id:'o-aka-traveling-merchant',
+    name:'O\u2019aka, Traveling Merchant',
+    costLabel:'{1}{U}',
+    type:'creature',
+    subtype:'Legendary Creature Human Citizen',
+    power: 1,
+    toughness: 2,
+    text:'{T}, Remove a counter from a nonland permanent you control: Draw a card.\n'+
+    '“Say, lad, you wouldn\u2019t have a bit o\u2019 gil to lend?”',
+    imagePath:'/assets/cards/o-aka-traveling-merchant.webp',
+    abilities: [
+      {
+        id: 'oaka-draw',
+        label: 'Draw',
+        cost: { tap: true, removeCounterFromAnotherPermanent: 'nonland' },
+        effects: [{ type: 'drawCards', amount: 1 }],
+        effectText: 'Draw a card.',
+      },
+    ],
+  },
+  {
     id: 'omega-heartless-evolution',
     name: 'Omega, Heartless Evolution',
     costLabel: '{5}{G}{U}',
@@ -2840,6 +3137,17 @@ export const CARD_POOL: CardDefinition[] = [
     equipGrantsWard: { mana: '{1}' },
     equipGrantsSubtype: 'Knight',
     imagePath: '/assets/cards/paladin-s-arms.webp'
+  },
+  {
+    id:'path-to-exile',
+    name:'Path to Exile',
+    costLabel:'{W}',
+    type:'instant',
+    text:'Exile target creature. Its controller may search their library for a basic land card, put that card onto the battlefield tapped, then shuffle.\n'+
+    '“This is your story. It all begins here.”\n'+
+    '—Auron',
+    imagePath:'/assets/cards/path-to-exile.webp',
+    onCast: [{ type: 'exileTargetCreatureThenControllerMaySearchBasicLand' }],
   },
   {
     id: 'phantom-train',
@@ -2942,6 +3250,25 @@ export const CARD_POOL: CardDefinition[] = [
     text: "Haste \n Selfie Shot — Whenever you cast a noncreature spell, if at least four mana was spent to cast it, create a Treasure token.",
     imagePath: '/assets/cards/prompto-argentum.webp',
     noncreatureCastTrigger: { createTokenIfExpensive: { minManaValue: 4, tokenId: 'token-treasure' } },
+  },
+  {
+    id:'protection-magic',
+    name:'Protection Magic',
+    costLabel:'{1}{W}',
+    type:'instant',
+    text:'Put a shield counter on each of up to three target creatures. (If a creature with a shield counter would be dealt damage or destroyed, remove a shield counter from it instead.)\n'+
+    '“Armor of light, halt physical might!”',
+    imagePath:'/assets/cards/protection-magic.webp',
+    onCast: [{ type: 'support', counterLabel: 'Shield', counterAmount: 1, count: 3 }],
+  },
+  {
+    id:'pull-from-tomorrow',
+    name:'Pull from Tomorrow',
+    costLabel:'{X}{U}{U}',
+    type:'instant',
+    text:'Draw X cards, then discard a card.\n'+
+    'He knew there was no way back home, back to Zanarkand.',
+    imagePath:'/assets/cards/pull-from-tomorrow.webp'
   },
   {
     id: 'pupu-ufo',
@@ -3829,6 +4156,21 @@ export const CARD_POOL: CardDefinition[] = [
     imagePath: '/assets/cards/sin-spira-s-punishment.webp'
   },
   {
+    id:'sin-unending-cataclysm',
+    name:'Sin, Unending Cataclysm',
+    costLabel:'{5}{G}{U}',
+    type: 'creature',
+    subtype:'Legendary Creature Leviathan Avatar',
+    power: 5,
+    toughness: 5,
+    text:'Flying, trample\n'+
+    'As Sin enters, remove all counters from any number of artifacts, creatures, and enchantments. Sin enters with X +1/+1 counters on it, where X is twice the number of counters removed this way.\n'+
+    'When Sin dies, put its counters on target creature you control, then shuffle this card into its owner\u2019s library.',
+    imagePath:'/assets/cards/sin-unending-cataclysm.webp',
+    onEnter: [{ type: 'removeAllCountersEnterWithDoubleAsCounter', counterLabel: '+1/+1' }],
+    onDeath: [{ type: 'putOwnCountersOnTargetThenShuffleSelfIntoLibrary' }],
+  },
+  {
     id: 'slash-of-light',
     name: 'Slash of Light',
     costLabel: '{1}{W}',
@@ -3890,6 +4232,18 @@ export const CARD_POOL: CardDefinition[] = [
     // specifically because they had flashback" as a distinct pool.
     onCast: [{ type: 'returnInstantOrSorceryFromGraveyardToHand' }, { type: 'addMana', colors: { R: 1 } }],
     flashback: { cost: '{4}{R}' },
+  },
+  {
+    id:'sphere-grid',
+    name:'Sphere Grid',
+    costLabel:'{1}{G}',
+    type:'enchantment',
+    text:'Whenever a creature you control deals combat damage to a player, put a +1/+1 counter on that creature.\n'+
+    'Unlock Ability — Creatures you control with +1/+1 counters on them have reach and trample.\n'+
+    'To activate nodes, you must use spheres.',
+    imagePath:'/assets/cards/sphere-grid.webp',
+    onAnyControlledCreatureCombatDamageToPlayerPutCounterOnThatCreature: { counterLabel: '+1/+1', counterAmount: 1 },
+    staticAnthemForCreaturesWithCounter: { counterLabel: '+1/+1', grantKeywords: ['reach', 'trample'] },
   },
   {
     id: 'squall-seed-mercenary',
@@ -4559,7 +4913,49 @@ export const CARD_POOL: CardDefinition[] = [
       drawCardsIfExpensive: { minManaValue: 4, amount: 2 },
       sacrificeSelfAndDealDamageEqualToManaSpentIfExpensive: { minManaValue: 8 },
     },
-    imagePath: '/assets/cards/tellah-great-sage.webp'
+    imagePath:'/assets/cards/tellah-great-sage.webp'
+  },
+  {
+    id:'temple-of-enlightenment',
+    name:'Temple of Enlightenment',
+    costLabel:'-',
+    type:'land',
+    text:'This land enters tapped.\n'+
+    'When this land enters, scry 1. (Look at the top card of your library. You may put that card on the bottom.)\n'+
+    '{T}: Add {W} or {U}.\n'+
+    '“First down the Moonflow to the Guado city of Guadosalam… then we cross the Thunder Plains to the temple of Macalania.”\n'+
+    '—Lulu',
+    imagePath:'/assets/cards/temple-of-enlightenment.webp',
+    entersTapped: true,
+    onEnter: [{ type: 'surveil', count: 1 }],
+    producesMana: ['W', 'U'],
+  },
+  {
+    id:'temple-of-mystery',
+    name:'Temple of Mystery',
+    costLabel:'-',
+    type:'land',
+    text:'This land enters tapped.\n'+
+    'When this land enters, scry 1. (Look at the top card of your library. You may put that card on the bottom.)\n'+
+    '{T}: Add {G} or {U}.\n' +
+    'Remiem Temple. Once a great religious center in the Calm Lands, lost after the battle with Sin.',
+    imagePath:'/assets/cards/temple-of-mystery.webp',
+    entersTapped: true,
+    onEnter: [{ type: 'surveil', count: 1 }],
+    producesMana: ['G', 'U'],
+  },
+  {
+    id:'temple-of-plenty',
+    name:'Temple of Plenty',
+    costLabel:'-',
+    type:'land',
+    text:'This land enters tapped.\n'+
+    'When this land enters, scry 1. (Look at the top card of your library. You may put that card on the bottom.)\n'+
+    '{T}: Add {G} or {W}.',
+    imagePath:'/assets/cards/temple-of-plenty.webp',
+    entersTapped: true,
+    onEnter: [{ type: 'surveil', count: 1 }],
+    producesMana: ['G', 'W'],
   },
   {
     id:'temple-of-the-false-god',
@@ -5014,6 +5410,20 @@ export const CARD_POOL: CardDefinition[] = [
     // via the existing pumpTarget effect.
   },
   {
+    id:'tireless-tracker',
+    name:'Tireless Tracker',
+    costLabel:'{2}{G}',
+    type:'creature',
+    subtype:'Creature Human Scout',
+    power: 3,
+    toughness: 2,
+    text:'Landfall — Whenever a land you control enters, investigate. (Create a Clue token. It\u2019s an artifact with “{2}, Sacrifice this token: Draw a card.”)'+
+    'Whenever you sacrifice a Clue, put a +1/+1 counter on this creature.',
+    imagePath:'/assets/cards/tireless-tracker.webp',
+    landfall: { createTokenId: 'token-clue' },
+    onControlledTokenSacrificed: { tokenId: 'token-clue', counterLabel: '+1/+1', counterAmount: 1 },
+  },
+  {
     id:'together-forever',
     name:'Together Forever',
     costLabel:'{W}{W}',
@@ -5127,6 +5537,28 @@ export const CARD_POOL: CardDefinition[] = [
     // mana-value comparison across the whole batch is well beyond the
     // established "play from exile" gap; no mechanism here handles even the
     // simpler single-player version of this.
+  },
+  {
+    id:'tromell-seymour-s-butler',
+    name:'Tromell, Seymour\u2019s Butler',
+    costLabel:'{2}{G}',
+    type:'creature',
+    subtype:'Legendary Creature Elf Advisor',
+    power: 2,
+    toughness: 3,
+    text:'Each other nontoken creature you control enters with an additional +1/+1 counter on it.\n'+
+    '{1}, {T}: Proliferate X times, where X is the number of nontoken creatures you control that entered this turn. (To proliferate, choose any number of permanents and/or players, then give each another counter of each kind already there.)',
+    imagePath:'/assets/cards/tromell-seymour-s-butler.webp',
+    grantsOtherNontokenCreaturesExtraCounterOnEnter: { counterLabel: '+1/+1', counterAmount: 1 },
+    abilities: [
+      {
+        id: 'tromell-proliferate',
+        label: 'Proliferate',
+        cost: { manaLabel: '{1}', tap: true },
+        effects: [{ type: 'repeatProliferateByNontokenCreaturesEnteredThisTurn' }],
+        effectText: 'Proliferate X times, where X is the number of nontoken creatures you control that entered this turn.',
+      },
+    ],
   },
   {
     id: 'ultima',
@@ -5916,6 +6348,24 @@ export const TOKEN_POOL: CardDefinition[] = [
         cost: { manaLabel: '{2}', tap: true, sacrificeSelf: true },
         effects: [{ type: 'gainLife', amount: 3 }],
         effectText: 'You gain 3 life.',
+      },
+    ],
+  },
+  {
+    id: 'token-clue',
+    name: 'Clue',
+    type: 'artifact',
+    subtype: 'Clue Token',
+    costLabel: '-',
+    text: '{2}, Sacrifice this token: Draw a card.',
+    imagePath: '/assets/cards/token-clue.webp',
+    abilities: [
+      {
+        id: 'token-clue-draw',
+        label: 'Draw',
+        cost: { manaLabel: '{2}', sacrificeSelf: true },
+        effects: [{ type: 'drawCards', amount: 1 }],
+        effectText: 'Draw a card.',
       },
     ],
   },
