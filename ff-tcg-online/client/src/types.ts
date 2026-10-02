@@ -57,7 +57,10 @@ export interface CardAbility {
      * first) rather than asked - same simplification
      * MoveCounterBetweenTargetCreaturesEffect already uses. See
      * engine/actions.ts: activateAbility. */
-    removeCounterFromAnotherPermanent?: 'nonland';
+    /** 'any' (Scholar of New Horizons' "a permanent you control", no nonland
+     * restriction stated) additionally allows a LAND to be chosen - checked
+     * in engine/actions.ts: activateAbility alongside the 'nonland' case. */
+    removeCounterFromAnotherPermanent?: 'nonland' | 'any';
   };
   /** "At the beginning of your end step, you may..." - since there's no
    * separate trigger/priority system, this just restricts activation to
@@ -707,6 +710,21 @@ export interface ReturnControlledLandToHandEffect {
 export interface RandomGraveyardCopyEffect {
   type: 'randomGraveyardCopy';
   repeatOnLand: boolean;
+}
+
+/** "Explore" (real MTG keyword action) - "Reveal the top card of your
+ * library. Put that card into your hand if it's a land. Otherwise, put a
+ * +1/+1 counter on [sourceInstanceId], then put the card back or put it into
+ * your graveyard." The land case is fully automatic (no choice); the nonland
+ * case always puts the counter immediately, then pauses on
+ * GameState.pendingExplore for the top-or-graveyard choice (RESOLVE_EXPLORE) -
+ * unlike SurveilEffect, there's no reordering or "any number" here, just one
+ * card and one binary choice, so this gets its own small pending state
+ * rather than overloading pendingSurveil's shape. The counter honors
+ * CardDefinition.increasesOwnCounterPlacementsByOne (Hardened Scales) and
+ * applyCounterPlacementSideEffects like every other counter-adding effect. */
+export interface ExploreEffect {
+  type: 'explore';
 }
 
 /**
@@ -2214,6 +2232,71 @@ export interface MoveCounterBetweenTargetCreaturesEffect {
   type: 'moveCounterBetweenTargetCreatures';
 }
 
+/** "Whenever a permanent you control leaves the battlefield, if it had
+ * counters on it, put those counters on target permanent you control."
+ * (Resourceful Defense) - scoped to permanents that go to the GRAVEYARD
+ * (destroy, sacrifice, lethal damage - the one real choke point this engine
+ * has for "a permanent left the battlefield", engine/effects.ts:
+ * resolveOnDeathTriggers), not every possible way to leave the battlefield
+ * (bounce to hand, exile) - a true "any removal from the battlefield, to any
+ * zone" watcher would need hooking into dozens of scattered call sites, far
+ * more than this one card's clause justifies. `counters` is a snapshot of
+ * the dying permanent's own counters taken the moment it died (copied
+ * wholesale, every label and amount, not just one type - unlike the
+ * auto-pick-highest-stack simplification MoveCounterBetweenTargetCreaturesEffect
+ * uses elsewhere, because here ALL the dying permanent's counters are meant
+ * to move together). Mandatory target - ANY permanent (not creature-only)
+ * the controller controls. */
+export interface MoveDeadPermanentCountersToTargetEffect {
+  type: 'moveDeadPermanentCountersToTarget';
+  counters: Counter[];
+}
+
+/** "{4}{W}: Move any number of counters from target permanent you control
+ * onto a second target permanent you control." (Resourceful Defense) -
+ * approximated as moving ALL of the first permanent's counters of
+ * whichever label has the highest count (same "distribute N things across
+ * picks" problem and the same auto-pick-highest-stack fallback
+ * MoveCounterBetweenTargetCreaturesEffect/MayMoveAllCountersToTargetCreatureEffect
+ * already use elsewhere), generalized to ANY PERMANENT TYPE for both picks
+ * (unlike MoveCounterBetweenTargetCreaturesEffect, which is creature-only) -
+ * see GameState.pendingTarget.firstInstanceId for the two-step pick. */
+export interface MoveAllCountersBetweenTargetPermanentsEffect {
+  type: 'moveAllCountersBetweenTargetPermanents';
+}
+
+/** "{1}, {T}: Move a counter from target permanent you control onto a
+ * second target permanent. Activate only as a sorcery." (Nesting Grounds) -
+ * unlike MoveCounterBetweenTargetCreaturesEffect (both picks "creature you
+ * control") or MoveAllCountersBetweenTargetPermanentsEffect (both picks
+ * "permanent you control", moves ALL), this moves exactly ONE counter, the
+ * FIRST pick must be a permanent the activating player controls, and the
+ * SECOND pick has NO ownership restriction at all (either player's
+ * permanent, any type). Same auto-pick-highest-count-counter-type
+ * simplification as its siblings for a source with more than one kind. */
+export interface MoveOneCounterFromOwnPermanentToAnyPermanentEffect {
+  type: 'moveOneCounterFromOwnPermanentToAnyPermanent';
+}
+
+/** "{T}: Add one mana of any color in your commander's color identity. When
+ * THAT MANA is spent to cast a creature spell that shares a creature type
+ * with your commander, scry 1." (Path of Ancestry) - this engine's mana pool
+ * has no provenance tracking at all (nothing remembers which tap produced
+ * which mana once it's pooled), so "when THAT mana is spent" is approximated
+ * as "when the very next spell this controller casts is paid for" (see
+ * GameState.pendingManaIdentitySourceScry, set by this effect via
+ * CardDefinition.onTapForManaEffects, consumed in engine/actions.ts:
+ * castCard the same way pendingNextCreatureSpellBonus is). This can
+ * misfire if the player taps this land but then spends OTHER mana first and
+ * holds this mana for a later spell, or pays for something else entirely
+ * with pooled mana that happens to include this - a real, acknowledged gap
+ * from the lack of true provenance tracking, not worth a mana-pool rewrite
+ * for one card's clause. "Scry" has no separate implementation in this
+ * engine (see onOwnSurveilDraw's own doc comment) - resolved as Surveil 1. */
+export interface ArmManaIdentitySourceScryEffect {
+  type: 'armManaIdentitySourceScry';
+}
+
 /** "At the beginning of your upkeep, you may move any number of
  * [counterLabel] counters from this creature onto OTHER creatures."
  * (Forgotten Ancient) - approximated as moving ALL of this creature's
@@ -2244,6 +2327,104 @@ export interface MayMoveAllCountersToTargetCreatureEffect {
 export interface GrantPreventCombatDamageConvertToCounterToTargetOwnCreatureEffect {
   type: 'grantPreventCombatDamageConvertToCounterToTargetOwnCreature';
   counterLabel: string;
+}
+
+/** "Adapt N" (Incubation Druid's "Adapt 3") - a real MTG keyword action: "If
+ * this creature has no [counterLabel] counters on it, put N of them on it."
+ * A no-op (nothing happens, not even a failed action) if it already has one
+ * or more - unlike every other counter-adding effect here, this one can
+ * legitimately do nothing and that's correct, expected behavior. */
+export interface AdaptEffect {
+  type: 'adapt';
+  counterLabel: string;
+  amount: number;
+}
+
+/** "When this creature dies, search your library for up to X basic land
+ * cards, where X is this creature's power, put them onto the battlefield,
+ * then shuffle." (Rampant Rejuvenator) - X is read from the dying instance's
+ * own last-known power (printed power + counters, same approximation
+ * resolveOnDeathTriggers' temporaryOnDeathPutCountersEqualToPower already
+ * uses - equip/anthem bonuses that applied while alive aren't recoverable).
+ * Resolved as a chain of GameState.pendingLibrarySearch picks (remainingPicks
+ * = X - 1) with allowDuplicateNames set, so unlike Reach the Horizon's
+ * "search for up to N with different names" (the only other multi-pick
+ * precedent), this CAN find the same basic land name more than once, matching
+ * the printed card (no "different names" clause stated). Any future "search
+ * for up to N [repeatable type]" card without a stated different-names
+ * restriction should reuse allowDuplicateNames the same way, rather than a
+ * new pending-state shape. */
+export interface SearchLibraryForUpToXBasicLandsEqualToPowerEffect {
+  type: 'searchLibraryForUpToXBasicLandsEqualToPower';
+}
+
+/** "Steal — {1}, {T}: Move a counter from target creature an opponent
+ * controls onto target creature you control." (Rikku, Resourceful Guardian) -
+ * the cross-player mirror of MoveCounterBetweenTargetCreaturesEffect (which
+ * requires BOTH picks to be the controller's own creatures): the FIRST pick
+ * must be a creature an OPPONENT controls with at least one counter, the
+ * SECOND must be a creature the activating player controls. Same
+ * auto-pick-highest-count-counter-type simplification as
+ * MoveCounterBetweenTargetCreaturesEffect for a source with more than one
+ * counter kind. See GameState.pendingTarget.firstInstanceId for the two-step
+ * pick. */
+export interface MoveCounterFromOpponentCreatureToOwnCreatureEffect {
+  type: 'moveCounterFromOpponentCreatureToOwnCreature';
+}
+
+/** "Search your library for a [landName] card and reveal it. If an opponent
+ * controls more lands than you, you may put that card onto the battlefield
+ * tapped. If you don't, put it into your hand. Then shuffle." (Scholar of
+ * New Horizons) - the "if [condition]" gate is checked ONCE, before the
+ * search even begins (an opponent controlling more lands than the activating
+ * player at that moment); if true, GameState.pendingLibrarySearch.
+ * mayChooseBattlefieldTapped is set, so the controller genuinely chooses the
+ * destination (battlefield tapped, or hand) at RESOLVE_LIBRARY_SEARCH time -
+ * if false, the search behaves exactly like a plain SearchLibraryForLandEffect
+ * (straight to hand, no choice offered), matching the printed card's "if you
+ * don't [put it onto the battlefield]" fallback. This is the GENERAL shape
+ * for "search always finds something, then you may put it onto the
+ * battlefield instead of hand" - any future card with that shape should set
+ * mayChooseBattlefieldTapped from its own gating condition the same way,
+ * rather than adding a new effect type. */
+export interface SearchLibraryForLandConditionalBattlefieldIfOpponentHasMoreLandsEffect {
+  type: 'searchLibraryForLandConditionalBattlefieldIfOpponentHasMoreLands';
+  landName: string;
+}
+
+/** Plays whatever card is sitting in CardInstance.hideawayExiledCardId on
+ * `sourceInstanceId` (a HideawayEffect's "exiled card") without paying its
+ * mana cost - the exact same resolution CardDefinition.playHideawayCard's
+ * activated-ability path already used (Clive's Hideaway), now factored out
+ * into a reusable CardEffect so any OTHER trigger shape (not just a paid
+ * activated ability) can offer "play the exiled card" too - e.g. wrapped in
+ * a MayEffectEffect for Fight Rigging's "you may play the exiled card"
+ * combat trigger (see PutCounterOnTargetOwnCreatureThenMayPlayHideawayIfCreaturePowerAtLeastEffect
+ * below). A no-op (with a log line, not an error) if nothing was ever hidden
+ * away, or it's already been played. See engine/effects.ts:
+ * resolveCardEffects's own resolution for the full mechanics (legend rule,
+ * Saga/artifact/noncreature-cast triggers on the newly-played card). */
+export interface PlayHideawayCardEffect {
+  type: 'playHideawayCard';
+}
+
+/** "At the beginning of combat on your turn, put a +1/+1 counter on target
+ * creature you control. Then if you control a creature with power 7 or
+ * greater, you may play the exiled card without paying its mana cost."
+ * (Fight Rigging) - a mandatory single target (arms GameState.pendingTarget,
+ * same "mandatory, own creature" shape as GrantTemporaryBaseStatsAndDeathReturnEffect;
+ * a no-op with no legal target - zero creatures controlled - skips the
+ * "then" check entirely too, matching how a real illegal-target trigger
+ * never resolves at all). The power check happens AFTER the counter is
+ * placed (so the just-countered creature's own new power counts), and on a
+ * hit arms a genuine "you may" via the existing GameState.pendingMayEffect
+ * wrapping a single PlayHideawayCardEffect - no new pending-state needed.
+ * See engine/actions.ts: chooseTarget's own resolution. */
+export interface PutCounterOnTargetOwnCreatureThenMayPlayHideawayIfCreaturePowerAtLeastEffect {
+  type: 'putCounterOnTargetOwnCreatureThenMayPlayHideawayIfCreaturePowerAtLeast';
+  counterLabel: string;
+  counterAmount: number;
+  minPower: number;
 }
 
 /** "[This] deals N damage to each creature" (Fire Magic) - unlike
@@ -2523,7 +2704,18 @@ export type CardEffect =
   | ExileTargetCreatureThenControllerMaySearchBasicLandEffect
   | PutTargetNonlandPermanentInLibraryOwnersChoiceEffect
   | MayMoveAllCountersToTargetCreatureEffect
-  | GrantPreventCombatDamageConvertToCounterToTargetOwnCreatureEffect;
+  | GrantPreventCombatDamageConvertToCounterToTargetOwnCreatureEffect
+  | AdaptEffect
+  | SearchLibraryForUpToXBasicLandsEqualToPowerEffect
+  | MoveCounterFromOpponentCreatureToOwnCreatureEffect
+  | SearchLibraryForLandConditionalBattlefieldIfOpponentHasMoreLandsEffect
+  | PlayHideawayCardEffect
+  | PutCounterOnTargetOwnCreatureThenMayPlayHideawayIfCreaturePowerAtLeastEffect
+  | ExploreEffect
+  | MoveDeadPermanentCountersToTargetEffect
+  | MoveAllCountersBetweenTargetPermanentsEffect
+  | MoveOneCounterFromOwnPermanentToAnyPermanentEffect
+  | ArmManaIdentitySourceScryEffect;
 
 /** One mode of a "Choose one or more —" modal spell (e.g. Clash of the
  * Eikons) - the caster picks any NONEMPTY subset of modes at cast time (see
@@ -2797,7 +2989,12 @@ export interface CardDefinition {
    * plain colorless if the opponent controls no mana-producing land, or
    * only colorless-producing ones. In a 2-player engine "an opponent" is
    * always just the one opponent. */
-  producesMana?: ManaColor | 'any' | ManaColor[] | 'commanderColorIdentity' | 'opponentLandColors';
+  /** 'ownLandColors' (Incubation Druid's "Add one mana of any type that a
+   * land you control could produce") - the controller's-own-lands mirror of
+   * 'opponentLandColors' below, resolved the exact same way in
+   * engine/actions.ts: toggleTap (via the ownLandColors helper), just reading
+   * the controller's own battlefield instead of their opponent's. */
+  producesMana?: ManaColor | 'any' | ManaColor[] | 'commanderColorIdentity' | 'opponentLandColors' | 'ownLandColors';
   /** "Pain land" - a SECOND, alternate tap-for-mana mode alongside the plain
    * producesMana above (Brushland: "{T}: Add {C}." / "{T}: Add {G} or {W}.
    * This land deals 1 damage to you.") - engaged in engine/actions.ts:
@@ -2817,6 +3014,14 @@ export interface CardDefinition {
    * the specific CardInstance's own counters instead of a fixed printed
    * number, for cards whose mana output scales with their own counters. */
   producesManaAmountEqualToOwnCounterLabel?: string;
+  /** "Add one mana... If this creature has a [counterLabel] counter on it,
+   * add three mana of that type instead" (Incubation Druid) - unlike
+   * producesManaAmountEqualToOwnCounterLabel (output scales 1:1 with a
+   * counter count), this is a flat ALL-OR-NOTHING override: the instance
+   * either has at least one of counterLabel (amount applies) or it doesn't
+   * (plain default of 1 applies). Checked in engine/actions.ts:
+   * effectiveProducedManaAmount. */
+  producesManaAmountIfOwnCounter?: { counterLabel: string; amount: number };
   /** "Activate only if you control five or more lands" (Temple of the False
    * God) - gates producesMana entirely (the tap is simply illegal below this
    * land count), checked in engine/actions.ts: toggleTap. */
@@ -3561,6 +3766,56 @@ export interface CardDefinition {
    * draws once here regardless of amount. "Don't control" is approximated
    * as "doesn't own". */
   onOwnCounterPlacedOnOpponentCreatureTrigger?: CardEffect[];
+  /** "Whenever you put one or more counters on a creature, until end of
+   * turn, that creature can't be blocked by creatures your opponents
+   * control." (Rikku, Resourceful Guardian) - checked by engine/effects.ts:
+   * applyCounterPlacementSideEffects, same deliberately-incomplete call-site
+   * coverage as onOwnCounterAddedTrigger/onOwnCounterPlacedOnOpponentCreatureTrigger
+   * above. Unlike those two (which run a CardEffect[] against the WATCHER),
+   * this grants the named keyword straight to the RECIPIENT (via
+   * engine/effects.ts: grantTemporaryKeyword), whoever controls it - the
+   * printed text states no ownership restriction on "a creature". */
+  onOwnCounterPlacementGrantsRecipientKeyword?: string;
+  /** "If one or more [counterLabel] counters would be put on a creature you
+   * control, that many plus one [counterLabel] counters are put on it
+   * instead." (Hardened Scales) - a REPLACEMENT effect on the AMOUNT, not a
+   * trigger - see engine/effects.ts: hardenedScalesAdjustedAmount for the
+   * actual resolution and its own doc comment for scope/coverage caveats. */
+  increasesOwnCounterPlacementsByOne?: string;
+  /** "Whenever another creature you control enters, put a [counterLabel]
+   * counter on that creature if its power is less than this creature's
+   * power. Otherwise, put a [counterLabel] counter on this creature."
+   * (Shelinda Yevon, Acolyte) - checked directly in engine/effects.ts:
+   * triggerCreatureEnterWatchers (same hook as evolve/
+   * onAnyOtherControlledCreatureEnterTrigger), comparing the entering
+   * creature's effectivePower against this permanent's own at the moment
+   * just before either counter is added. */
+  onAnyOtherControlledCreatureEnterComparePowerPutCounter?: { counterLabel: string };
+  /** "Whenever a creature you control enters, [effects]." (Path of
+   * Discovery's "it explores") - unlike onAnyOtherControlledCreatureEnterTrigger
+   * (which always runs effects against the WATCHER as source), these effects
+   * run with the JUST-ENTERED creature itself as source, matching "it" in
+   * the printed text. Checked in engine/effects.ts:
+   * triggerCreatureEnterWatchers, same loop (and same self-skip) as evolve/
+   * onAnyOtherControlledCreatureEnterComparePowerPutCounter above. */
+  onAnyControlledCreatureEnterEffects?: CardEffect[];
+  /** "Whenever you cast a spell, [effects]." (Inexorable Tide's
+   * "proliferate") - unlike onAnyPlayerCastsSpellTrigger (either player) or
+   * onOpponentCastsSpell (opponent only, fixed shape), this is the
+   * self-only, generic-CardEffect[] shape. See engine/effects.ts:
+   * triggerAnyPlayerCastSpellWatchers, which checks this alongside
+   * onAnyPlayerCastsSpellTrigger in the same traversal. */
+  onOwnCastAnySpellTrigger?: CardEffect[];
+  /** "Whenever a permanent you control leaves the battlefield, if it had
+   * counters on it, put those counters on target permanent you control."
+   * (Resourceful Defense) - see MoveDeadPermanentCountersToTargetEffect's own
+   * doc comment for the real scope (graveyard-bound deaths only). Checked in
+   * engine/effects.ts: resolveOnDeathTriggers against every OTHER permanent
+   * the dying card's OWNER controls (not the dying card's own def.onDeath -
+   * this is a generic watcher on a SEPARATE permanent, same shape as
+   * onOwnCounterPlacementGrantsRecipientKeyword's "watch something happen to
+   * ANY of my other permanents" pattern). */
+  onOwnPermanentDiesMoveCountersToTarget?: boolean;
   /** "Whenever a player casts a spell, [effect]." (Forgotten Ancient) -
    * unlike CardDefinition.onOpponentCastsSpell (opponent only, fixed
    * counter/life-gain shape) or onOpponentGainsControlFromYouTrigger-style
@@ -4015,7 +4270,12 @@ export interface GameState {
       | ExileTargetCreatureThenControllerMaySearchBasicLandEffect
       | PutTargetNonlandPermanentInLibraryOwnersChoiceEffect
       | MayMoveAllCountersToTargetCreatureEffect
-      | GrantPreventCombatDamageConvertToCounterToTargetOwnCreatureEffect;
+      | GrantPreventCombatDamageConvertToCounterToTargetOwnCreatureEffect
+      | MoveCounterFromOpponentCreatureToOwnCreatureEffect
+      | PutCounterOnTargetOwnCreatureThenMayPlayHideawayIfCreaturePowerAtLeastEffect
+      | MoveDeadPermanentCountersToTargetEffect
+      | MoveAllCountersBetweenTargetPermanentsEffect
+      | MoveOneCounterFromOwnPermanentToAnyPermanentEffect;
     /** Only used by ChooseCreaturesFightEffect/ChooseCreatureDealsDamageToOpponentCreatureEffect:
      * the first (controller's own) creature already chosen, waiting on the
      * second (opponent's) pick. */
@@ -4067,6 +4327,12 @@ export interface GameState {
    * `cards` are the surveiled cards, already removed from the library (so
    * they don't show up there in the meantime) but not yet anywhere else. */
   pendingSurveil: { sourceInstanceId: string; controllerId: string; cards: CardInstance[]; thenDrawCount?: number } | null;
+  /** Set while an ExploreEffect's "put the card back or put it into your
+   * graveyard" choice is outstanding - the land auto-to-hand case and the
+   * counter placement both already happened before this is ever set (see
+   * ExploreEffect's own doc comment); `revealedCard` is the one card, already
+   * removed from the library. Cleared by RESOLVE_EXPLORE. */
+  pendingExplore: { sourceInstanceId: string; controllerId: string; revealedCard: CardInstance } | null;
   /** FIFO queue of player ids owed an extra turn (e.g. Ultimecia, Omnipotent's
    * Time Compression) - see engine/actions.ts: endTurn, which pops the front
    * entry and gives that player the next turn instead of the usual opponent. */
@@ -4290,6 +4556,15 @@ export interface GameState {
    * Magic would stack multiple delayed triggers as separate, independent
    * ones - an acceptable simplification since no current card creates two. */
   pendingNextCreatureSpellBonus: { controllerId: string; counterLabel?: string; counterAmount?: number; grantsHaste?: boolean } | null;
+  /** Set by ArmManaIdentitySourceScryEffect (Path of Ancestry's tap-for-mana
+   * trigger) - consumed by `controllerId`'s very next spell cast in
+   * engine/actions.ts: castCard, the same "very next cast" approximation
+   * pendingNextCreatureSpellBonus uses, see ArmManaIdentitySourceScryEffect's
+   * own doc comment for why this can't be true mana-provenance tracking.
+   * Cleared on ANY next cast (not just a qualifying creature spell) - unlike
+   * pendingNextCreatureSpellBonus, which waits for a qualifying one - since
+   * "that mana" is spent (on whatever was cast) either way. */
+  pendingManaIdentitySourceScry: { controllerId: string } | null;
   /** Set while a SearchLibraryFor*Effect (or CyclingAbility.searchLandName's
    * land-search half) is waiting on the controller to browse their library
    * and pick a match, or decline and find nothing - cleared by
@@ -4321,8 +4596,40 @@ export interface GameState {
      * every ordinary single-pick search. */
     remainingPicks?: number;
     /** Names already picked earlier in the same multi-pick chain - excluded
-     * from matching on every subsequent pick ("with different names"). */
+     * from matching on every subsequent pick ("with different names"). Never
+     * populated at all when allowDuplicateNames is set (see below), so the
+     * "already found a card with that name" rejection in
+     * engine/actions.ts: resolveLibrarySearch never triggers for those
+     * searches. */
     excludeNames?: string[];
+    /** "Search for up to N basic land cards... put them onto the
+     * battlefield" (Rampant Rejuvenator) - unlike Reach the Horizon's
+     * "different names" (the ONLY multi-pick precedent before this), a plain
+     * "up to N" search with no "different names" clause stated must allow
+     * repeats (two Plains is perfectly legal). Set by whichever effect
+     * resolver arms a multi-pick search that doesn't want the default
+     * different-names restriction - see engine/effects.ts:
+     * searchLibraryForUpToXBasicLandsEqualToPower's resolution for the
+     * current example, and reuse this same flag for any future "search for
+     * up to N [[basic land/other repeatable type]]" card rather than adding
+     * a parallel pending-state shape. */
+    allowDuplicateNames?: boolean;
+    /** "If an opponent controls more lands than you, you may put that card
+     * onto the battlefield tapped. If you don't, put it into your hand."
+     * (Scholar of New Horizons) - the GENERAL "this search always finds
+     * something, then the controller may choose to put it onto the
+     * battlefield instead of its default destination" shape: when set, the
+     * controller supplies RESOLVE_LIBRARY_SEARCH's own toBattlefieldTapped
+     * at pick time instead of this object's own (fixed)
+     * toBattlefieldTapped/toBattlefieldUntapped applying. The printed
+     * card's "if [condition]" gate is evaluated ONCE, before the search
+     * even begins (see engine/effects.ts:
+     * searchLibraryForLandConditionalBattlefieldIfOpponentHasMoreLands's
+     * resolution) - this flag is only ever true/false for the WHOLE search,
+     * never re-evaluated per pick. Reusable as-is for any future "search for
+     * [X], then you may put it onto the battlefield instead" card, whatever
+     * that card's own gating condition turns out to be. */
+    mayChooseBattlefieldTapped?: boolean;
   } | null;
   /** Set once, right when a card is revealed to the opponent (currently only
    * via a pendingLibrarySearch pick) - purely a "show a passing notification
@@ -4462,6 +4769,7 @@ export type GameAction =
   | { type: 'CHOOSE_SACRIFICE'; instanceId: string }
   | { type: 'CHOOSE_KEEP_ONE_SACRIFICE_REST'; instanceId: string }
   | { type: 'RESOLVE_SURVEIL'; graveyardIds: string[]; keepOrder: string[] }
+  | { type: 'RESOLVE_EXPLORE'; toGraveyard: boolean }
   | { type: 'RETURN_FROM_GRAVEYARD'; instanceId: string }
   | { type: 'DISCARD_CARD'; instanceId: string }
   | { type: 'RESOLVE_OPTIONAL_BOUNCE'; instanceId: string | null }
@@ -4491,7 +4799,18 @@ export type GameAction =
   | { type: 'RESOLVE_PUT_CREATURE_OR_LAND_FROM_HAND'; instanceId: string | null }
   | { type: 'RESOLVE_REVEAL_LAND_TYPE_FROM_HAND'; instanceId: string | null }
   | { type: 'RESOLVE_FREE_CAST_FROM_HAND'; instanceId: string | null }
-  | { type: 'RESOLVE_LIBRARY_SEARCH'; instanceId: string | null }
+  | {
+      type: 'RESOLVE_LIBRARY_SEARCH';
+      instanceId: string | null;
+      /** Only consulted when GameState.pendingLibrarySearch.
+       * mayChooseBattlefieldTapped is set (Scholar of New Horizons' "you may
+       * put that card onto the battlefield tapped") - the controller's own
+       * choice of destination for THIS pick, made at the same time as the
+       * card pick itself. Ignored (and the pending search's own fixed
+       * toBattlefieldTapped/toBattlefieldUntapped applies as normal) for
+       * every ordinary search that doesn't offer this choice. */
+      toBattlefieldTapped?: boolean;
+    }
   | { type: 'RESOLVE_GRAVEYARD_EXILE'; instanceId: string | null }
   | { type: 'DISCARD_UP_TO_THEN_DRAW'; instanceId: string | null }
   | { type: 'RESOLVE_REVEAL_PICKUP' }

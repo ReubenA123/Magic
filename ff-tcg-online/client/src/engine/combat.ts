@@ -439,6 +439,9 @@ export function isLegalPendingTarget(state: GameState, pendingTarget: NonNullabl
   if (effect.type === 'grantPreventCombatDamageConvertToCounterToTargetOwnCreature') {
     return def.type === 'creature' && ownerId === pendingTarget.controllerId;
   }
+  if (effect.type === 'putCounterOnTargetOwnCreatureThenMayPlayHideawayIfCreaturePowerAtLeast') {
+    return def.type === 'creature' && ownerId === pendingTarget.controllerId;
+  }
   if (effect.type === 'mayMoveAllCountersToTargetCreature') {
     return def.type === 'creature' && card.instanceId !== pendingTarget.sourceInstanceId;
   }
@@ -574,6 +577,23 @@ export function isLegalPendingTarget(state: GameState, pendingTarget: NonNullabl
   if (effect.type === 'moveCounterBetweenTargetCreatures') {
     if (def.type !== 'creature' || ownerId !== pendingTarget.controllerId) return false;
     if (!pendingTarget.firstInstanceId) return card.counters.length > 0;
+    return card.instanceId !== pendingTarget.firstInstanceId;
+  }
+  if (effect.type === 'moveCounterFromOpponentCreatureToOwnCreature') {
+    if (def.type !== 'creature') return false;
+    if (!pendingTarget.firstInstanceId) return ownerId !== pendingTarget.controllerId && card.counters.length > 0;
+    return ownerId === pendingTarget.controllerId;
+  }
+  if (effect.type === 'moveAllCountersBetweenTargetPermanents') {
+    if (ownerId !== pendingTarget.controllerId) return false;
+    if (!pendingTarget.firstInstanceId) return card.counters.length > 0;
+    return card.instanceId !== pendingTarget.firstInstanceId;
+  }
+  if (effect.type === 'moveDeadPermanentCountersToTarget') {
+    return ownerId === pendingTarget.controllerId;
+  }
+  if (effect.type === 'moveOneCounterFromOwnPermanentToAnyPermanent') {
+    if (!pendingTarget.firstInstanceId) return ownerId === pendingTarget.controllerId && card.counters.length > 0;
     return card.instanceId !== pendingTarget.firstInstanceId;
   }
   if (effect.type === 'support') {

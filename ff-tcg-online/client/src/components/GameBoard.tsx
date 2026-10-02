@@ -4,7 +4,7 @@ import { getCardDefinition } from '../data/cards';
 import { parseCostLabel, canPay, effectiveCastCost, dynamicCostReduction, manaValue } from '../engine/mana';
 import { CombatKeyword, hasKeyword, hasKeywordEffective } from '../engine/keywords';
 import { effectivePower, effectiveToughness, equipmentContributions, hasBoardGrantedKeyword, isLegalPendingTarget as isLegalPendingTargetShared } from '../engine/combat';
-import { matchesLibrarySearchFilter } from '../engine/effects';
+import { matchesLibrarySearchFilter, matchesReanimateFilter } from '../engine/effects';
 import Card from './Card';
 import PhaseBar from './PhaseBar';
 import CardActionsPanel from './CardActionsPanel';
@@ -1221,7 +1221,24 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
         if (d.type !== 'land') continue;
         if (d.producesMana === 'any') ALL_MANA_COLORS.forEach((x) => colors.add(x));
         else if (Array.isArray(d.producesMana)) d.producesMana.forEach((x) => colors.add(x));
-        else if (d.producesMana && d.producesMana !== 'commanderColorIdentity' && d.producesMana !== 'opponentLandColors') colors.add(d.producesMana);
+        else if (d.producesMana && d.producesMana !== 'commanderColorIdentity' && d.producesMana !== 'opponentLandColors' && d.producesMana !== 'ownLandColors') colors.add(d.producesMana);
+        if (d.altProducesMana) d.altProducesMana.colors.forEach((x) => colors.add(x));
+      }
+      colors.delete('C');
+      const union = [...colors];
+      producesMana = union.length > 1 ? union : union.length === 1 ? union[0] : 'C';
+    }
+    if (producesMana === 'ownLandColors') {
+      // Mirrors engine/actions.ts: toggleTap's own ownLandColors resolution -
+      // the controller's-own-lands mirror of opponentLandColors above.
+      const owner = state.players.find((p) => p.id === instance.ownerId);
+      const colors = new Set<ManaColor>();
+      for (const c of owner?.zones.battlefield ?? []) {
+        const d = getCardDefinition(c.defId);
+        if (d.type !== 'land') continue;
+        if (d.producesMana === 'any') ALL_MANA_COLORS.forEach((x) => colors.add(x));
+        else if (Array.isArray(d.producesMana)) d.producesMana.forEach((x) => colors.add(x));
+        else if (d.producesMana && d.producesMana !== 'commanderColorIdentity' && d.producesMana !== 'opponentLandColors' && d.producesMana !== 'ownLandColors') colors.add(d.producesMana);
         if (d.altProducesMana) d.altProducesMana.colors.forEach((x) => colors.add(x));
       }
       colors.delete('C');
@@ -2903,6 +2920,10 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                                   ? pendingTargetForYou.firstInstanceId
                                     ? `Choose a second creature you control for ${pendingTargetSourceName}'s ability to move the counter onto.`
                                     : `Choose a creature you control with a counter on it for ${pendingTargetSourceName}'s ability to move a counter from.`
+                                  : effect.type === 'moveCounterFromOpponentCreatureToOwnCreature'
+                                  ? pendingTargetForYou.firstInstanceId
+                                    ? `Choose a creature you control for ${pendingTargetSourceName}'s ability to move the counter onto.`
+                                    : `Choose a creature an opponent controls with a counter on it for ${pendingTargetSourceName}'s ability to move a counter from.`
                                   : effect.type === 'damageAnyTarget'
                                   ? `Choose any target (a creature or a player) for ${pendingTargetSourceName} to deal ${effect.amount} damage to.`
                                   : effect.type === 'support'
@@ -2923,6 +2944,18 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                                   ? `Choose a creature you control for ${pendingTargetSourceName}'s ability.`
                                   : effect.type === 'mayMoveAllCountersToTargetCreature'
                                   ? `Choose another creature for ${pendingTargetSourceName}'s ability to move its counters onto - or Skip.`
+                                  : effect.type === 'putCounterOnTargetOwnCreatureThenMayPlayHideawayIfCreaturePowerAtLeast'
+                                  ? `Choose a creature you control for ${pendingTargetSourceName}'s ability.`
+                                  : effect.type === 'moveDeadPermanentCountersToTarget'
+                                  ? `Choose a permanent you control for ${pendingTargetSourceName}'s ability to receive the counters.`
+                                  : effect.type === 'moveAllCountersBetweenTargetPermanents'
+                                  ? pendingTargetForYou.firstInstanceId
+                                    ? `Choose a second permanent you control for ${pendingTargetSourceName}'s ability to move the counters onto.`
+                                    : `Choose a permanent you control with a counter on it for ${pendingTargetSourceName}'s ability to move counters from.`
+                                  : effect.type === 'moveOneCounterFromOwnPermanentToAnyPermanent'
+                                  ? pendingTargetForYou.firstInstanceId
+                                    ? `Choose a second permanent (either player's) for ${pendingTargetSourceName}'s ability to move the counter onto.`
+                                    : `Choose a permanent you control with a counter on it for ${pendingTargetSourceName}'s ability to move a counter from.`
                                   : effect.targetFilter === 'artifactOrEnchantment'
                                   ? `Choose an artifact or enchantment for ${pendingTargetSourceName}'s ability (either player's).`
                                   : effect.targetFilter === 'enchantment'
@@ -3239,12 +3272,20 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           const sourceName = sourceFound ? getCardDefinition(sourceFound.card.defId).name : 'This ability';
           const eligible = state.players
             .flatMap((p) => p.zones.graveyard)
-            .filter((c) => !pending.creatureOnly || getCardDefinition(c.defId).type === 'creature');
+            .filter((c) => {
+              const d = getCardDefinition(c.defId);
+              return (!pending.creatureOnly || d.type === 'creature') && (!pending.instantOrSorceryOnly || d.type === 'instant' || d.type === 'sorcery');
+            });
+          const exileDescription = pending.creatureOnly
+            ? "Choose a creature card in either graveyard to exile, or Skip."
+            : pending.instantOrSorceryOnly
+              ? 'Choose an instant or sorcery card in either graveyard to exile, or Skip.'
+              : "Choose a card in either graveyard to exile.";
           return (
             <ReturnFromGraveyardModal
               sourceName={sourceName}
               title="Exile a card"
-              description={pending.creatureOnly ? "Choose a creature card in either graveyard to exile, or Skip." : "Choose a card in either graveyard to exile."}
+              description={exileDescription}
               cards={eligible.map((c) => ({ definition: getCardDefinition(c.defId), instance: c }))}
               onChoose={(instanceId) => onAction({ type: 'RESOLVE_GRAVEYARD_EXILE', instanceId }, pending.controllerId)}
               onCancel={pending.optional ? () => onAction({ type: 'RESOLVE_GRAVEYARD_EXILE', instanceId: null }, pending.controllerId) : undefined}
@@ -3729,6 +3770,40 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           );
         })()}
 
+      {state.pendingExplore &&
+        (state.pendingExplore.controllerId === yourPlayerId || soloControl) &&
+        (() => {
+          const pending = state.pendingExplore;
+          const sourceFound = findCard(state, pending.sourceInstanceId);
+          const sourceName = sourceFound ? getCardDefinition(sourceFound.card.defId).name : 'This creature';
+          const revealedDef = getCardDefinition(pending.revealedCard.defId);
+          return (
+            <div className="card-actions-overlay">
+              <div className="zone-modal">
+                <div className="card-actions-header">
+                  <strong>{sourceName} explores</strong>
+                </div>
+                <p className="card-actions-text">Put {revealedDef.name} back on top of your library, or into your graveyard?</p>
+                <div className="zone-modal-grid">
+                  <Card definition={revealedDef} instance={pending.revealedCard} onClick={() => undefined} />
+                </div>
+                <button
+                  className="opponent-view-exit-button"
+                  onClick={() => onAction({ type: 'RESOLVE_EXPLORE', toGraveyard: false }, pending.controllerId)}
+                >
+                  Keep on top
+                </button>
+                <button
+                  className="opponent-view-exit-button"
+                  onClick={() => onAction({ type: 'RESOLVE_EXPLORE', toGraveyard: true }, pending.controllerId)}
+                >
+                  Put into graveyard
+                </button>
+              </div>
+            </div>
+          );
+        })()}
+
       {state.pendingReturnFromGraveyard &&
         (() => {
           const pending = state.pendingReturnFromGraveyard;
@@ -3754,14 +3829,20 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           const sourceFound = findCard(state, pending.sourceInstanceId);
           const sourceName = sourceFound ? getCardDefinition(sourceFound.card.defId).name : 'This ability';
           const controller = state.players.find((p) => p.id === pending.controllerId)!;
-          const eligible = controller.zones.graveyard.filter((c) => getCardDefinition(c.defId).type === 'creature');
+          const eligible = controller.zones.graveyard.filter((c) => matchesReanimateFilter(getCardDefinition(c.defId), pending.effect));
+          const title = pending.effect.anyPermanentInsteadOfCreature || pending.effect.nonlegendaryPermanentInsteadOfCreature ? 'Return a permanent' : 'Return a creature';
+          const description =
+            pending.effect.anyPermanentInsteadOfCreature || pending.effect.nonlegendaryPermanentInsteadOfCreature
+              ? 'Choose a permanent card from your graveyard to return to the battlefield.'
+              : 'Choose a creature card from your graveyard to return to the battlefield.';
           return (
             <ReturnFromGraveyardModal
               sourceName={sourceName}
-              title="Return a creature"
-              description="Choose a creature card from your graveyard to return to the battlefield."
+              title={title}
+              description={description}
               cards={eligible.map((c) => ({ definition: getCardDefinition(c.defId), instance: c }))}
               onChoose={(instanceId) => onAction({ type: 'RESOLVE_REANIMATE', instanceId }, pending.controllerId)}
+              onCancel={pending.effect.optional ? () => onAction({ type: 'RESOLVE_REANIMATE', instanceId: null }, pending.controllerId) : undefined}
             />
           );
         })()}
@@ -3867,6 +3948,8 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
               cards={eligible.map((c) => ({ definition: getCardDefinition(c.defId), instance: c }))}
               onChoose={(instanceId) => onAction({ type: 'RESOLVE_LIBRARY_SEARCH', instanceId }, pending.controllerId)}
               onFindNothing={() => onAction({ type: 'RESOLVE_LIBRARY_SEARCH', instanceId: null }, pending.controllerId)}
+              mayChooseBattlefieldTapped={pending.mayChooseBattlefieldTapped}
+              onChooseDestination={(instanceId, toBattlefieldTapped) => onAction({ type: 'RESOLVE_LIBRARY_SEARCH', instanceId, toBattlefieldTapped }, pending.controllerId)}
             />
           );
         })()}

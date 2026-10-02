@@ -1,27 +1,7 @@
-# Three more Commander decks — cards still needed in cards.ts
-
-Three more real Commander decklists pasted in by the user (not fabricated) —
-same convention as `counter-blitz-missing-cards.md`: listed here for real
-stats/costs/text to be supplied later rather than guessed, then added as
-`CardDefinition` entries in `server/src/data/cards.ts` (mirrored to
-`client/src/data/cards.ts`). Unlike that file, no cost labels are included
-below — the pasted lists only had card names and market prices (ignored),
-not mana costs.
-
-Already in the pool across all three decks (no action needed): the five
-basics (**Forest**, **Island**, **Plains**, **Mountain**, **Swamp**), plus
-whatever else each deck's own list below already excludes.
-
-## Terra, Herald of Hope
-
-### Commander (1)
-
-- Terra, Herald of Hope
-
 ### Creature (35)
 
 - Stitcher's Supplier
-- Banon, the Returners' Leader
+
 - Gau, Feral Youth
 - Millikin
 - Priest of Fell Rites
@@ -32,7 +12,7 @@ whatever else each deck's own list below already excludes.
 - Shadow, Mysterious Assassin
 - Strago and Relm
 - The Warring Triad
-- Anger
+
 - Celes, Rune Knight
 - Edgar, Master Machinist
 - Gogo, Mysterious Mime
@@ -41,15 +21,15 @@ whatever else each deck's own list below already excludes.
 - Pitiless Plunderer
 - Siegfried, Famed Swordsman
 - Solemn Simulacrum
-- Summon: Esper Valigarmanda
+
 - Archfiend of Depravity
 - General Leo Cristophe
 - Sabin, Master Monk
 - Combustible Gearhulk
 - Flayer of the Hatebound
 - Ruin Grinder
-- Sun Titan
-- Umaro, Raging Yeti
+
+
 - Angel of the Ruins
 - Cyan, Vengeful Samurai
 - Kefka, Dancing Mad
@@ -140,7 +120,7 @@ whatever else each deck's own list below already excludes.
 - Professional Face-Breaker
 - Red XIII, Proud Warrior
 - Vincent, Vengeful Atoner
-- Yuffie, Materia Hunter
+
 - Aerith, Last Ancient
 - Barret, Avalanche Leader
 - Cait Sith, Fortune Teller
@@ -162,7 +142,7 @@ whatever else each deck's own list below already excludes.
 - Harmonize
 - Unfinished Business
 - Austere Command
-- Ultimate Magic: Meteor
+
 - Vanquish the Horde
 
 ### Instant (6)
@@ -172,14 +152,14 @@ whatever else each deck's own list below already excludes.
 - Chaos Warp
 - Ultimate Magic: Holy
 - Clever Concealment
-- Lifestream's Blessing
+
 
 ### Artifact (19)
 
 - Colossus Hammer
 - Explorer's Scope
-- Skullclamp
-- Sol Ring
+
+
 - Arcane Signet
 - Conformer Shuriken
 - Conqueror's Flail
@@ -187,14 +167,14 @@ whatever else each deck's own list below already excludes.
 - Hero's Heirloom
 - Lightning Greaves
 - Mask of Memory
-- Sword of the Animist
+
 - Trailblazer's Boots
 - Wrecking Ball Arm
 - Behemoth Sledge
 - Champion's Helm
 - Darksteel Plate
 - Inspiring Statuary
-- Summoning Materia
+
 
 ### Enchantment (2)
 
@@ -228,7 +208,7 @@ whatever else each deck's own list below already excludes.
 - Spire of Industry
 - Sungrass Prairie
 - Sunpetal Grove
-- Sunscorched Divide
+
 - Wooded Ridgeline
 
 (Fortified Village from this deck's land list is already in the pool.)
@@ -289,7 +269,7 @@ whatever else each deck's own list below already excludes.
 
 ### Artifact (13)
 
-- Sol Ring
+
 - Arcane Signet
 - Talisman of Dominance
 - Talisman of Hierarchy
@@ -343,3 +323,51 @@ whatever else each deck's own list below already excludes.
 
 (Astrologian's Planisphere, Sage's Nouliths, and White Auracite from this
 deck's artifact list are already in the pool.)
+
+Star of Extinction
+{5}{R}{R}
+Meteorfall
+
+Day of Judgment
+{2}{W}{W}
+Spira's Punishment
+
+Temporal Extortion
+{B}{B}{B}{B}
+Absorb into Time
+
+Feed the Swarm
+{1}{B}
+Primogenesis
+
+Toxic Deluge
+{2}{B}
+Merciless Poisoning
+
+Praetor's Grasp
+{1}{B}{B}
+Unseat the Usurper
+
+
+Add to Deck
+Solitude
+{3}{W}{W}
+Yojimbo
+
+Subtlety
+{2}{U}{U}
+Shiva
+
+Grief
+{2}{B}{B}
+Anima
+
+
+Add to Deck
+Fury
+{3}{R}{R}
+Ifrit
+
+Endurance
+{1}{G}{G}
+Magus Sisters

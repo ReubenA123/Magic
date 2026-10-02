@@ -9,7 +9,7 @@ import { getCardDefinition } from '../data/cards';
 import { canPay, parseCostLabel, manaValue } from '../engine/mana';
 import { hasKeyword } from '../engine/keywords';
 import { effectivePower, effectiveToughness, isLegalPendingTarget } from '../engine/combat';
-import { matchesLibrarySearchFilter } from '../engine/effects';
+import { matchesLibrarySearchFilter, matchesReanimateFilter } from '../engine/effects';
 import { findCardAnywhere } from '../engine/state';
 
 const MAX_HISTORY = 25;
@@ -201,7 +201,52 @@ export function useLocalGame(initialState: GameState) {
     const timer = setTimeout(() => {
       const ai = state.players.find((p) => p.id === AI_PLAYER_ID)!;
       const found = ai.zones.library.find((c) => matchesLibrarySearchFilter(getCardDefinition(c.defId), pending.filter));
-      dispatch({ type: 'RESOLVE_LIBRARY_SEARCH', instanceId: found?.instanceId ?? null }, AI_PLAYER_ID);
+      // mayChooseBattlefieldTapped (Scholar of New Horizons) - the AI always
+      // takes the free battlefield placement over hand when it's offered,
+      // same "take the strictly better option" simplification as its other
+      // yes/no auto-resolutions elsewhere in this file.
+      dispatch(
+        { type: 'RESOLVE_LIBRARY_SEARCH', instanceId: found?.instanceId ?? null, toBattlefieldTapped: pending.mayChooseBattlefieldTapped ? true : undefined },
+        AI_PLAYER_ID
+      );
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [state, dispatch]);
+
+  // --- AI: resolve its own pending Explore choice (Path of Discovery, ...) -
+  // Same "nobody else can choose for it" problem again. Deliberately simple:
+  // always puts the card into the graveyard rather than keeping it on top,
+  // since the AI has no lookahead to weigh keeping a known card on top
+  // against just drawing into the unknown.
+  useEffect(() => {
+    if (state.winnerId) return;
+    if (state.mutualAdjustment.status !== 'inactive') return;
+    const pending = state.pendingExplore;
+    if (!pending || pending.controllerId !== AI_PLAYER_ID) return;
+
+    const timer = setTimeout(() => {
+      dispatch({ type: 'RESOLVE_EXPLORE', toGraveyard: true }, AI_PLAYER_ID);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [state, dispatch]);
+
+  // --- AI: resolve its own pending reanimation target (Sun Titan, Terra, ...) -
+  // Same "nobody else can choose for it" problem again. Deliberately simple:
+  // takes whatever's first in graveyard order among the eligible matches, or
+  // declines if none exist and the effect allows it (pendingReanimate is only
+  // ever armed when at least one eligible card exists for a MANDATORY pick,
+  // but an optional one - e.g. Terra's may-pay-mana follow-up - can still be
+  // declined here by choice).
+  useEffect(() => {
+    if (state.winnerId) return;
+    if (state.mutualAdjustment.status !== 'inactive') return;
+    const pending = state.pendingReanimate;
+    if (!pending || pending.controllerId !== AI_PLAYER_ID) return;
+
+    const timer = setTimeout(() => {
+      const ai = state.players.find((p) => p.id === AI_PLAYER_ID)!;
+      const found = ai.zones.graveyard.find((c) => matchesReanimateFilter(getCardDefinition(c.defId), pending.effect));
+      dispatch({ type: 'RESOLVE_REANIMATE', instanceId: found?.instanceId ?? null }, AI_PLAYER_ID);
     }, 800);
     return () => clearTimeout(timer);
   }, [state, dispatch]);
@@ -547,12 +592,20 @@ export function useLocalGame(initialState: GameState) {
             let color: ManaColor = 'C';
             if (Array.isArray(d.producesMana)) color = d.producesMana[0];
             // 'commanderColorIdentity' (Arcane Signet) / 'opponentLandColors'
-            // (Exotic Orchard) both resolve server-side in engine/actions.ts:
-            // toggleTap - the AI has no simple static color to guess here, so
-            // it just falls through to the 'C' default above (harmless: a
-            // single-color resolution ignores chosenColor entirely, and this
-            // is only ever a fallback tap anyway, not a strategic choice).
-            else if (d.producesMana && d.producesMana !== 'any' && d.producesMana !== 'commanderColorIdentity' && d.producesMana !== 'opponentLandColors') color = d.producesMana;
+            // (Exotic Orchard) / 'ownLandColors' (Incubation Druid) all
+            // resolve server-side in engine/actions.ts: toggleTap - the AI has
+            // no simple static color to guess here, so it just falls through
+            // to the 'C' default above (harmless: a single-color resolution
+            // ignores chosenColor entirely, and this is only ever a fallback
+            // tap anyway, not a strategic choice).
+            else if (
+              d.producesMana &&
+              d.producesMana !== 'any' &&
+              d.producesMana !== 'commanderColorIdentity' &&
+              d.producesMana !== 'opponentLandColors' &&
+              d.producesMana !== 'ownLandColors'
+            )
+              color = d.producesMana;
             dispatch({ type: 'TOGGLE_TAP', instanceId: untappedLand.instanceId, chosenColor: color }, AI_PLAYER_ID);
             break;
           }

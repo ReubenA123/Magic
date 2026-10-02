@@ -73,6 +73,20 @@ export const CARD_POOL: CardDefinition[] = [
     imagePath: '/assets/cards/adelbert-steiner.webp',
   },
   {
+    id:'anger',
+    name:'Anger',
+    type:'creature',
+    subtype:'Creature Incarnation',
+    costLabel:'{3}{R}',
+    power: 2,
+    toughness: 2,
+    text:'Haste\n'+
+    'As long as this card is in your graveyard and you control a Mountain, creatures you control have haste.\n'+
+    '“Relm\u2109s inside!”\n'+
+    '—Strago Magus' ,
+    imagePath:'/assets/cards/anger.webp',
+  },
+  {
     id: 'aerith-gainsborough',
     name: 'Aerith Gainsborough',
     type: 'creature',
@@ -394,6 +408,19 @@ export const CARD_POOL: CardDefinition[] = [
     'on this creature for each permanent destroyed this way.',
     imagePath:'/assets/cards/bane-of-progress.webp',
     onEnter: [{ type: 'destroyAll', targetFilter: 'artifactAndEnchantment', thenCounterSelfLabel: '+1/+1' }],
+  },
+  {
+    id:'banon-the-returners-leader',
+    name:'Banon, the Returners Leader',
+    type:'creature',
+    subtype:'Legendary Creature Human Cleric Rebel',
+    costLabel:'{R}{W}',
+    power: 1,
+    toughness: 3,
+    text:'Pray — Once during each of your turns, you may cast a creature spell from among cards in your graveyard that were put there from anywhere other than the battlefield this turn.\n'+
+    'Whenever you attack, you may pay {1} and discard a card. If you do, draw a card.\n'+
+    '“You are this world\u2019s last ray of light… our final hope.”',
+    imagePath:'/assets/cards/banon-the-returners-leader.webp',
   },
   {
     id: 'bards-bow',
@@ -1630,6 +1657,17 @@ export const CARD_POOL: CardDefinition[] = [
     imagePath: '/assets/cards/fight-on.webp'
   },
   {
+    id:'fight-rigging',
+    name:'Fight Rigging',
+    type:'enchantment',
+    costLabel:'{2}{G}',
+    text:'Hideaway 5 (When this enchantment enters, look at the top five cards of your library, exile one face down, then put the rest on the bottom in a random order.)\n'+
+    'At the beginning of combat on your turn, put a +1/+1 counter on target creature you control. Then if you control a creature with power 7 or greater, you may play the exiled card without paying its mana cost.',
+    imagePath:'/assets/cards/fight-rigging.webp',
+    onEnter: [{ type: 'hideaway', count: 5 }],
+    onOwnCombatBegin: [{ type: 'putCounterOnTargetOwnCreatureThenMayPlayHideawayIfCreaturePowerAtLeast', counterLabel: '+1/+1', counterAmount: 1, minPower: 7 }],
+  },
+  {
     id: 'fire-magic',
     name: "Fire Magic",
     type: 'instant',
@@ -2094,6 +2132,21 @@ export const CARD_POOL: CardDefinition[] = [
     producesMana: ['G', 'U']
   },
   {
+    id:'gyre-sage',
+    name:'Gyre Sage',
+    type:'creature',
+    subtype:'Creature Elf Druid',
+    costLabel:'{1}{G}',
+    power: 1,
+    toughness: 2,
+    text:'Evolve (Whenever a creature you control enters, if that creature has greater power or toughness than this creature, put a +1/+1 counter on this creature.)\n'+
+    '{T}: Add {G} for each +1/+1 counter on this creature.',
+    imagePath:'/assets/cards/gyre-sage.webp',
+    evolve: true,
+    producesMana: 'G',
+    producesManaAmountEqualToOwnCounterLabel: '+1/+1',
+  },
+  {
     id: 'gysahl-greens',
     name: 'Gysahl Greens',
     costLabel: '{1}{G}',
@@ -2111,6 +2164,17 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'Target creature gets +3/+1 and gains haste until end of turn. Exile the top card of your library. You may play it until your next end step.',
     onCast: [{ type: 'pumpTarget', power: 3, toughness: 1, grantKeyword: 'haste' }],
     imagePath: '/assets/cards/haste-magic.webp'
+  },
+  {
+    id:'hardened-scales',
+    name:'Hardened Scales',
+    type:'enchantment',
+    costLabel:'{G}',
+    text:'If one or more +1/+1 counters would be put on a creature you control, that many plus one +1/+1 counters are put on it instead.\n'+
+    '“When it starts, I won\u2019t be myself any more. I won\u2019t be able to hold myself back.”\n'+
+    '—Jecht',
+    imagePath:'/assets/cards/hardened-scales.webp',
+    increasesOwnCounterPlacementsByOne: '+1/+1',
   },
   {
     id: 'hecteyes',
@@ -2133,6 +2197,19 @@ export const CARD_POOL: CardDefinition[] = [
       'Mountaincycling 2(2, Discard this card: Search your library for a Mountain card, reveal it, put it into your hand, then shuffle.)',
     cycling: { cost: '{2}', searchLandName: 'Mountain' },
     imagePath: '/assets/cards/hill-gigas.webp'
+  },
+  {
+    id:'hinterland-harbor',
+    name:'Hinterland Harbor',
+    type:'land',
+    costLabel: '-',
+    text:'This land enters tapped unless you control a Forest or an Island.\n'+
+    '{T}: Add {G} or {U}.\n'+
+    '“The entire river glows, like a sea of stars.”\n'+
+    '—Lulu',
+    imagePath:'/assets/cards/hinterland-harbor.webp',
+    entersTappedUnlessControlLandNames: ['Forest', 'Island'],
+    producesMana: ['G', 'U'],
   },
   {
     id: 'hope-estheim',
@@ -2178,6 +2255,30 @@ export const CARD_POOL: CardDefinition[] = [
     // Blizzard alone is wired via the existing bounceTarget effect.
   },
   {
+    id:'idyllic-beachfront',
+    name:'Idyllic Beachfront',
+    type:'land',
+    costLabel:'-',
+    text:'({T}: Add {W} or {U}.)\n'+
+    'This land enters tapped.\n'+
+    '“This is where I was born. I started blitz when I was five. I joined the Aurochs at thirteen… ten years ago. Ten years… and we never won a game.”\n'+
+    '—Wakka',
+    imagePath:'/assets/cards/idyllic-beachfront.webp',
+    entersTapped: true,
+    producesMana: ['W', 'U'],
+  },
+  {
+    id:'inexorable-tide',
+    name:'Inexorable Tide',
+    type:'enchantment',
+    costLabel:'{3}{U}',
+    text:'Whenever you cast a spell, proliferate. (Choose any number of permanents and/or players, then give each another counter of each kind already there.)\n'+
+    '“When Sin attacked Zanarkand that day, I woke up in Spira.”\n'+
+    '—Tidus',
+    imagePath:'/assets/cards/inexorable-tide.webp',
+    onOwnCastAnySpellTrigger: [{ type: 'proliferate' }],
+  },
+  {
     id: 'ignis-scientia',
     name: 'Ignis Scientia',
     costLabel: '{1}{G}{U}',
@@ -2210,6 +2311,29 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'Flying \n Whenever this creature attacks, surveil 1.',
     imagePath: '/assets/cards/il-mheg-pixie.webp',
     onAttack: [{ type: 'surveil', count: 1 }],
+  },
+  {
+    id:'incubation-druid',
+    name:'Incubation Druid',
+    type:'creature',
+    subtype:'Creature Elf Druid',
+    costLabel:'{1}{G}',
+    power: 0,
+    toughness: 2, 
+    text:'{T}: Add one mana of any type that a land you control could produce. If this creature has a +1/+1 counter on it, add three mana of that type instead.\n'+
+    '{3}{G}{G}: Adapt 3. (If this creature has no +1/+1 counters on it, put three +1/+1 counters on it.)',
+    imagePath:'/assets/cards/incubation-druid.webp',
+    producesMana: 'ownLandColors',
+    producesManaAmountIfOwnCounter: { counterLabel: '+1/+1', amount: 3 },
+    abilities: [
+      {
+        id: 'incubation-druid-adapt',
+        label: 'Adapt 3',
+        cost: { manaLabel: '{3}{G}{G}' },
+        effects: [{ type: 'adapt', counterLabel: '+1/+1', amount: 3 }],
+        effectText: 'If this creature has no +1/+1 counters on it, put three +1/+1 counters on it.',
+      },
+    ],
   },
   {
     id: 'insomnia-crown-city',
@@ -2592,6 +2716,17 @@ export const CARD_POOL: CardDefinition[] = [
     // instead of needing a new pre-cast-cost/choice mechanism.
     onCast: [{ type: 'loot', drawCount: 2, discardCount: 1 }],
     flashback: { cost: '{3}{R}' },
+  },
+  {
+    id:'lifestream-s-blessing',
+    name:'Lifestream\u2019s Blessing',
+    costLabel:'{4}{G}{G}',
+    type:'instant',
+    text:'Draw X cards, where X is the greatest power among creatures you controlled as you cast this spell. If this spell was cast from exile, you gain twice X life.\n'+
+    'Foretell {4}{G} (During your turn, you may pay {2} and exile this card from your hand face down. Cast it on a later turn for its foretell cost.)\n'+
+    '“We came to tell you our memories. Come, planet! Show us your answer!”\n'+
+    '—Cloud Strife',
+    imagePath:'/assets/cards/lifestream-s-blessing.webp',
   },
   {
     id: 'lightning-army-of-one',
@@ -3009,6 +3144,27 @@ export const CARD_POOL: CardDefinition[] = [
     // mechanism exists yet (only unconditional onAttack effects do).
   },
   {
+    id:'nesting-grounds',
+    name:'Nesting Grounds',
+    costLabel:'-',
+    type:'land',
+    text:'{T}: Add {C}.\n'+
+    '{1}, {T}: Move a counter from target permanent you control onto a second target permanent. Activate only as a sorcery.\n'+
+    'A butterfly will lead the way to secret things.',
+    imagePath:'/assets/cards/nesting-grounds.webp',
+    producesMana: 'C',
+    abilities: [
+      {
+        id: 'nesting-grounds-move-counter',
+        label: 'Move Counter',
+        cost: { manaLabel: '{1}', tap: true },
+        onlyDuringOwnMainPhase: true,
+        effects: [{ type: 'moveOneCounterFromOwnPermanentToAnyPermanent' }],
+        effectText: 'Move a counter from target permanent you control onto a second target permanent.',
+      },
+    ],
+  },
+  {
     id: 'nibelheim-aflame',
     name: 'Nibelheim Aflame',
     costLabel: '{2}{R}{R}',
@@ -3113,6 +3269,25 @@ export const CARD_POOL: CardDefinition[] = [
     ],
   },
   {
+    id:'overflowing-basin',
+    name:'Overflowing Basin',
+    costLabel:'-',
+    type:'land',
+    text:'{1}, {T}: Add {G}{U}.\n'+
+    '“They say that clouds of pyreflies gather here when night falls.”\n'+
+    '—Yuna',
+    imagePath:'/assets/cards/overflowing-basin.webp',
+    abilities: [
+      {
+        id: 'overflowing-basin-filter',
+        label: 'Add {G}{U}',
+        cost: { manaLabel: '{1}', tap: true },
+        effects: [{ type: 'addMana', colors: { G: 1, U: 1 } }],
+        effectText: 'Add {G}{U}.',
+      },
+    ],
+  },
+  {
     id: 'overkill',
     name: 'Overkill',
     costLabel: '{2}{B}',
@@ -3137,6 +3312,27 @@ export const CARD_POOL: CardDefinition[] = [
     equipGrantsWard: { mana: '{1}' },
     equipGrantsSubtype: 'Knight',
     imagePath: '/assets/cards/paladin-s-arms.webp'
+  },
+  {
+    id:'path-of-ancestry',
+    name:'Path of Ancestry',
+    costLabel:'-',
+    type:'land',
+    text:'This land enters tapped.\n'+
+    '{T}: Add one mana of any color in your commander\u2019s color identity. When that mana is spent to cast a creature spell that shares a creature type with your commander, scry 1. (Look at the top card of your library. You may put that card on the bottom.)',
+    imagePath:'/assets/cards/path-of-ancestry.webp',
+    entersTapped: true,
+    producesMana: 'commanderColorIdentity',
+    onTapForManaEffects: [{ type: 'armManaIdentitySourceScry' }],
+  },
+  {
+    id:'path-of-discovery',
+    name:'Path of Discovery',
+    costLabel:'{3}{G}',
+    type:'enchantment',
+    text:'Whenever a creature you control enters, it explores. (Reveal the top card of your library. Put that card into your hand if it\u2019s a land. Otherwise, put a +1/+1 counter on the creature, then put the card back or put it into your graveyard.)',
+    imagePath:'/assets/cards/path-of-discovery.webp',
+    onAnyControlledCreatureEnterEffects: [{ type: 'explore' }],
   },
   {
     id:'path-to-exile',
@@ -3213,6 +3409,32 @@ export const CARD_POOL: CardDefinition[] = [
     // reveal-opponent's-hand-and-choose mechanism exists), and there's no
     // choose-a-mode UI anyway (see phoenix-down for the same modal-ability gap).
     onCast: [{ type: 'buffAllCreatures', power: -1, toughness: -1 }],
+  },
+  {
+    id:'port-town',
+    name:'Port Town',
+    costLabel:'-',
+    type:'land',
+    text:'As this land enters, you may reveal a Plains or Island card from your hand. If you don\u2019t, this land enters tapped.\n'+
+    '{T}: Add {W} or {U}.\n'+
+    '“The excitement here has reached a fever pitch as the opening ceremony gets under way!”\n'+
+    '—Blitzball announcer',
+    imagePath:'/assets/cards/port-town.webp',
+    entersTappedUnlessRevealLandNames: ['Plains', 'Island'],
+    producesMana: ['W', 'U'],
+  },
+  {
+    id:'prairie-stream',
+    name:'Prairie Stream',
+    costLabel:'-',
+    type:'land',
+    text:'({T}: Add {W} or {U}.)\n'+
+    'This land enters tapped unless you control two or more basic lands.\n'+
+    '“Hydatos, a reference to its watery disposition. This will be the last corner of the island that the expedition will need to contend with.”\n'+
+    '—Eureka expedition ferryman',
+    imagePath:'/assets/cards/prairie-stream.webp',
+    entersTappedUnlessControlBasicLandCount: 2,
+    producesMana: ['W', 'U'],
   },
   {
     id: 'prishe-s-wanderings',
@@ -3421,6 +3643,20 @@ export const CARD_POOL: CardDefinition[] = [
     onDeath: [{ type: 'destroyTarget', targetFilter: 'anyPermanent' }, { type: 'reanimateTargetFromGraveyard', nonlegendaryPermanentInsteadOfCreature: true }],
   },
   {
+    id:'rampant-rejuvenator',
+    name:'Rampant Rejuvenator',
+    costLabel:'{3}{G}',
+    type:'creature',
+    subtype:'Creature Plant Hydra',
+    power: 0,
+    toughness: 0,
+    text:'This creature enters with two +1/+1 counters on it.\n'+
+    'When this creature dies, search your library for up to X basic land cards, where X is this creature\u2019s power, put them onto the battlefield, then shuffle.',
+    imagePath:'/assets/cards/rampant-rejuvenator.webp',
+    onEnter: [{ type: 'putCounterOnSelf', counterLabel: '+1/+1', counterAmount: 2 }],
+    onDeath: [{ type: 'searchLibraryForUpToXBasicLandsEqualToPower' }],
+  },
+  {
     id: 'random-encounter',
     name: 'Random Encounter',
     costLabel: '{4}{R}{R}',
@@ -3532,6 +3768,25 @@ export const CARD_POOL: CardDefinition[] = [
     flashback: { cost: '{6}{B}' },
   },
   {
+    id:'resourceful-defense',
+    name:'Resourceful Defense',
+    costLabel:'{2}{W}',
+    type:'enchantment',
+    text:'Whenever a permanent you control leaves the battlefield, if it had counters on it, put those counters on target permanent you control.\n'+
+    '{4}{W}: Move any number of counters from target permanent you control onto a second target permanent you control.',
+    imagePath:'/assets/cards/resourceful-defense.webp',
+    onOwnPermanentDiesMoveCountersToTarget: true,
+    abilities: [
+      {
+        id: 'resourceful-defense-move',
+        label: 'Move Counters',
+        cost: { manaLabel: '{4}{W}' },
+        effects: [{ type: 'moveAllCountersBetweenTargetPermanents' }],
+        effectText: 'Move any number of counters from target permanent you control onto a second target permanent you control.',
+      },
+    ],
+  },
+  {
     id: 'restoration-magic',
     name: 'Restoration Magic',
     costLabel: '{W}',
@@ -3579,6 +3834,30 @@ export const CARD_POOL: CardDefinition[] = [
     // "5GG: becomes a 7/7 Beast creature" is deferred - unlike
     // BecomeCreatureUntilEndOfTurnEffect (temporary), this is PERMANENT with
     // a fixed base power/toughness, which no existing mechanism models.
+  },
+  {
+    id:'rikku-resourceful-guardian',
+    name:'Rikku, Resourceful Guardian',
+    costLabel:'{2}{G}{U}',
+    type:'creature',
+    subtype:'Legendary Creature Human Artificer',
+    power: 2,
+    toughness: 3,
+    text:'Whenever you put one or more counters on a creature, until end of turn, that creature can\u2019t be blocked by creatures your opponents control.\n'+
+    'Steal — {1}, {T}: Move a counter from target creature an opponent controls onto target creature you control. Activate only as a sorcery.\n'+
+    '“Rikku-approved item coming up!”',
+    imagePath:'/assets/cards/rikku-resourceful-guardian.webp',
+    onOwnCounterPlacementGrantsRecipientKeyword: 'unblockable',
+    abilities: [
+      {
+        id: 'rikku-steal',
+        label: 'Steal',
+        cost: { manaLabel: '{1}', tap: true },
+        onlyDuringOwnMainPhase: true,
+        effects: [{ type: 'moveCounterFromOpponentCreatureToOwnCreature' }],
+        effectText: 'Move a counter from target creature an opponent controls onto target creature you control.',
+      },
+    ],
   },
   {
     id: 'ring-of-the-lucii',
@@ -3794,6 +4073,28 @@ export const CARD_POOL: CardDefinition[] = [
     landfall: { counterLabel: '+1/+1', counterAmount: 1 },
   },
   {
+    id:'scholar-of-new-horizons',
+    name:'Scholar of New Horizons',
+    costLabel:'{1}{W}',
+    type:'creature',
+    subtype:'Creature Scout',
+    power: 1,
+    toughness: 1,
+    text: 'This creature enters with a +1/+1 counter on it.\n'+
+    '{T}, Remove a counter from a permanent you control: Search your library for a Plains card and reveal it. If an opponent controls more lands than you, you may put that card onto the battlefield tapped. If you don\u2019t put the card onto the battlefield, put it into your hand. Then shuffle.',
+    imagePath: '/assets/cards/scholar-of-new-horizons.webp',
+    onEnter: [{ type: 'putCounterOnSelf', counterLabel: '+1/+1', counterAmount: 1 }],
+    abilities: [
+      {
+        id: 'scholar-of-new-horizons-search',
+        label: 'Search for Plains',
+        cost: { tap: true, removeCounterFromAnotherPermanent: 'any' },
+        effects: [{ type: 'searchLibraryForLandConditionalBattlefieldIfOpponentHasMoreLands', landName: 'Plains' }],
+        effectText: 'Search your library for a Plains card and reveal it. If an opponent controls more lands than you, put it onto the battlefield tapped - otherwise into your hand.',
+      },
+    ],
+  },
+  {
     id: 'scorpion-sentinel',
     name: 'Scorpion Sentinel',
     costLabel: '{1}{U}',
@@ -3804,6 +4105,19 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'As long as you control seven or more lands, this creature gets +3/+0.',
     landCountBuff: { minLands: 7, power: 3, toughness: 0 },
     imagePath: '/assets/cards/scorpion-sentinel.webp'
+  },
+  {
+    id: 'seaside-citadel',
+    name: 'Seaside Citadel',
+    costLabel: '-',
+    type: 'land',
+    text: 'This land enters tapped.\n'+
+    '{T}: Add {G}, {W}, or {U}.\n'+
+    '“I lived in the city of Bevelle until ten years ago. It\u2019s the biggest city in Spira! The main temple of Yevon is there.”\n'+
+    '—Yuna',
+    imagePath: '/assets/cards/seaside-citadel.webp',
+    entersTapped: true,
+    producesMana: ['G', 'W', 'U'],
   },
   {
     id: 'seifer-almasy',
@@ -3980,6 +4294,20 @@ export const CARD_POOL: CardDefinition[] = [
     imagePath: '/assets/cards/sharlayan-nation-of-scholars.webp',
     entersTapped: true,
     producesMana: ['W', 'U']
+  },
+  {
+    id: 'shelinda-yevon-acolyte',
+    name: 'Shelinda Yevon, Acolyte',
+    costLabel: '{G}{W}',
+    type: 'creature',
+    subtype: 'Legendary Creature Human Cleric',
+    power: 2,
+    toughness: 2,
+    text:'Lifelink\n'+
+    'Whenever another creature you control enters, put a +1/+1 counter on that creature if its power is less than Shelinda\u2019s power. Otherwise, put a +1/+1 counter on Shelinda.\n'+
+    '“Truly, I know nothing of the ways of fighting, but I do know some white magic.”',
+    imagePath: '/assets/cards/shelinda-yevon-acolyte.webp',
+    onAnyOtherControlledCreatureEnterComparePowerPutCounter: { counterLabel: '+1/+1' },
   },
   {
     id: 'shinra-reinforcements',
@@ -4171,6 +4499,38 @@ export const CARD_POOL: CardDefinition[] = [
     onDeath: [{ type: 'putOwnCountersOnTargetThenShuffleSelfIntoLibrary' }],
   },
   {
+    id:'skullclamp',
+    name:'Skullclamp',
+    costLabel:'{1}',
+    type:'artifact',
+    subtype:'Artifact Equipment',
+    text:'Equipped creature gets +1/-1.\n'+
+    'Whenever equipped creature dies, draw two cards.\n'+
+    'Equip {1}\n'+
+    '“My mother\u2019s name is Jenova… \u2019The Jenova Project\u2019… is this just a coincidence?”\n'+
+    '—Sephiroth',
+    imagePath:'/assets/cards/skullclamp.webp',
+  },
+  {
+    id:'skycloud-expanse',
+    name:'Skycloud Expanse',
+    costLabel:'-',
+    type:'land',
+    text:'{1}, {T}: Add {W}{U}.\n'+
+    '“Deep within the Sea of Clouds, beyond treacherous winds and swirling rock, lies a land like no other. Isles-—nay, pristine jewels—clustered about a massive floating crystal.”\n'+
+    '—Diadem mission commander',
+    imagePath:'assets/cards/skycloud-expanse.webp',
+    abilities: [
+      {
+        id: 'skycloud-expanse-filter',
+        label: 'Add {W}{U}',
+        cost: { manaLabel: '{1}', tap: true },
+        effects: [{ type: 'addMana', colors: { W: 1, U: 1 } }],
+        effectText: 'Add {W}{U}.',
+      },
+    ],
+  },
+  {
     id: 'slash-of-light',
     name: 'Slash of Light',
     costLabel: '{1}{W}',
@@ -4337,6 +4697,48 @@ export const CARD_POOL: CardDefinition[] = [
     attachedPreventsAbilities: true,
   },
   {
+    id:'sungrass-prairie',
+    name:'Sungrass Prairie',
+    costLabel:'-',
+    type:'land',
+    text:'{1}, {T}: Add {G}{W}.\n'+
+    '“Thinking of crossing the marshes? Hmm, then it\u2019ll probably be safer for you to get a chocobo.”\n'+
+    '—Chocobo Bill',
+    imagePath:'/assets/cards/sungrass-prairie.webp',
+    abilities: [
+      {
+        id: 'sungrass-prairie-filter',
+        label: 'Add {G}{W}',
+        cost: { manaLabel: '{1}', tap: true },
+        effects: [{ type: 'addMana', colors: { G: 1, W: 1 } }],
+        effectText: 'Add {G}{W}.',
+      },
+    ],
+  },
+  {
+    id:'sunpetal-grove',
+    name:'Sunpetal Grove',
+    costLabel:'-',
+    type:'land',
+    text:'This land enters tapped unless you control a Forest or a Plains.\n'+
+    '{T}: Add {G} or {W}.\n'+
+    '“I wish I could live in a place like this. Peaceful… living with a smile on my face every day.”\n'+
+    '—Yuna',
+    imagePath:'/assets/cards/sunpetal-grove.webp',
+    entersTappedUnlessControlLandNames: ['Forest', 'Plains'],
+    producesMana: ['G', 'W'],
+  },
+  {
+    id:'sunscorched-divide',
+    name:'Sunscorched Divide',
+    costLabel:'-',
+    type:'land',
+    text:'{1}, {T}: Add {R}{W}.\n'+
+    '“You there! We\u2019re about to storm the castle. The two of you will join the assault squad. Get moving!”\n'+
+    '-—Imperial soldier',
+    imagePath:'/assets/cards/sunscorched-divide.webp'
+  },
+  {
     id: 'summon-anima',
     name: 'Summon: Anima',
     costLabel: '{4}{B}{B}',
@@ -4464,6 +4866,20 @@ export const CARD_POOL: CardDefinition[] = [
       sacrificeAfterFinalChapter: true,
     },
     imagePath: '/assets/cards/summon-esper-ramuh.webp'
+  },
+  {
+    id:'summon-esper-valigarmanda',
+    name:'Summon: Esper Valigarmanda',
+    costLabel:'{3}{R}',
+    type:'creature',
+    subtype:'Enchantment Creature Saga Drake',
+    power: 3,
+    toughness: 3,
+    text:'(As this Saga enters and after your draw step, add a lore counter. Sacrifice after IV.)\n'+
+    'I — Exile an instant or sorcery card from each graveyard.\n'+
+    'II, III, IV — Add {R} for each lore counter on this Saga. You may cast an instant or sorcery card exiled with this Saga, and mana of any type can be spent to cast that spell.\n'+
+    'Flying, haste',
+    imagePath:'/assets/cards/summon-esper-valigarmanda.webp',
   },
   {
     // Was '' (an empty id) - getCardDefinition('') could never find this card,
@@ -4800,7 +5216,7 @@ export const CARD_POOL: CardDefinition[] = [
     toughness: 5,
     text: '(As this Saga enters and after your draw step, add a lore counter. Sacrifice after IV.)\n' +
       'I — Exile target artifact, enchantment, or tapped creature an opponent controls.\n' +
-      'II, III — Until your next turn, creatures can’t attack you unless their controller pays {2} for each of those creatures.\n' +
+      'II, III — Until your next turn, creatures can\u2019t attack you unless their controller pays {2} for each of those creatures.\n' +
       'IV — Create X Treasure tokens, where X is the number of opponents who control a creature with power 4 or greater.\n' +
       'Vigilance',
     imagePath: '/assets/cards/summon-yojimbo.webp',
@@ -4812,6 +5228,18 @@ export const CARD_POOL: CardDefinition[] = [
       ],
       sacrificeAfterFinalChapter: true,
     },
+  },
+  {
+    id:'summoning-materia',
+    name:'Summoning Materia',
+    costLabel:'{2}{G}',
+    type:'artifact',
+    subtype:'Artifact Equipment',
+    text:'You may look at the top card of your library any time.\n'+
+    'As long as this Equipment is attached to a creature, you may cast creature spells from the top of your library.\n'+
+    'Equipped creature gets +2/+2 and has vigilance and “{T}: Add {G}.”\n'+
+    'Equip {2}',
+    imagePath:'/assets/cards/summoning-materia.webp',
   },
   {
     id:'summoner-s-sending',
@@ -4829,6 +5257,19 @@ export const CARD_POOL: CardDefinition[] = [
         thenCreateToken: { tokenId: 'token-spirit', counterIfManaValueAtLeast: { value: 4, counterLabel: '+1/+1', counterAmount: 1 } },
       },
     ],
+  },
+  {
+    id:'sun-titan',
+    name:'Sun Titan',
+    costLabel:'{4}{W}{W}',
+    type:'creature',
+    subtype:'Creature Giant',
+    power: 6,
+    toughness: 6,
+    text:'Vigilance\n'+
+    'Whenever this creature enters or attacks, you may return target permanent card with mana value 3 or less from your graveyard to the battlefield.\n'+
+    'Wrexsoul is formed of the countless souls lost during the conflict one thousand years past…',
+    imagePath:'/assets/cards/sun-titan.webp',
   },
   {
     id:'sunscorch-regent',
@@ -4885,6 +5326,18 @@ export const CARD_POOL: CardDefinition[] = [
     producesMana: 'B'
   },
   {
+    id:'sword-of-the-animist',
+    name:'Sword of the Animist',
+    costLabel:'{2}',
+    type:'artifact',
+    subtype:'Legendary Artifact Equipment',
+    text:'Equipped creature gets +1/+1.\n'+
+    'Whenever equipped creature attacks, you may search your library for a basic land card, put it onto the battlefield tapped, then shuffle.\n'+
+    'Equip {2}\n'+
+    '“Don\u2019t fight here! You\u2019ll ruin the flowers!”',
+    imagePath:'/assets/cards/sword-of-the-animist.webp',
+  },
+  {
     id: 'syncopate',
     name: 'Syncopate',
     costLabel: '{X}{U}',
@@ -4897,6 +5350,19 @@ export const CARD_POOL: CardDefinition[] = [
     // the time any other card could respond. A real implementation would
     // need a whole new casting pipeline (announce -> priority window for
     // responses -> resolve), not just a new effect on this one card.
+  },
+  {
+    id:'tangled-islet',
+    name:'Tangled Islet',
+    costLabel:'-',
+    type:'land',
+    text:'({T}: Add {G} or {U}.)\n'+
+    'This land enters tapped.\n'+
+    '“Are you heading for Kilika Temple? Then just follow this trail. There are poisonous fiends in the forest. Be on your guard!”\n'+
+    '-—Crusader captain',
+    imagePath:'/assets/cards/tangled-islet.webp',
+    entersTapped: true,
+    producesMana: ['G', 'U'],
   },
   {
     id: 'tellah-great-sage',
@@ -4969,6 +5435,18 @@ export const CARD_POOL: CardDefinition[] = [
     producesMana: 'C',
     producesManaAmount: 2,
     producesManaOnlyIfControlLandCount: 5,
+  },
+  {
+    id:'terra-herald-of-hope',
+    name:'Terra, Herald of Hope',
+    costLabel:'{R}{W}{B}',
+    type:'creature',
+    subtype:'Legendary Creature Human Wizard Warrior',
+    power: 3,
+    toughness: 3,
+    text:'Trance — At the beginning of combat on your turn, mill two cards. Terra gains flying until end of turn.\n'+
+    'Whenever Terra deals combat damage to a player, you may pay {2}. When you do, return target creature card with power 3 or less from your graveyard to the battlefield tapped.',
+    imagePath:'/assets/cards/terra-herald-of-hope.webp',
   },
   {
     id: 'terra-magical-adept',
@@ -5573,6 +6051,24 @@ export const CARD_POOL: CardDefinition[] = [
     // jump straight to the next player's turn all at once).
   },
   {
+    id:'ultimate-magic-holy',
+    name:'Ultimate Magic Holy',
+    costLabel:'{2}{W}',
+    type:'instant',
+    text:'Permanents you control gain indestructible until end of turn. If this spell was cast from exile, prevent all damage that would be dealt to you this turn.\n'+
+    'Foretell {2}{W} (During your turn, you may pay {2} and exile this card from your hand face down. Cast it on a later turn for its foretell cost.)',
+    imagePath:'/assets/cards/ultimate-magic-holy.webp',
+  },
+  {
+    id:'ultimate-magic-meteor',
+    name:'Ultimate Magic Meteor',
+    costLabel:'{5}{R}',
+    type:'sorcery',
+    text:'Ultimate Magic: Meteor deals 7 damage to each creature. If this spell was cast from exile, for each opponent, choose an artifact or land that player controls. Destroy the chosen permanents.\n'+
+    'Foretell {5}{R} (During your turn, you may pay {2} and exile this card from your hand face down. Cast it on a later turn for its foretell cost.)',
+    imagePath:'/assets/cards/ultimate-magic-meteor.webp',
+  },
+  {
     id: 'ultima-origin-of-oblivion',
     name: 'Ultima, Origin of Oblivion',
     costLabel: '{5}',
@@ -5679,6 +6175,21 @@ export const CARD_POOL: CardDefinition[] = [
       counterIfExpensive: { minManaValue: 8, counterLabel: '+1/+1', counterAmount: 8 },
     },
   },
+  {
+    id:'umaro-raging-yeti',
+    name:'Umaro, Raging Yeti',
+    costLabel:'{5}{R}',
+    type:'creature',
+    subtype:'Legendary Creature Yeti Berserker',
+    power: 6,
+    toughness: 6,
+    text:'Trample\n'+
+    'At the beginning of combat on your turn, choose one at random —\n'+
+    '• Other creatures you control get +3/+0 and gain trample until end of turn.\n'+
+    '• Discard your hand, then draw four cards.\n'+
+    '• Umaro deals 5 damage to any target.',
+    imagePath:'/assets/cards/umaro-raging-yeti.webp',
+  },  
   {
     id: 'undercity-dire-rat',
     name: 'Undercity Dire Rat',
@@ -6083,6 +6594,18 @@ export const CARD_POOL: CardDefinition[] = [
       'its owner\u2019s control. Then if it\u2019s the first end step of the turn, there is an additional end step after this step.',
     imagePath: '/assets/cards/y-shtola-rhul.webp',
     onOwnEndStep: [{ type: 'exileThenReturnTargetOwnCreature' }, { type: 'queueExtraEndStepIfFirstEndStepOfTurn' }],
+  },
+  {
+    id:'yuffie-materia-hunter',
+    name:'Yuffie, Materia Hunter',
+    costLabel:'{2}{R}',
+    type:'creature',
+    subtype:'Legendary Creature Human Ninja',
+    power: 3,
+    toughness: 3,
+    text:'Ninjutsu {1}{R} ({1}{R}, Return an unblocked attacker you control to hand: Put this card onto the battlefield from your hand tapped and attacking.)\n'+
+    'When Yuffie enters, gain control of target noncreature artifact for as long as you control Yuffie. Then you may attach an Equipment you control to Yuffie.',
+    imagePath:'/assets/cards/yuffie-materia-hunter.webp',
   },
   {
     id: 'yuna-s-decision',

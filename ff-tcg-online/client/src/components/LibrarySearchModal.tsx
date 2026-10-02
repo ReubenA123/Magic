@@ -13,6 +13,13 @@ interface LibrarySearchModalProps {
   cards: { definition: CardDefinition; instance: CardInstance }[];
   onChoose: (instanceId: string) => void;
   onFindNothing: () => void;
+  /** "...you may put that card onto the battlefield tapped. If you don't,
+   * put it into your hand." (Scholar of New Horizons) - when set, picking a
+   * card doesn't resolve immediately; it instead shows a follow-up "to hand
+   * or to the battlefield tapped?" choice via onChooseDestination. See
+   * GameState.pendingLibrarySearch.mayChooseBattlefieldTapped. */
+  mayChooseBattlefieldTapped?: boolean;
+  onChooseDestination?: (instanceId: string, toBattlefieldTapped: boolean) => void;
 }
 
 function filterLabel(filter: LibrarySearchFilter): string {
@@ -41,9 +48,35 @@ function filterLabel(filter: LibrarySearchFilter): string {
  * already match. "Find Nothing" is always available - a real search is
  * never actually mandatory to succeed.
  */
-export default function LibrarySearchModal({ sourceName, filter, cards, onChoose, onFindNothing }: LibrarySearchModalProps) {
+export default function LibrarySearchModal({ sourceName, filter, cards, onChoose, onFindNothing, mayChooseBattlefieldTapped, onChooseDestination }: LibrarySearchModalProps) {
   const [query, setQuery] = useState('');
+  const [selected, setSelected] = useState<{ definition: CardDefinition; instance: CardInstance } | null>(null);
   const visible = query.trim() ? cards.filter((c) => c.definition.name.toLowerCase().includes(query.trim().toLowerCase())) : cards;
+
+  if (mayChooseBattlefieldTapped && selected) {
+    return (
+      <div className="card-actions-overlay">
+        <div className="zone-modal">
+          <div className="card-actions-header">
+            <strong>{sourceName} - {selected.definition.name}</strong>
+          </div>
+          <p className="card-actions-text">Put {selected.definition.name} onto the battlefield tapped, or into your hand?</p>
+          <div className="zone-modal-grid">
+            <Card definition={selected.definition} instance={selected.instance} onClick={() => undefined} />
+          </div>
+          <button className="opponent-view-exit-button" onClick={() => onChooseDestination?.(selected.instance.instanceId, true)}>
+            Battlefield (tapped)
+          </button>
+          <button className="opponent-view-exit-button" onClick={() => onChooseDestination?.(selected.instance.instanceId, false)}>
+            Hand
+          </button>
+          <button className="opponent-view-exit-button" onClick={() => setSelected(null)}>
+            Back
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="card-actions-overlay">
@@ -52,7 +85,8 @@ export default function LibrarySearchModal({ sourceName, filter, cards, onChoose
           <strong>{sourceName} - Search your library</strong>
         </div>
         <p className="card-actions-text">
-          Choose {filterLabel(filter)} from your library to reveal and put into your hand.
+          Choose {filterLabel(filter)} from your library to reveal
+          {mayChooseBattlefieldTapped ? ', then choose where it goes.' : ' and put into your hand.'}
         </p>
         {cards.length > 8 && (
           <input
@@ -65,7 +99,12 @@ export default function LibrarySearchModal({ sourceName, filter, cards, onChoose
         )}
         <div className="zone-modal-grid">
           {visible.map((c) => (
-            <Card key={c.instance.instanceId} definition={c.definition} instance={c.instance} onClick={() => onChoose(c.instance.instanceId)} />
+            <Card
+              key={c.instance.instanceId}
+              definition={c.definition}
+              instance={c.instance}
+              onClick={() => (mayChooseBattlefieldTapped ? setSelected(c) : onChoose(c.instance.instanceId))}
+            />
           ))}
         </div>
         <button className="opponent-view-exit-button" onClick={onFindNothing}>

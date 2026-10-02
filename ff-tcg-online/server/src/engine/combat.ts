@@ -2,7 +2,7 @@
 // engine/combat.ts
 // ============================================================================
 
-import { CardDefinition, CardInstance, CharacteristicOverride, GameState, WardCost } from '../types';
+import { CardDefinition, CardEffect, CardInstance, CharacteristicOverride, GameState, WardCost } from '../types';
 import { getCardDefinition, frontFaceDefId } from '../data/cards';
 import { getOpponent, getPlayer, updatePlayer, detachEverythingFrom, nextInstanceId } from './state';
 import { hasKeyword, hasKeywordEffective } from './keywords';
@@ -153,6 +153,17 @@ export function hasBoardGrantedKeyword(state: GameState, controllerId: string, i
     return def.type === 'creature' && instance.counters.some((ctr) => ctr.label === anthem.counterLabel && ctr.amount > 0);
   });
   if (viaCounterAnthem) return true;
+  // "As long as this card is in your graveyard and you control a [landName],
+  // creatures you control have [keyword]." (Anger) - graveyard-sourced,
+  // always-on (not turn-gated), no subtype restriction.
+  const viaGraveyardAnthem = controller.zones.graveyard.some((c) => {
+    const grant = getCardDefinition(c.defId).grantsControlledCreaturesKeywordWhileInGraveyard;
+    if (!grant || grant.keyword !== keyword) return false;
+    if (def.type !== 'creature') return false;
+    if (!grant.requiresControlledLandName) return true;
+    return controller.zones.battlefield.some((land) => getCardDefinition(land.defId).type === 'land' && getCardDefinition(land.defId).name === grant.requiresControlledLandName);
+  });
+  if (viaGraveyardAnthem) return true;
   if (state.activePlayerId !== controllerId) return false;
   const viaEquipped =
     !!def.hasKeywordsWhileEquipped?.includes(keyword) && controller.zones.battlefield.some((c) => c.attachedToInstanceId === instance.instanceId);
@@ -439,6 +450,9 @@ export function isLegalPendingTarget(state: GameState, pendingTarget: NonNullabl
   if (effect.type === 'grantPreventCombatDamageConvertToCounterToTargetOwnCreature') {
     return def.type === 'creature' && ownerId === pendingTarget.controllerId;
   }
+  if (effect.type === 'putCounterOnTargetOwnCreatureThenMayPlayHideawayIfCreaturePowerAtLeast') {
+    return def.type === 'creature' && ownerId === pendingTarget.controllerId;
+  }
   if (effect.type === 'mayMoveAllCountersToTargetCreature') {
     return def.type === 'creature' && card.instanceId !== pendingTarget.sourceInstanceId;
   }
@@ -576,6 +590,23 @@ export function isLegalPendingTarget(state: GameState, pendingTarget: NonNullabl
     if (!pendingTarget.firstInstanceId) return card.counters.length > 0;
     return card.instanceId !== pendingTarget.firstInstanceId;
   }
+  if (effect.type === 'moveCounterFromOpponentCreatureToOwnCreature') {
+    if (def.type !== 'creature') return false;
+    if (!pendingTarget.firstInstanceId) return ownerId !== pendingTarget.controllerId && card.counters.length > 0;
+    return ownerId === pendingTarget.controllerId;
+  }
+  if (effect.type === 'moveAllCountersBetweenTargetPermanents') {
+    if (ownerId !== pendingTarget.controllerId) return false;
+    if (!pendingTarget.firstInstanceId) return card.counters.length > 0;
+    return card.instanceId !== pendingTarget.firstInstanceId;
+  }
+  if (effect.type === 'moveDeadPermanentCountersToTarget') {
+    return ownerId === pendingTarget.controllerId;
+  }
+  if (effect.type === 'moveOneCounterFromOwnPermanentToAnyPermanent') {
+    if (!pendingTarget.firstInstanceId) return ownerId === pendingTarget.controllerId && card.counters.length > 0;
+    return card.instanceId !== pendingTarget.firstInstanceId;
+  }
   if (effect.type === 'support') {
     if (effect.excludeSelf && card.instanceId === pendingTarget.sourceInstanceId) return false;
     return def.type === 'creature' && !(pendingTarget.chosenInstanceIds ?? []).includes(card.instanceId);
@@ -618,6 +649,12 @@ export function isLegalPendingTarget(state: GameState, pendingTarget: NonNullabl
   if (effect.type === 'putTargetNonlandPermanentInLibraryOwnersChoice') {
     return def.type !== 'land';
   }
+  if (effect.type === 'gainControlOfTargetNoncreatureArtifactPermanent') {
+    return def.type === 'artifact';
+  }
+  if (effect.type === 'mayAttachTargetControlledEquipmentToSelf') {
+    return def.type === 'artifact' && !!def.equipCost && ownerId === pendingTarget.controllerId;
+  }
   const isFlyingCreature = def.type === 'creature' && hasKeyword(def, 'flying');
   return (
     effect.targetFilter === 'anyPermanent' ||
@@ -629,7 +666,8 @@ export function isLegalPendingTarget(state: GameState, pendingTarget: NonNullabl
     (effect.targetFilter === 'enchantment' && def.type === 'enchantment') ||
     (effect.targetFilter === 'creatureWithDamageMarked' && def.type === 'creature' && card.damageMarked > 0) ||
     (effect.targetFilter === 'land' && def.type === 'land') ||
-    (effect.targetFilter === 'creature' && def.type === 'creature')
+    (effect.targetFilter === 'creature' && def.type === 'creature') ||
+    (effect.targetFilter === 'opponentArtifactOrLand' && (def.type === 'artifact' || def.type === 'land') && ownerId !== pendingTarget.controllerId)
   );
 }
 
@@ -1011,6 +1049,28 @@ export function moveCreaturesToGraveyard(state: GameState, deadIds: string[], ve
   if (deadIds.length === 0) return state;
   let next = state;
 
+  // "Whenever equipped creature dies, [effects]" (Skullclamp) - captured
+  // HERE, before detachEverythingFrom below severs the attachment, since
+  // that's the only moment this engine can still see it. Queued into
+  // GameState.pendingEquipmentDeathEffects for engine/effects.ts:
+  // resolveOnDeathTriggers to actually resolve (this file can't call
+  // resolveCardEffects itself without a circular import).
+  const newEquipmentDeathEffects: { effects: CardEffect[]; sourceInstanceId: string; controllerId: string }[] = [];
+  for (const id of deadIds) {
+    for (const p2 of next.players) {
+      for (const c of p2.zones.battlefield) {
+        if (c.attachedToInstanceId !== id) continue;
+        const cDef = getCardDefinition(c.defId);
+        if (cDef.equipGrantsOnDeath && cDef.equipGrantsOnDeath.length > 0) {
+          newEquipmentDeathEffects.push({ effects: cDef.equipGrantsOnDeath, sourceInstanceId: c.instanceId, controllerId: p2.id });
+        }
+      }
+    }
+  }
+  if (newEquipmentDeathEffects.length > 0) {
+    next = { ...next, pendingEquipmentDeathEffects: [...next.pendingEquipmentDeathEffects, ...newEquipmentDeathEffects] };
+  }
+
   for (const id of deadIds) {
     next = detachEverythingFrom(next, id);
   }
@@ -1110,7 +1170,7 @@ export function moveCreaturesToGraveyard(state: GameState, deadIds: string[], ve
     // owner's own zones in a second updatePlayer call below; battlefield
     // removal and any death-triggered tokens still happen on `player.id`
     // (the CONTROLLER'S array/side), since that's unaffected by ownership.
-    const graveyardMap = (d: CardInstance) => ({ ...d, defId: frontFaceDefId(d.defId), damageMarked: 0, tookDeathtouchDamage: false });
+    const graveyardMap = (d: CardInstance) => ({ ...d, defId: frontFaceDefId(d.defId), damageMarked: 0, tookDeathtouchDamage: false, graveyardEntrySource: 'battlefield' as const });
     const exileMap = (d: CardInstance) => ({ ...d, damageMarked: 0, tookDeathtouchDamage: false });
     const ownGraveyard = toGraveyard.filter((d) => d.ownerId === player.id).map(graveyardMap);
     const foreignGraveyard = toGraveyard.filter((d) => d.ownerId !== player.id).map(graveyardMap);
