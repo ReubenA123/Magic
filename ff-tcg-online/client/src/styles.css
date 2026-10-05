@@ -2441,6 +2441,11 @@ button {
   opacity: 0.35;
 }
 
+.card-phased-out {
+  opacity: 0.25;
+  filter: grayscale(0.6);
+}
+
 .card-action-button:disabled {
   opacity: 0.35;
   cursor: not-allowed;

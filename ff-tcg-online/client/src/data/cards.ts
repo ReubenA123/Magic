@@ -85,6 +85,7 @@ export const CARD_POOL: CardDefinition[] = [
     '“Relm\u2109s inside!”\n'+
     '—Strago Magus' ,
     imagePath:'/assets/cards/anger.webp',
+    grantsControlledCreaturesKeywordWhileInGraveyard: { keyword: 'haste', requiresControlledLandName: 'Mountain' },
   },
   {
     id: 'aerith-gainsborough',
@@ -152,6 +153,21 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'Whenever this creature or another creature or artifact you control dies, target opponent loses 1 life and you gain 1 life.',
     imagePath: '/assets/cards/al-bhed-salvagers.webp',
     onAnyDeathDrain: { opponentLifeLoss: 1, controllerLifeGain: 1 },
+  },
+  {
+    id:'alisaie-leveilleur',
+    name:'Alisaie Leveilleur',
+    type:'creature',
+    subtype:'Legendary Creature \u2014 Elf Wizard',
+    costLabel:'{2}{W}',
+    power: 3,
+    toughness: 2,
+    text:'Partner with Alphinaud Leveilleur (When this creature enters, target player may put Alphinaud Leveilleur into their hand from their library, then shuffle.)\n'+
+    'First strike\n'+
+    'Dualcast — The second spell you cast each turn costs {2} less to cast.',
+    imagePath:'/assets/cards/alisaie-leveilleur.webp',
+    onEnter: [{ type: 'mayPutExactNamedCardFromLibraryToHandForTargetPlayer', name: 'Alphinaud Leveilleur' }],
+    reducesCastCostForSecondSpellEachTurn: 2,
   },
   {
     id: 'altered-ego',
@@ -227,6 +243,37 @@ export const CARD_POOL: CardDefinition[] = [
     // includes any mana symbols in the commander's rules/reminder text,
     // which this engine has no generic way to derive from CardDefinition.
     producesMana: 'commanderColorIdentity',
+  },
+  {
+    id:'archfiend-of-depravity',
+    name:'Archfiend of Depravity',
+    type:'creature',
+    subtype:'Creature Demon',
+    costLabel:'{3}{B}{B}',
+    power: 5,
+    toughness: 5,
+    text:'Flying\n'+
+    'At the beginning of each opponent\u2019s end step, that player chooses up to two creatures they control, then sacrifices the rest.\n'+
+    'Ancient monsters that had long been sealed away were released when the world was ripped apart.',
+    imagePath:'/assets/cards/archfiend-of-depravity.webp',
+    onOpponentEndStep: [{ type: 'chooseUpToNCreaturesSacrificeRest', keepCount: 2 }],
+  },
+  {
+    id:'ardbert-warrior-of-darkness',
+    name:'Ardbert, Warrior of Darkness',
+    type:'creature',
+    subtype:'Legendary Creature \u2014 Spirit Warrior',
+    costLabel: '{1}{W}{B}',
+    power: 2,
+    toughness: 2,
+    text:'Whenever you cast a white spell, put a +1/+1 counter on each legendary creature you control. They gain vigilance until end of turn.\n'+
+    'Whenever you cast a black spell, put a +1/+1 counter on each legendary creature you control. They gain menace until end of turn.\n'+
+    '“Always we took the burden of fighting upon ourselves. That\u2019s what heroes do, isn\u2019t it?”',
+    imagePath:'/assets/cards/ardbert-warrior-of-darkness.webp',
+    onOwnCastColorSpellTrigger: [
+      { color: 'W', effects: [{ type: 'putCounterOnEachControlledCreatureMatchingSubtype', subtype: 'Legendary', counterLabel: '+1/+1', counterAmount: 1, grantKeyword: 'vigilance' }] },
+      { color: 'B', effects: [{ type: 'putCounterOnEachControlledCreatureMatchingSubtype', subtype: 'Legendary', counterLabel: '+1/+1', counterAmount: 1, grantKeyword: 'menace' }] },
+    ],
   },
   {
     id: 'ardyn-the-usurper',
@@ -326,6 +373,25 @@ export const CARD_POOL: CardDefinition[] = [
     ],
   },
   {
+    id:'austere-command',
+    name:'Austere Command',
+    type:'sorcery',
+    costLabel:'{4}{W}{W}',
+    text:'Choose two —\n'+
+    '• Destroy all artifacts.\n'+
+    '• Destroy all enchantments.\n'+
+    '• Destroy all creatures with mana value 3 or less.\n'+
+    '• Destroy all creatures with mana value 4 or greater.',
+    imagePath:'/assets/cards/austere-command.webp',
+    chooseExactlyNModes: 2,
+    chooseModes: [
+      { label: 'Destroy all artifacts.', effects: [{ type: 'destroyAll', targetFilter: 'artifact' }] },
+      { label: 'Destroy all enchantments.', effects: [{ type: 'destroyAll', targetFilter: 'enchantment' }] },
+      { label: 'Destroy all creatures with mana value 3 or less.', effects: [{ type: 'destroyAll', targetFilter: 'creatureWithManaValueAtMost', maxManaValue: 3 }] },
+      { label: 'Destroy all creatures with mana value 4 or greater.', effects: [{ type: 'destroyAll', targetFilter: 'creatureWithManaValueAtLeast', minManaValue: 4 }] },
+    ],
+  },
+  {
     id: 'balamb-garden-seed-academy',
     name: 'Balamb Garden Seed Academy',
     type: 'land',
@@ -375,6 +441,20 @@ export const CARD_POOL: CardDefinition[] = [
     imagePath: '/assets/cards/balamb-t-rexaur.webp',
   },
   {
+    id:'baleful-strix',
+    name:'Baleful Strix',
+    type:'creature',
+    subtype:'Artifact Creature Bird',
+    costLabel:'{U}{B}',
+    power: 1,
+    toughness: 1,
+    text:'Flying, deathtouch\n'+
+    'When this creature enters, draw a card.\n'+
+    'Skatenes are mind-quickened owls, granted sentience via powerful magicks much in the same way toads are transformed into poroggos.',
+    imagePath:'/assets/cards/baleful-strix.webp',
+    onEnter: [{ type: 'drawCards', amount: 1 }],
+  },
+  {
     id: 'balthier-and-fran',
     name: 'Balthier and Fran',
     type: 'creature',
@@ -421,6 +501,8 @@ export const CARD_POOL: CardDefinition[] = [
     'Whenever you attack, you may pay {1} and discard a card. If you do, draw a card.\n'+
     '“You are this world\u2019s last ray of light… our final hope.”',
     imagePath:'/assets/cards/banon-the-returners-leader.webp',
+    grantsOncePerTurnCastCreatureFromGraveyardIfNotFromBattlefield: true,
+    onAttack: [{ type: 'mayPayManaThenEffect', manaCost: '{1}', effects: [{ type: 'loot', drawCount: 1, discardCount: 1 }] }],
   },
   {
     id: 'bards-bow',
@@ -653,6 +735,19 @@ export const CARD_POOL: CardDefinition[] = [
     imagePath: '/assets/cards/cactuar.webp',
   },
   {
+    id:'cait-sith-fortune-teller',
+    name:'Cait Sith, Fortune Teller',
+    type:'creature',
+    subtype:'Legendary Artifact Creature \u2014 Cat Moogle',
+    costLabel:'{3}{R}',
+    power: 3,
+    toughness: 3,
+    text:'Lucky Slots — At the beginning of combat on your turn, scry 1, then exile the top card of your library. You may play that card this turn. When you exile a card this way, target creature you control gets +X/+0 until end of turn, where X is that card\u2019s mana value.\n'+
+    '“I\u2019m friend to one and all, thanks to my crystal ball!”',
+    imagePath:'/assets/cards/cait-sith-fortune-teller.webp',
+    onOwnCombatBegin: [{ type: 'scryThenExileTopPlayableThisTurnThenPumpTargetByExiledManaValue' }],
+  },
+  {
     id: 'call-the-mountain-chocobo',
     name: 'Call the Mountain Chocobo',
     type: 'sorcery',
@@ -746,6 +841,17 @@ export const CARD_POOL: CardDefinition[] = [
     imagePath: '/assets/cards/chasm-skulker.webp',
     onDrawTrigger: { counterLabel: '+1/+1', counterAmount: 1 },
     onDeathCreateTokensEqualToOwnCounters: { counterLabel: '+1/+1', tokenId: 'token-squid' },
+  },
+  {
+    id:'chaos-warp',
+    name:'Chaos Warp',
+    type:'instant',
+    costLabel:'{2}{R}',
+    text:'The owner of target permanent shuffles it into their library, then reveals the top card of their library. If it\u2019s a permanent card, they put it onto the battlefield.\n'+
+    '“I\u2019m getting less human…”\n'+
+    '—Vincent Valentine',
+    imagePath:'/assets/cards/chaos-warp.webp',
+    onCast: [{ type: 'shuffleTargetPermanentIntoLibraryThenRevealTop' }],
   },
   {
     id: 'chocobo-kick',
@@ -845,6 +951,17 @@ export const CARD_POOL: CardDefinition[] = [
     imagePath: '/assets/cards/clash-of-the-eikons.webp',
   },
   {
+    id:'clever-concealment',
+    name:'Clever Concealment',
+    type:'instant',
+    costLabel:'{2}{W}{W}',
+    text:'Convoke (Your creatures can help cast this spell. Each creature you tap while casting this spell pays for {1} or one mana of that creature\u2019s color.)\n'+
+    'Any number of target nonland permanents you control phase out. (Treat them and anything attached to them as though they don’t exist until your next turn.)',
+    imagePath:'/assets/cards/clever-concealment.webp',
+    convoke: true,
+    onCast: [{ type: 'phaseOutAnyNumberOfTargetControlledNonlandPermanents' }],
+  },
+  {
     id: 'clive-ifrits-dominant',
     name: "Clive, Ifrit's Dominant",
     type: 'creature',
@@ -913,6 +1030,41 @@ export const CARD_POOL: CardDefinition[] = [
         playHideawayCard: true,
         effectText: 'You may play the exiled card without paying its mana cost if you control four or more legendary creatures.',
       },
+    ],
+  },
+  {
+    id: 'cloud-ex-soldier',
+    name: 'Cloud, Ex-Soldier',
+    type: 'creature',
+    subtype: 'Legendary Creature \u2014 Human Soldier Mercenary',
+    costLabel: '{2}{R}{G}{W}',
+    power: 4,
+    toughness: 4,
+    text:'Haste\n'+
+    'When Cloud enters, attach up to one target Equipment you control to it.\n'+
+    'Whenever Cloud attacks, draw a card for each equipped attacking creature you control. Then if Cloud has power 7 or greater, create two Treasure tokens.',
+    imagePath:'/assets/cards/cloud-ex-soldier.webp',
+    onEnter: [{ type: 'mayAttachTargetControlledEquipmentToSelf' }],
+    onAttack: [{ type: 'drawForEquippedAttackersThenEffectsIfPowerAtLeast', minPower: 7, thenEffects: [{ type: 'createToken', tokenId: 'token-treasure', count: 2 }] }],
+  },
+  {
+    id:'cloud-s-limit-break',
+    name:'Cloud\u2019s Limit Break',
+    type:'instant',
+    costLabel:'{1}{W}',
+    text:'Tiered (Choose one additional cost.)\n'+
+    '• Cross-Slash — {0} — Destroy target tapped creature.\n'+
+    '• Blade Beam — {1} — Destroy any number of target tapped creatures with different controllers.\n'+
+    '• Omnislash — {3}{W} — Destroy all tapped creatures.',
+    imagePath:'/assets/cards/cloud-s-limit-break.webp',
+    tieredModes: [
+      { label: 'Cross-Slash — {0} — Destroy target tapped creature.', additionalCost: '{0}', effects: [{ type: 'destroyTarget', targetFilter: 'tappedCreature' }] },
+      {
+        label: 'Blade Beam — {1} — Destroy any number of target tapped creatures with different controllers.',
+        additionalCost: '{1}',
+        effects: [{ type: 'destroyAnyNumberOfTappedCreaturesWithDifferentControllers' }],
+      },
+      { label: 'Omnislash — {3}{W} — Destroy all tapped creatures.', additionalCost: '{3}{W}', effects: [{ type: 'destroyAll', targetFilter: 'tappedCreature' }] },
     ],
   },
   {
@@ -1047,6 +1199,21 @@ export const CARD_POOL: CardDefinition[] = [
         effects: [{ type: 'putCounterOnEachCreatureTargetPlayerControls', counterLabel: '+1/+1', counterAmount: 1 }],
       },
     ],
+  },
+  {
+    id: 'colossus-hammer',
+    name: 'Colossus Hammer',
+    type: 'artifact',
+    subtype: 'equipment',
+    costLabel: '{1}',
+    text:'Equipped creature gets +10/+10 and loses flying.\n'+
+    'Equip {8} ({8}: Attach to target creature you control. Equip only as a sorcery.)\n'+
+    '“Sorry to keep you waiting. It\u2019s me! I\u2019ll handle the rest!”',
+    imagePath:'/assets/cards/colossus-hammer.webp',
+    equipBuff: { power: 10, toughness: 10 },
+    equipRemovesKeyword: 'flying',
+    equipCost: '{8}',
+    attachesTo: 'creature',
   },
   {
     id: 'combat-tutorial',
@@ -1208,6 +1375,44 @@ export const CARD_POOL: CardDefinition[] = [
     imagePath:'/assets/cards/demon-wall.webp'
   },
   {
+    id:'demolition-field',
+    name:'Demolition Field',
+    type:'land',
+    costLabel:'-',
+    text:'{T}: Add {C}.\n'+
+    '{2}, {T}, Sacrifice this land: Destroy target nonbasic land an opponent controls. That land’s controller may search their library for a basic land card, put it onto the battlefield, then shuffle. You may search your library for a basic land card, put it onto the battlefield, then shuffle.',
+    imagePath:'/assets/cards/demolition-field.webp',
+    producesMana: 'C',
+    abilities: [
+      {
+        id: 'demolition-field-destroy',
+        label: 'Sacrifice: Destroy Nonbasic Land',
+        cost: { manaLabel: '{2}', tap: true, sacrificeSelf: true },
+        effects: [{ type: 'destroyTarget', targetFilter: 'opponentNonbasicLand', thenBothPlayersMaySearchBasicLandToBattlefield: true }],
+        effectText: 'Destroy target nonbasic land an opponent controls. That land’s controller may search their library for a basic land card, put it onto the battlefield, then shuffle. You may search your library for a basic land card, put it onto the battlefield, then shuffle.',
+      },
+    ],
+  },
+  {
+    id:'desolate-mire',
+    name:'Desolate Mire',
+    type:'land',
+    costLabel:'-',
+    text:'{1}, {T}: Add {W}{B}.\n'+
+    '“To the south of here lies the Veldt. \u2019Tis a wild and dangerous land, inhabited by all manner of ferocious beasts…”\n'+
+    '-—Cyan Garamonde',
+    imagePath:'/assets/cards/desolate-mire.webp',
+    abilities: [
+      {
+        id: 'desolate-mire-filter',
+        label: 'Add {W}{B}',
+        cost: { manaLabel: '{1}', tap: true },
+        effects: [{ type: 'addMana', colors: { W: 1, B: 1 } }],
+        effectText: 'Add {W}{B}.',
+      },
+    ],
+  },
+  {
     id:'destroy-evil',
     name:'Destroy Evil',
     type:'instant',
@@ -1321,6 +1526,18 @@ export const CARD_POOL: CardDefinition[] = [
     text: "Flying\n When this creature enters, create a 1/1 colorless Hero creature token.",
     onEnter: [{ type: 'createToken', tokenId: 'token-hero' }],
     imagePath: '/assets/cards/dragoon-s-wyvern.webp'
+  },
+  {
+    id:'dragonskull-summit',
+    name:'Dragon Summit',
+    type:'land',
+    costLabel:'-',
+    text:'This land enters tapped unless you control a Swamp or a Mountain.\n'+
+    '{T}: Add {B} or {R}.\n'+
+    'Eight dragons seal away its awesome might; the might of the one called “Crusader.” And when the eight shall fall, the one again shall rise.',
+    imagePath:'/assets/cards/dragonskull-summit.webp',
+    entersTappedUnlessControlLandNames: ['Swamp', 'Mountain'],
+    producesMana: ['B', 'R'],
   },
   {
     id: 'dreams-of-laguna',
@@ -1576,6 +1793,19 @@ export const CARD_POOL: CardDefinition[] = [
     '—Tromell, Seymour\u2019s butler',
     imagePath:'/assets/cards/exotic-orchard.webp',
     producesMana: 'opponentLandColors',
+  },
+  {
+    id:'explorer-s-scope',
+    name:'Explorer\u2019s Scope',
+    type:'artifact',
+    subtype:'equipment artifact',
+    costLabel:'{1}',
+    text:'Whenever equipped creature attacks, look at the top card of your library. If it\u2019s a land card, you may put it onto the battlefield tapped.\n'+
+    'Equip {1} ({1}: Attach to target creature you control. Equip only as a sorcery.)',
+    imagePath:'/assets/cards/explorer-s-scope.webp',
+    equipGrantsOnAttack: [{ type: 'mayPutTopLandOntoBattlefieldTapped' }],
+    equipCost: '{1}',
+    attachesTo: 'creature',
   },
   {
     id: 'fang-fearless-l-cie',
@@ -1915,6 +2145,21 @@ export const CARD_POOL: CardDefinition[] = [
     onEnter: [{ type: 'grantPreventCombatDamageConvertToCounterToTargetOwnCreature', counterLabel: '+1/+1' }],
   },
   {
+    id:'general-leo-cristophe',
+    name:'General Leo Christophe',
+    type:'creature',
+    subtype:'Legendary Creature Human Soldier',
+    costLabel:'{4}{W}',
+    power: 2,
+    toughness: 2,
+    text:'When General Leo Cristophe enters, return up to one target creature card with mana value 3 or less from your graveyard to the battlefield. Then put a +1/+1 counter on General Leo Cristophe for each creature you control.\n'+
+    '“You\nre a human being before you\nre a soldier.”',
+    imagePath:'/assets/cards/general-leo-cristophe.webp',
+    onEnter: [
+      { type: 'reanimateTargetFromGraveyard', maxManaValue: 3, optional: true, thenPutCounterOnSourceEqualToControlledCreatureCount: { counterLabel: '+1/+1' } },
+    ],
+  },
+  {
     id:'generous-patron',
     name:'Generous Patron',
     type:'creature',
@@ -2031,6 +2276,18 @@ export const CARD_POOL: CardDefinition[] = [
     text: "XX Tap:Copy target activated or triggered ability you control X times. You may choose new targets for the copies. " +
       "This ability can\u2019t be copied and X can\u2019t be 0. (Mana abilities can\u2019t be targeted.)",
     imagePath: '/assets/cards/gogo-master-of-mimicry.webp'
+  },
+  {
+    id: 'gogo-mysterious-mime',
+    name: 'Gogo, Mysterious Mime',
+    costLabel: '{3}{R}',
+    type: 'creature',
+    subtype: 'Legendary Creature Wizard',
+    power: 2,
+    toughness: 2,
+    text:'At the beginning of combat on your turn, you may have Gogo become a copy of another target creature you control until end of turn, except its name is Gogo, Mysterious Mime. If you do, Gogo and that creature each get +2/+0 and gain haste until end of turn and attack this turn if able.',
+    imagePath: '/assets/cards/gogo-mysterious-mime.webp',
+    onOwnCombatBegin: [{ type: 'mayBecomeCopyOfAnotherControlledCreatureThenBuffBoth', power: 2, toughness: 0, grantKeyword: 'haste' }],
   },
   {
     id: 'gohn-town-of-ruin',
@@ -2376,6 +2633,18 @@ export const CARD_POOL: CardDefinition[] = [
         effectText: 'You gain 3 life.',
       },
     ],
+  },
+  {
+    id:'into-the-story',
+    name:'Into the Story',
+    costLabel:'{5}{U}{U}',
+    type:'instant',
+    text:'This spell costs {3} less to cast if an opponent has seven or more cards in their graveyard.\n'+
+    'Draw four cards.\n'+
+    '“Hear… feel… think…”',
+    imagePath:'/assets/cards/into-the-story.webp',
+    costReductionIfOpponentGraveyardAtLeast: { minCount: 7, amount: 3 },
+    onCast: [{ type: 'drawCards', amount: 4 }],
   },
   {
     id: 'iron-giant',
@@ -2727,6 +2996,9 @@ export const CARD_POOL: CardDefinition[] = [
     '“We came to tell you our memories. Come, planet! Show us your answer!”\n'+
     '—Cloud Strife',
     imagePath:'/assets/cards/lifestream-s-blessing.webp',
+    onCast: [{ type: 'drawCardsEqualToGreatestPower' }],
+    onCastFromExileEffects: [{ type: 'gainLifeEqualToTwiceGreatestPower' }],
+    foretell: { cost: '{4}{G}' },
   },
   {
     id: 'lightning-army-of-one',
@@ -3060,6 +3332,39 @@ export const CARD_POOL: CardDefinition[] = [
     imagePath: '/assets/cards/memories-returning.webp'
   },
   {
+    id:'meteor-golem',
+    name:'Meteor Golem',
+    costLabel:'{7}',
+    type:'creature',
+    subtype:'Artifact Creature \u2014 Golem',
+    power: 3,
+    toughness: 3,
+    text:'When this creature enters, destroy target nonland permanent an opponent controls.\n'+
+    'A mechanical monster equipped with a massive arsenal of weapons and attacks, including its signature Wave Cannon.',
+    imagePath:'/assets/cards/meteor-golem.webp',
+    onEnter: [{ type: 'destroyTarget', targetFilter: 'opponentNonlandPermanent' }],
+  },
+  {
+    id:'mind-stone',
+    name:'Mind Stone',
+    costLabel:'{2}',
+    type:'artifact',
+    text:'{T}: Add {C}.\n'+
+    '{1}, {T}, Sacrifice this artifact: Draw a card.\n'+
+    'A relic that greatly enhances the magical power of its wielder.',
+    imagePath:'/assets/cards/mind-stone.webp',
+    producesMana: 'C',
+    abilities: [
+      {
+        id: 'mind-stone-draw',
+        label: 'Sacrifice: Draw a Card',
+        cost: { manaLabel: '{1}', tap: true, sacrificeSelf: true },
+        effects: [{ type: 'drawCards', amount: 1 }],
+        effectText: 'Draw a card.',
+      },
+    ],
+  },
+  {
     id: 'midgar-city-of-mako',
     name: 'Midgar, City of Mako',
     costLabel: '-',
@@ -3177,6 +3482,17 @@ export const CARD_POOL: CardDefinition[] = [
     // The "if cast from a graveyard, discard your hand and draw four cards"
     // flashback-conditional bonus is deferred - onCast has no way to know
     // whether it's resolving as a normal cast or a flashback cast.
+  },
+  {
+    id:'night-s-whisper',
+    name:'Night\u2019s Whisper',
+    costLabel:'{1}{B}',
+    type:'sorcery',
+    text:'You draw two cards and lose 2 life.\n'+
+    '“My love… you made me so happy. Thank you…”\n'+
+    '—Elayne Garamonde',
+    imagePath:'/assets/cards/night-s-whisper.webp',
+    onCast: [{ type: 'drawCards', amount: 2 }, { type: 'loseLife', amount: 2 }],
   },
   {
     id: 'ninja-s-blades',
@@ -4510,6 +4826,10 @@ export const CARD_POOL: CardDefinition[] = [
     '“My mother\u2019s name is Jenova… \u2019The Jenova Project\u2019… is this just a coincidence?”\n'+
     '—Sephiroth',
     imagePath:'/assets/cards/skullclamp.webp',
+    equipBuff: { power: 1, toughness: -1 },
+    equipGrantsOnDeath: [{ type: 'drawCards', amount: 2 }],
+    equipCost: '{1}',
+    attachesTo: 'creature',
   },
   {
     id:'skycloud-expanse',
@@ -4736,7 +5056,16 @@ export const CARD_POOL: CardDefinition[] = [
     text:'{1}, {T}: Add {R}{W}.\n'+
     '“You there! We\u2019re about to storm the castle. The two of you will join the assault squad. Get moving!”\n'+
     '-—Imperial soldier',
-    imagePath:'/assets/cards/sunscorched-divide.webp'
+    imagePath:'/assets/cards/sunscorched-divide.webp',
+    abilities: [
+      {
+        id: 'sunscorched-divide-filter',
+        label: 'Add {R}{W}',
+        cost: { manaLabel: '{1}', tap: true },
+        effects: [{ type: 'addMana', colors: { R: 1, W: 1 } }],
+        effectText: 'Add {R}{W}.',
+      },
+    ],
   },
   {
     id: 'summon-anima',
@@ -4880,6 +5209,13 @@ export const CARD_POOL: CardDefinition[] = [
     'II, III, IV — Add {R} for each lore counter on this Saga. You may cast an instant or sorcery card exiled with this Saga, and mana of any type can be spent to cast that spell.\n'+
     'Flying, haste',
     imagePath:'/assets/cards/summon-esper-valigarmanda.webp',
+    saga: {
+      chapters: [
+        { numbers: [1], effects: [{ type: 'exileTargetGraveyardCard', instantOrSorceryOnly: true, optional: true }] },
+        { numbers: [2, 3, 4], effects: [{ type: 'addManaEqualToOwnLoreCounter', color: 'R' }] },
+      ],
+      sacrificeAfterFinalChapter: true,
+    },
   },
   {
     // Was '' (an empty id) - getCardDefinition('') could never find this card,
@@ -4976,6 +5312,29 @@ export const CARD_POOL: CardDefinition[] = [
       chapters: [
         { numbers: [1, 2], effects: [{ type: 'discardUpToThenDrawThatMany', maxCount: 1 }] },
         { numbers: [3, 4], effects: [{ type: 'addMana', colors: { R: 1 } }] },
+      ],
+      sacrificeAfterFinalChapter: true,
+    },
+  },
+  {
+    id:'summon-good-king-mog-xii',
+    name:'Summon: Good King Mog XII',
+    costLabel:'{4}{W}',
+    type:'creature',
+    subtype:'Enchantment Creature \u2014 Saga Moogle',
+    power: 4,
+    toughness: 4,
+    text:'(As this Saga enters and after your draw step, add a lore counter. Sacrifice after IV.)\n'+
+    'I — Create two 1/2 white Moogle creature tokens with lifelink.\n'+
+    'II, III — Whenever you cast a noncreature spell this turn, create a token that\u2019s a copy of a non-Saga token you control.\n'+
+    'IV — Put two +1/+1 counters on each other Moogle you control.\n'+
+    'Flying, lifelink',
+    imagePath:'/assets/cards/summon-good-king-mog-xii.webp',
+    saga: {
+      chapters: [
+        { numbers: [1], effects: [{ type: 'createToken', tokenId: 'token-moogle', count: 2 }] },
+        { numbers: [2, 3], effects: [{ type: 'grantTemporaryNoncreatureCastCreatesTokenCopy' }] },
+        { numbers: [4], effects: [{ type: 'putCounterOnEachControlledCreatureMatchingSubtype', subtype: 'Moogle', counterLabel: '+1/+1', counterAmount: 2, excludeSelf: true }] },
       ],
       sacrificeAfterFinalChapter: true,
     },
@@ -5240,6 +5599,11 @@ export const CARD_POOL: CardDefinition[] = [
     'Equipped creature gets +2/+2 and has vigilance and “{T}: Add {G}.”\n'+
     'Equip {2}',
     imagePath:'/assets/cards/summoning-materia.webp',
+    equipBuff: { power: 2, toughness: 2 },
+    equipGrantsKeyword: 'vigilance',
+    equipGrantsManaAbility: 'G',
+    equipCost: '{2}',
+    attachesTo: 'creature',
   },
   {
     id:'summoner-s-sending',
@@ -5270,6 +5634,8 @@ export const CARD_POOL: CardDefinition[] = [
     'Whenever this creature enters or attacks, you may return target permanent card with mana value 3 or less from your graveyard to the battlefield.\n'+
     'Wrexsoul is formed of the countless souls lost during the conflict one thousand years past…',
     imagePath:'/assets/cards/sun-titan.webp',
+    onEnter: [{ type: 'reanimateTargetFromGraveyard', anyPermanentInsteadOfCreature: true, maxManaValue: 3, optional: true }],
+    onAttack: [{ type: 'reanimateTargetFromGraveyard', anyPermanentInsteadOfCreature: true, maxManaValue: 3, optional: true }],
   },
   {
     id:'sunscorch-regent',
@@ -5336,6 +5702,20 @@ export const CARD_POOL: CardDefinition[] = [
     'Equip {2}\n'+
     '“Don\u2019t fight here! You\u2019ll ruin the flowers!”',
     imagePath:'/assets/cards/sword-of-the-animist.webp',
+    equipBuff: { power: 1, toughness: 1 },
+    equipGrantsOnAttack: [{ type: 'mayEffect', effects: [{ type: 'searchLibraryForBasicLand', toBattlefieldTapped: true }] }],
+    equipCost: '{2}',
+    attachesTo: 'creature',
+  },
+  {
+    id:'swords-to-plowshares',
+    name:'Swords to Plowshares',
+    costLabel:'{W}',
+    type:'instant',
+    text:'Exile target creature. Its controller gains life equal to its power.\n'+
+    '“The refreshing caress of the wind, the soothing whisper of the waves… how liberating!”',
+    imagePath:'/assets/cards/swords-to-plowshares.webp',
+    onCast: [{ type: 'exileTargetCreatureThenControllerGainsLifeEqualToPower' }],
   },
   {
     id: 'syncopate',
@@ -5447,6 +5827,10 @@ export const CARD_POOL: CardDefinition[] = [
     text:'Trance — At the beginning of combat on your turn, mill two cards. Terra gains flying until end of turn.\n'+
     'Whenever Terra deals combat damage to a player, you may pay {2}. When you do, return target creature card with power 3 or less from your graveyard to the battlefield tapped.',
     imagePath:'/assets/cards/terra-herald-of-hope.webp',
+    onOwnCombatBegin: [{ type: 'millSelf', count: 2 }, { type: 'pumpSelf', power: 0, toughness: 0, grantKeyword: 'flying' }],
+    onCombatDamageToPlayer: [
+      { type: 'mayPayManaThenEffect', manaCost: '{2}', effects: [{ type: 'reanimateTargetFromGraveyard', maxPower: 3, forceEntersTapped: true }] },
+    ],
   },
   {
     id: 'terra-magical-adept',
@@ -6058,6 +6442,8 @@ export const CARD_POOL: CardDefinition[] = [
     text:'Permanents you control gain indestructible until end of turn. If this spell was cast from exile, prevent all damage that would be dealt to you this turn.\n'+
     'Foretell {2}{W} (During your turn, you may pay {2} and exile this card from your hand face down. Cast it on a later turn for its foretell cost.)',
     imagePath:'/assets/cards/ultimate-magic-holy.webp',
+    onCast: [{ type: 'grantKeywordsToControlledPermanents', keywords: ['indestructible'] }],
+    foretell: { cost: '{2}{W}' },
   },
   {
     id:'ultimate-magic-meteor',
@@ -6067,6 +6453,9 @@ export const CARD_POOL: CardDefinition[] = [
     text:'Ultimate Magic: Meteor deals 7 damage to each creature. If this spell was cast from exile, for each opponent, choose an artifact or land that player controls. Destroy the chosen permanents.\n'+
     'Foretell {5}{R} (During your turn, you may pay {2} and exile this card from your hand face down. Cast it on a later turn for its foretell cost.)',
     imagePath:'/assets/cards/ultimate-magic-meteor.webp',
+    onCast: [{ type: 'damageEachCreature', amount: 7 }],
+    onCastFromExileEffects: [{ type: 'destroyTarget', targetFilter: 'opponentArtifactOrLand' }],
+    foretell: { cost: '{5}{R}' },
   },
   {
     id: 'ultima-origin-of-oblivion',
@@ -6189,7 +6578,17 @@ export const CARD_POOL: CardDefinition[] = [
     '• Discard your hand, then draw four cards.\n'+
     '• Umaro deals 5 damage to any target.',
     imagePath:'/assets/cards/umaro-raging-yeti.webp',
-  },  
+    onOwnCombatBegin: [
+      {
+        type: 'chooseOneAtRandom',
+        options: [
+          [{ type: 'buffOtherCreaturesYouControl', power: 3, toughness: 0, grantKeyword: 'trample' }],
+          [{ type: 'discardHandThenDraw', drawCount: 4 }],
+          [{ type: 'damageAnyTarget', amount: 5 }],
+        ],
+      },
+    ],
+  },
   {
     id: 'undercity-dire-rat',
     name: 'Undercity Dire Rat',
@@ -6606,6 +7005,8 @@ export const CARD_POOL: CardDefinition[] = [
     text:'Ninjutsu {1}{R} ({1}{R}, Return an unblocked attacker you control to hand: Put this card onto the battlefield from your hand tapped and attacking.)\n'+
     'When Yuffie enters, gain control of target noncreature artifact for as long as you control Yuffie. Then you may attach an Equipment you control to Yuffie.',
     imagePath:'/assets/cards/yuffie-materia-hunter.webp',
+    ninjutsu: { cost: '{1}{R}' },
+    onEnter: [{ type: 'gainControlOfTargetNoncreatureArtifactPermanent' }],
   },
   {
     id: 'yuna-s-decision',

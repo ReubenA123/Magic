@@ -144,6 +144,41 @@ export function useLocalGame(initialState: GameState) {
     return () => clearTimeout(timer);
   }, [state, dispatch]);
 
+  // --- AI: choose a player for its own pending player-target (Combat ------
+  // Tutorial, Collective Effort, Alisaie Leveilleur) ------------------------
+  // Same "nobody else can choose for it" problem as pendingTarget above - a
+  // pre-existing gap (this pending state had no AI resolver at all before).
+  // Deliberately simple: always targets itself, same as every other
+  // "not remotely optimal" AI heuristic in this file.
+  useEffect(() => {
+    if (state.winnerId) return;
+    if (state.mutualAdjustment.status !== 'inactive') return;
+    const pending = state.pendingPlayerTarget;
+    if (!pending || pending.controllerId !== AI_PLAYER_ID) return;
+
+    const timer = setTimeout(() => {
+      dispatch({ type: 'CHOOSE_PLAYER_TARGET', targetPlayerId: AI_PLAYER_ID }, AI_PLAYER_ID);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [state, dispatch]);
+
+  // --- AI: resolve its own pending scry-before-exile (Cait Sith, Fortune --
+  // Teller's Lucky Slots) ----------------------------------------------------
+  // Same "nobody else can choose for it" problem again. Deliberately
+  // simple: never bothers scrying to the bottom (always keeps the top card
+  // as-is), same spirit as this file's other "not remotely optimal" choices.
+  useEffect(() => {
+    if (state.winnerId) return;
+    if (state.mutualAdjustment.status !== 'inactive') return;
+    const pending = state.pendingScryBeforeExile;
+    if (!pending || pending.controllerId !== AI_PLAYER_ID) return;
+
+    const timer = setTimeout(() => {
+      dispatch({ type: 'RESOLVE_SCRY_BEFORE_EXILE', toBottom: false }, AI_PLAYER_ID);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [state, dispatch]);
+
   // --- AI: choose a card to discard for its own pending discard ----------
   // Without this, ANY card that makes an opponent discard (Malboro's Bad
   // Breath, Braska's Final Aeon's Jecht Beam, ...) would leave
@@ -406,6 +441,42 @@ export function useLocalGame(initialState: GameState) {
     return () => clearTimeout(timer);
   }, [state, dispatch]);
 
+  // --- AI: resolve its own pending optional pay-mana (Banon's attack -----
+  // trigger; Terra, Herald of Hope's combat-damage trigger) -----------------
+  // Same "nobody else can choose for it" problem as pendingOptionalPayLife
+  // above. Accepts whenever it can actually afford the cost, declines
+  // otherwise.
+  useEffect(() => {
+    if (state.winnerId) return;
+    if (state.mutualAdjustment.status !== 'inactive') return;
+    const pending = state.pendingOptionalPayMana;
+    if (!pending || pending.controllerId !== AI_PLAYER_ID) return;
+
+    const timer = setTimeout(() => {
+      const ai = state.players.find((p) => p.id === AI_PLAYER_ID)!;
+      const canAfford = canPay(ai.manaPool, parseCostLabel(pending.manaCost), 0);
+      dispatch({ type: 'RESOLVE_OPTIONAL_PAY_MANA', accept: canAfford }, AI_PLAYER_ID);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [state, dispatch]);
+
+  // --- AI: resolve its own pending may-put-top-land (Explorer's Scope) ----
+  // Same "nobody else can choose for it" problem again - a free extra land
+  // is always at worst neutral for the controller, so the AI just always
+  // accepts (this pending state is only ever armed once the top card is
+  // already confirmed to be a land).
+  useEffect(() => {
+    if (state.winnerId) return;
+    if (state.mutualAdjustment.status !== 'inactive') return;
+    const pending = state.pendingMayPutTopLandOntoBattlefieldTapped;
+    if (!pending || pending.controllerId !== AI_PLAYER_ID) return;
+
+    const timer = setTimeout(() => {
+      dispatch({ type: 'RESOLVE_MAY_PUT_TOP_LAND_ONTO_BATTLEFIELD_TAPPED', accept: true }, AI_PLAYER_ID);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [state, dispatch]);
+
   // --- AI: resolve its own pending may-effect (Tidus, Yuna's Guardian) ----
   // Same "nobody else can choose for it" problem again - a no-cost "you
   // may" is always at worst neutral for the controller, so the AI just
@@ -628,7 +699,13 @@ export function useLocalGame(initialState: GameState) {
             // tieredModes card in the pool) / first mode - simple but at
             // least it actually casts the spell.
             const chosenTierIndex = d.tieredModes ? 0 : undefined;
-            const chosenModeIndices = d.chooseModes ? [0] : undefined;
+            // chooseExactlyNModes (Austere Command's "Choose two —") needs
+            // exactly that many picks or castCard rejects the whole cast -
+            // just takes the first N modes printed, same "not remotely
+            // optimal" simplicity as the tier/mode-0 picks above.
+            const chosenModeIndices = d.chooseModes
+              ? Array.from({ length: d.chooseExactlyOneMode ? 1 : d.chooseExactlyNModes ?? 1 }, (_, i) => i)
+              : undefined;
             dispatch({ type: 'CAST_CARD', instanceId: castable.instanceId, chosenTierIndex, chosenModeIndices }, AI_PLAYER_ID);
             break;
           }

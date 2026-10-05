@@ -428,6 +428,9 @@ export function isLegalPendingTarget(state: GameState, pendingTarget: NonNullabl
   if (ownerId !== pendingTarget.controllerId && (hasKeywordEffective(def, card, 'hexproof') || hasBoardGrantedKeyword(state, ownerId, card, def, 'hexproof'))) {
     return false;
   }
+  // Phased out - "treated as though it doesn't exist" - never a legal
+  // target for anyone, same unconditional pre-check shape as hexproof above.
+  if (card.phasedOut) return false;
   const effect = pendingTarget.effect;
   if (effect.type === 'tapAndStun') {
     if (ownerId === pendingTarget.controllerId) return false;
@@ -646,6 +649,9 @@ export function isLegalPendingTarget(state: GameState, pendingTarget: NonNullabl
   if (effect.type === 'exileTargetCreatureThenControllerMaySearchBasicLand') {
     return def.type === 'creature';
   }
+  if (effect.type === 'exileTargetCreatureThenControllerGainsLifeEqualToPower') {
+    return def.type === 'creature';
+  }
   if (effect.type === 'putTargetNonlandPermanentInLibraryOwnersChoice') {
     return def.type !== 'land';
   }
@@ -654,6 +660,18 @@ export function isLegalPendingTarget(state: GameState, pendingTarget: NonNullabl
   }
   if (effect.type === 'mayAttachTargetControlledEquipmentToSelf') {
     return def.type === 'artifact' && !!def.equipCost && ownerId === pendingTarget.controllerId;
+  }
+  if (effect.type === 'shuffleTargetPermanentIntoLibraryThenRevealTop') {
+    return true;
+  }
+  if (effect.type === 'destroyAnyNumberOfTappedCreaturesWithDifferentControllers') {
+    return def.type === 'creature' && card.tapped && !(pendingTarget.usedControllerIds ?? []).includes(ownerId);
+  }
+  if (effect.type === 'phaseOutAnyNumberOfTargetControlledNonlandPermanents') {
+    return def.type !== 'land' && ownerId === pendingTarget.controllerId && !(pendingTarget.chosenInstanceIds ?? []).includes(card.instanceId);
+  }
+  if (effect.type === 'mayBecomeCopyOfAnotherControlledCreatureThenBuffBoth') {
+    return def.type === 'creature' && ownerId === pendingTarget.controllerId && card.instanceId !== pendingTarget.sourceInstanceId;
   }
   const isFlyingCreature = def.type === 'creature' && hasKeyword(def, 'flying');
   return (
@@ -667,7 +685,15 @@ export function isLegalPendingTarget(state: GameState, pendingTarget: NonNullabl
     (effect.targetFilter === 'creatureWithDamageMarked' && def.type === 'creature' && card.damageMarked > 0) ||
     (effect.targetFilter === 'land' && def.type === 'land') ||
     (effect.targetFilter === 'creature' && def.type === 'creature') ||
-    (effect.targetFilter === 'opponentArtifactOrLand' && (def.type === 'artifact' || def.type === 'land') && ownerId !== pendingTarget.controllerId)
+    (effect.targetFilter === 'opponentArtifactOrLand' && (def.type === 'artifact' || def.type === 'land') && ownerId !== pendingTarget.controllerId) ||
+    (effect.targetFilter === 'tappedCreature' && def.type === 'creature' && card.tapped) ||
+    (effect.targetFilter === 'opponentNonlandPermanent' && def.type !== 'land' && ownerId !== pendingTarget.controllerId) ||
+    // Duplicates effects.ts's BASIC_LAND_IDS inline (can't import it here -
+    // combat.ts is imported BY effects.ts, so the reverse would be circular).
+    (effect.targetFilter === 'opponentNonbasicLand' &&
+      def.type === 'land' &&
+      !['plains', 'island', 'swamp', 'mountain', 'forest'].includes(def.id) &&
+      ownerId !== pendingTarget.controllerId)
   );
 }
 

@@ -623,6 +623,12 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   // chosen before submitting, so this tracks a running selection instead of
   // dispatching on the first click.
   const [pendingCrew, setPendingCrew] = useState<{ instanceId: string; ownerId: string; crewCost: number; selected: string[] } | null>(null);
+  // Set while casting a CardDefinition.convoke spell (Clever Concealment) is
+  // waiting on the player to click which untapped creature(s) to tap toward
+  // its cost - same running-selection shape as pendingCrew above, except
+  // there's no fixed count to reach (0 is a legal choice, just pays the full
+  // mana cost) so a separate Cast button confirms instead of auto-dispatching.
+  const [pendingConvokeCast, setPendingConvokeCast] = useState<{ instanceId: string; ownerId: string; selected: string[] } | null>(null);
   const [handOrder, setHandOrder] = useState<string[]>([]);
   const [boardOrder, setBoardOrder] = useState<Record<string, string[]>>({});
   const [winnerDismissed, setWinnerDismissed] = useState(false);
@@ -1186,6 +1192,16 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     return getCardDefinition(card.defId).type === 'creature';
   }
 
+  /** Is this permanent a legal pick to add to the running Convoke selection?
+   * See pendingConvokeCast - clicking a card that already matches toggles it
+   * back off instead. */
+  function isLegalConvokeChoice(card: CardInstance, ownerId: string): boolean {
+    if (!pendingConvokeCast) return false;
+    if (ownerId !== pendingConvokeCast.ownerId) return false;
+    if (card.tapped && !pendingConvokeCast.selected.includes(card.instanceId)) return false;
+    return getCardDefinition(card.defId).type === 'creature';
+  }
+
   /** A permanent's own producesMana, or - if it doesn't have one - whatever a
    * grantsManaAbilityToOthers permanent (e.g. A Realm Reborn) the SAME
    * controller controls is handing out to everything else. Mirrors
@@ -1461,6 +1477,10 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
       setPendingKickerCast(card);
       return;
     }
+    if (def.convoke) {
+      setPendingConvokeCast({ instanceId: card.instanceId, ownerId: card.ownerId, selected: [] });
+      return;
+    }
     const parsed = parseCostLabel(def.costLabel);
     let chosenX: number | undefined;
     if (parsed.hasX) {
@@ -1618,7 +1638,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     const def = getCardDefinition(found.card.defId);
     const isInstantSpeed = def.type === 'instant' || hasKeyword(def, 'flash');
     if (!isInstantSpeed) return;
-    if (canPay(found.player.manaPool, effectiveCastCost(def, found.player), 0)) return;
+    if (canPay(found.player.manaPool, effectiveCastCost(def, found.player, state.players.find((p) => p.id !== found.player.id)), 0)) return;
     landsRowRefs.current.get(found.player.id)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     // Deliberately only re-runs when a new panel opens, not on every state
     // tick while it's open (e.g. mana pool changes from tapping) - otherwise
@@ -1847,6 +1867,8 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     const isKeepOneChoice = isLegalKeepOneChoice(c, ownerId);
     const isCrewChoice = isLegalCrewChoice(c, ownerId);
     const isCrewSelected = !!pendingCrew?.selected.includes(c.instanceId);
+    const isConvokeChoice = isLegalConvokeChoice(c, ownerId);
+    const isConvokeSelected = !!pendingConvokeCast?.selected.includes(c.instanceId);
     const selected =
       pendingBlocker === c.instanceId ||
       multiSelected.has(c.instanceId) ||
@@ -1858,7 +1880,8 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
       isCounterRemovalCostChoice ||
       isEscalateCostChoice ||
       isKeepOneChoice ||
-      isCrewSelected;
+      isCrewSelected ||
+      isConvokeSelected;
 
     // Attached Equipment/Auras stack literally UNDERNEATH the creature they're
     // attached to - the exact same diagonal peek-offset technique as several
@@ -1927,6 +1950,12 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                 onAction({ type: 'CHOOSE_KEEP_ONE_SACRIFICE_REST', instanceId: c.instanceId }, ownerId);
               } else if (isCrewChoice) {
                 setPendingCrew((prev) =>
+                  prev
+                    ? { ...prev, selected: prev.selected.includes(c.instanceId) ? prev.selected.filter((id) => id !== c.instanceId) : [...prev.selected, c.instanceId] }
+                    : prev
+                );
+              } else if (isConvokeChoice) {
+                setPendingConvokeCast((prev) =>
                   prev
                     ? { ...prev, selected: prev.selected.includes(c.instanceId) ? prev.selected.filter((id) => id !== c.instanceId) : [...prev.selected, c.instanceId] }
                     : prev
@@ -2104,7 +2133,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           // hand at the bottom of the screen, top for one mirrored at the top.
           const fanStyle = { transform: `rotate(${offset * 4}deg) translateY(${curveY}px)`, transformOrigin: curveUp ? 'bottom center' : 'top center', zIndex: i };
           const def = getCardDefinition(c.defId);
-          const affordable = def.type === 'land' || canPay(player.manaPool, effectiveCastCost(def, player), 0);
+          const affordable = def.type === 'land' || canPay(player.manaPool, effectiveCastCost(def, player, state.players.find((p) => p.id !== player.id)), 0);
           const isInstantSpeed = def.type === 'instant' || hasKeyword(def, 'flash');
           const dimmed = !(isControllersTurn || isInstantSpeed) || (hasMana && !affordable);
           return (
@@ -2956,6 +2985,20 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                                   ? pendingTargetForYou.firstInstanceId
                                     ? `Choose a second permanent (either player's) for ${pendingTargetSourceName}'s ability to move the counter onto.`
                                     : `Choose a permanent you control with a counter on it for ${pendingTargetSourceName}'s ability to move a counter from.`
+                                  : effect.type === 'gainControlOfTargetNoncreatureArtifactPermanent'
+                                  ? `Choose a noncreature artifact (either player's) for ${pendingTargetSourceName} to gain control of.`
+                                  : effect.type === 'mayAttachTargetControlledEquipmentToSelf'
+                                  ? `Choose an Equipment you control to attach to ${pendingTargetSourceName} - or Skip.`
+                                  : effect.type === 'shuffleTargetPermanentIntoLibraryThenRevealTop'
+                                  ? `Choose any permanent (either player's) for ${pendingTargetSourceName} to shuffle into its owner's library.`
+                                  : effect.type === 'destroyAnyNumberOfTappedCreaturesWithDifferentControllers'
+                                  ? `Choose a tapped creature for ${pendingTargetSourceName} to destroy (at most one per controller) - or Skip.`
+                                  : effect.type === 'phaseOutAnyNumberOfTargetControlledNonlandPermanents'
+                                  ? `Choose a nonland permanent you control for ${pendingTargetSourceName} to phase out - or Skip.`
+                                  : effect.type === 'mayBecomeCopyOfAnotherControlledCreatureThenBuffBoth'
+                                  ? `Choose another creature you control for ${pendingTargetSourceName} to become a copy of - or Skip.`
+                                  : effect.type === 'exileTargetCreatureThenControllerGainsLifeEqualToPower'
+                                  ? `Choose target creature for ${pendingTargetSourceName} to exile - its controller gains life equal to its power.`
                                   : effect.targetFilter === 'artifactOrEnchantment'
                                   ? `Choose an artifact or enchantment for ${pendingTargetSourceName}'s ability (either player's).`
                                   : effect.targetFilter === 'enchantment'
@@ -2986,6 +3029,10 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                 effect.type === 'putCounterOnUpToOneOtherCreatureEqualToOwnPower' ||
                 effect.type === 'tapStunAndGainLifeForNonbasicLands' ||
                 effect.type === 'attachAllControlledEquipmentToTargetCreature' ||
+                effect.type === 'mayAttachTargetControlledEquipmentToSelf' ||
+                effect.type === 'destroyAnyNumberOfTappedCreaturesWithDifferentControllers' ||
+                effect.type === 'phaseOutAnyNumberOfTargetControlledNonlandPermanents' ||
+                effect.type === 'mayBecomeCopyOfAnotherControlledCreatureThenBuffBoth' ||
                 (effect.type === 'pumpUpToTwoTargets' && !!pendingTargetForYou.firstInstanceId)) && (
                 <button className="opponent-view-exit-button" onClick={() => onAction({ type: 'CHOOSE_TARGET', targetInstanceId: null }, pendingTargetForYou.controllerId)}>
                   Skip
@@ -3061,6 +3108,27 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
             Confirm Crew
           </button>
           <button className="opponent-view-exit-button" onClick={() => setPendingCrew(null)}>
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {pendingConvokeCast && (
+        <div className="pending-target-banner">
+          <span>
+            Convoke: click untapped creatures you control to tap them toward this cost ({pendingConvokeCast.selected.length} selected).
+          </span>
+          <button
+            className="opponent-view-exit-button"
+            onClick={() => {
+              onAction({ type: 'CAST_CARD', instanceId: pendingConvokeCast.instanceId, convokeInstanceIds: pendingConvokeCast.selected }, pendingConvokeCast.ownerId);
+              setPendingConvokeCast(null);
+              setOpenPanelId(null);
+            }}
+          >
+            Cast
+          </button>
+          <button className="opponent-view-exit-button" onClick={() => setPendingConvokeCast(null)}>
             Cancel
           </button>
         </div>
@@ -3219,6 +3287,30 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                 Pay {pending.lifeCost} Life
               </button>
               <button className="opponent-view-exit-button" onClick={() => onAction({ type: 'RESOLVE_OPTIONAL_PAY_LIFE', accept: false }, pending.controllerId)}>
+                Skip
+              </button>
+            </div>
+          );
+        })()}
+
+      {state.pendingMayPutTopLandOntoBattlefieldTapped &&
+        (state.pendingMayPutTopLandOntoBattlefieldTapped.controllerId === yourPlayerId || soloControl) &&
+        (() => {
+          const pending = state.pendingMayPutTopLandOntoBattlefieldTapped;
+          const sourceFound = findCard(state, pending.sourceInstanceId);
+          const sourceName = sourceFound ? getCardDefinition(sourceFound.card.defId).name : 'This permanent';
+          const controller = state.players.find((p) => p.id === pending.controllerId)!;
+          const topCard = controller.zones.library[0];
+          const topName = topCard ? getCardDefinition(topCard.defId).name : 'it';
+          return (
+            <div className="pending-target-banner">
+              <span>
+                {sourceName}: the top card of your library is {topName} - you may put it onto the battlefield tapped.
+              </span>
+              <button className="opponent-view-exit-button" onClick={() => onAction({ type: 'RESOLVE_MAY_PUT_TOP_LAND_ONTO_BATTLEFIELD_TAPPED', accept: true }, pending.controllerId)}>
+                Put Onto Battlefield
+              </button>
+              <button className="opponent-view-exit-button" onClick={() => onAction({ type: 'RESOLVE_MAY_PUT_TOP_LAND_ONTO_BATTLEFIELD_TAPPED', accept: false }, pending.controllerId)}>
                 Skip
               </button>
             </div>
@@ -3892,9 +3984,10 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           const sourceFound = findCard(state, pending.sourceInstanceId);
           const sourceName = sourceFound ? getCardDefinition(sourceFound.card.defId).name : 'This ability';
           const controller = state.players.find((p) => p.id === pending.controllerId)!;
+          const opponentOfController = state.players.find((p) => p.id !== pending.controllerId);
           const eligible = controller.zones.hand.filter((c) => {
             const d = getCardDefinition(c.defId);
-            return d.type !== 'land' && manaValue(effectiveCastCost(d, controller)) <= pending.maxManaValue;
+            return d.type !== 'land' && manaValue(effectiveCastCost(d, controller, opponentOfController)) <= pending.maxManaValue;
           });
           return (
             <FreeCastModal
@@ -4350,6 +4443,8 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                   <span className="card-actions-hint">
                     {pending.effect.type === 'drawCardsFromTargetPlayer'
                       ? `Target player draws ${pending.effect.count} card(s).`
+                      : pending.effect.type === 'mayPutExactNamedCardFromLibraryToHandForTargetPlayer'
+                      ? `Target player may put ${pending.effect.name} into their hand from their library, then shuffle.`
                       : `Put a ${pending.effect.counterLabel} counter on each creature target player controls.`}
                   </span>
                 </div>

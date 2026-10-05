@@ -14,11 +14,16 @@ interface ModalSpellModalProps {
  * effects.ts/actions.ts resolve every checked mode's effects in the order
  * the modes are printed, regardless of check order. When
  * CardDefinition.chooseExactlyOneMode is set (Destroy Evil's "Choose one —",
- * unlike every other chooseModes card here), this instead renders radio
- * buttons restricting the pick to exactly one mode.
+ * unlike every other chooseModes card here), this instead restricts the
+ * pick to exactly one mode (rendered as radio buttons). chooseExactlyNModes
+ * (Austere Command's "Choose two —") generalizes that to any fixed N > 1 -
+ * still checkboxes (a radio group can't express "exactly two"), but a click
+ * past the Nth checked mode is ignored until one is unchecked first, and
+ * Cast only enables once exactly N are checked.
  */
 export default function ModalSpellModal({ definition, onConfirm, onCancel }: ModalSpellModalProps) {
   const exactlyOne = !!definition.chooseExactlyOneMode;
+  const requiredCount = exactlyOne ? 1 : definition.chooseExactlyNModes;
   const [checked, setChecked] = useState<Set<number>>(new Set());
 
   function toggle(i: number) {
@@ -28,8 +33,11 @@ export default function ModalSpellModal({ definition, onConfirm, onCancel }: Mod
     }
     setChecked((prev) => {
       const next = new Set(prev);
-      if (next.has(i)) next.delete(i);
-      else next.add(i);
+      if (next.has(i)) {
+        next.delete(i);
+      } else if (requiredCount === undefined || next.size < requiredCount) {
+        next.add(i);
+      }
       return next;
     });
   }
@@ -42,7 +50,10 @@ export default function ModalSpellModal({ definition, onConfirm, onCancel }: Mod
 
       <div className="card-actions-panel">
         <div className="card-actions-header">
-          <strong>{definition.name} - Choose {exactlyOne ? 'one' : 'one or more'}</strong>
+          <strong>
+            {definition.name} - Choose {requiredCount ?? 'one or more'}
+            {requiredCount ? ` (${checked.size}/${requiredCount} chosen)` : ''}
+          </strong>
         </div>
 
         <div className="card-actions-section">
@@ -57,7 +68,11 @@ export default function ModalSpellModal({ definition, onConfirm, onCancel }: Mod
         <div className="card-actions-spacer" />
 
         <div className="card-actions-bottom-row">
-          <button className="card-action-button card-action-button-play" disabled={checked.size === 0} onClick={() => onConfirm([...checked])}>
+          <button
+            className="card-action-button card-action-button-play"
+            disabled={requiredCount === undefined ? checked.size === 0 : checked.size !== requiredCount}
+            onClick={() => onConfirm([...checked])}
+          >
             Cast
           </button>
           <button className="card-action-button card-action-button-cancel-x" onClick={onCancel} aria-label="Cancel" title="Cancel">

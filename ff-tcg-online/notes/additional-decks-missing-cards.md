@@ -15,15 +15,15 @@
 
 - Celes, Rune Knight
 - Edgar, Master Machinist
-- Gogo, Mysterious Mime
+
 - Interceptor, Shadow's Hound
 - Palace Jailer
 - Pitiless Plunderer
 - Siegfried, Famed Swordsman
 - Solemn Simulacrum
 
-- Archfiend of Depravity
-- General Leo Cristophe
+
+
 - Sabin, Master Monk
 - Combustible Gearhulk
 - Flayer of the Hatebound
@@ -33,13 +33,13 @@
 - Angel of the Ruins
 - Cyan, Vengeful Samurai
 - Kefka, Dancing Mad
-- Meteor Golem
+
 - Sepulchral Primordial
 
 ### Sorcery (9)
 
 - Reanimate
-- Night's Whisper
+
 - Stitch Together
 - Legions to Ashes
 - Snort
@@ -63,7 +63,7 @@
 - Arcane Signet
 - Coin of Fate
 - Key to the City
-- Mind Stone
+
 - Swiftfoot Boots
 - Talisman of Conviction
 - Talisman of Indulgence
@@ -75,10 +75,10 @@
 - Ash Barrens
 - Battlefield Forge
 - Clifftop Retreat
-- Command Tower
-- Demolition Field
-- Desolate Mire
-- Dragonskull Summit
+
+
+
+
 - Evolving Wilds
 - Exotic Orchard
 - Fetid Heath
@@ -100,11 +100,6 @@
 - Sunlit Marsh
 - Sunscorched Divide
 
-## Cloud, Ex-SOLDIER
-
-### Commander (1)
-
-- Cloud, Ex-SOLDIER
 
 ### Creature (22)
 
@@ -123,7 +118,7 @@
 
 - Aerith, Last Ancient
 - Barret, Avalanche Leader
-- Cait Sith, Fortune Teller
+
 - Heidegger, Shinra Executive
 - Tifa, Martial Artist
 - Bronze Guardian
@@ -141,23 +136,22 @@
 - Decimate
 - Harmonize
 - Unfinished Business
-- Austere Command
+
 
 - Vanquish the Horde
 
 ### Instant (6)
 
 - Dispatch
-- Cloud's Limit Break
-- Chaos Warp
-- Ultimate Magic: Holy
-- Clever Concealment
+
+
+
 
 
 ### Artifact (19)
 
-- Colossus Hammer
-- Explorer's Scope
+
+
 
 
 - Arcane Signet
@@ -190,7 +184,7 @@
 - Canopy Vista
 - Cinder Glade
 - Clifftop Retreat
-- Command Tower
+
 - Evolving Wilds
 - Exotic Orchard
 - Fire-Lit Thicket
@@ -221,15 +215,15 @@
 
 ### Creature (22)
 
-- Baleful Strix
+
 - Hildibrand Manderville
 - Hypnotic Sprite
 - Krile Baldesion
 - Papalymo Totolymo
 - Tataru Taru
 - Urianger Augurelt
-- Alisaie Leveilleur
-- Ardbert, Warrior of Darkness
+
+
 - G'raha Tia, Scion Reborn
 - Lyse Hext
 - Murderous Rider
@@ -240,7 +234,7 @@
 - Hermes, Overseer of Elpis
 - Fandaniel, Telophoroi Ascian
 - Hraesvelgr of the First Brood
-- Summon: Good King Mog XII
+
 - Thancred Waters
 - Torrential Gearhulk
 
@@ -258,13 +252,13 @@
 
 ### Instant (8)
 
-- Swords to Plowshares
+
 - Transpose
 - Void Rend
 - Lethal Scheme
 - Snuff Out
 - Sublime Epiphany
-- Into the Story
+
 - Dig Through Time
 
 ### Artifact (13)
@@ -297,7 +291,7 @@
 - Arcane Sanctum
 - Ash Barrens
 - Choked Estuary
-- Command Tower
+
 - Contaminated Aquifer
 - Darkwater Catacombs
 - Demolition Field

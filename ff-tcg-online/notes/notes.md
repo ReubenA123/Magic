@@ -35,6 +35,8 @@ established fallback is "approximate down to a single target or ALL targets":
 - **Phoenix, Warden of Fire** (Saga ch. III) — "return any number of creatures, total MV ≤6" deferred (no budget-constrained multi-pick).
 - **Light of Judgment** — "destroy up to one Equipment attached to that [already-targeted] creature" deferred (dependent two-stage target, unsupported shape).
 - **Delivery Moogle** — "search library and/or graveyard" approximated as always searching both and always shuffling, not a genuine either/or branch. `types.ts:1242`
+- **Summon: Good King Mog XII** (chapters II/III) — "create a token that's a copy of a non-Saga token you control" auto-picks the first non-Saga token found rather than a real player choice (no pendingTarget built for a repeating delayed trigger). `types.ts` (`GrantTemporaryNoncreatureCastCreatesTokenCopyEffect`).
+- **Gogo, Mysterious Mime** — "and attack this turn if able" deferred entirely; this engine has no mechanism anywhere that forces or validates a mandatory attack declaration (human or AI). The copy/+2/+0/haste half is fully implemented. `types.ts` (`MayBecomeCopyOfAnotherControlledCreatureThenBuffBothEffect`).
 
 ## Mode / clause omissions (part of a card is implemented, part isn't)
 
@@ -71,7 +73,7 @@ line number on each — there are ~55 of these and most are genuinely one-off.
 The mana pool is just a count per color — nothing remembers which tap produced
 which mana once it's pooled. This blocks "when *that* mana is spent on X":
 
-- **Path of Ancestry** — "when that mana is spent on a creature spell sharing a type with your commander, scry 1" approximated as "the very next spell this controller casts" (see `GameState.pendingManaIdentitySourceScry`). Misfires if other mana gets spent first. Also: "Scry" has no distinct implementation anywhere in this engine — always resolved as Surveil 1. `types.ts:2281`, `types.ts:4559`
+- **Path of Ancestry** — "when that mana is spent on a creature spell sharing a type with your commander, scry 1" approximated as "the very next spell this controller casts" (see `GameState.pendingManaIdentitySourceScry`). Misfires if other mana gets spent first. Its own "scry 1" is STILL resolved as Surveil 1 (unchanged) — but Scry now has one real, standalone implementation elsewhere: **Cait Sith, Fortune Teller**'s Lucky Slots (`pendingScryBeforeExile`/`RESOLVE_SCRY_BEFORE_EXILE` — look at the top card, optionally move it to the bottom, bundled with the exile/pump that follows since nothing else needs a generic reusable `ScryEffect` yet). Worth promoting to a standalone effect if a second scry card ever shows up. `types.ts:2281`
 - **Arcane Signet / Command Tower** (commander color identity) — approximated as just the commander's own printed mana-cost colors; real color identity also reads rules/reminder text, which has no generic extraction here. `types.ts:2973`
 - **Cargo Ship** — "spend this mana only on artifact spells" not enforced (produces plain colorless).
 - **Flooded Grove / Starting Town** — hybrid-symbol mana abilities deferred; `parseCostLabel` has no `{G/U}` concept.
@@ -90,7 +92,7 @@ once will silently stomp each other:
 ## AI auto-resolver gaps (human or AI could get stuck waiting)
 
 - **No AI auto-resolver exists for `pendingSurveil` or `pendingHideaway` at all.** Confirmed pre-existing, not something introduced this session — but it means **Path of Ancestry** (scry→surveil) and **Fight Rigging** (Hideaway 5) will leave the AI opponent stuck on its own turn if it ever draws and plays either one. Needs a `useLocalGame.ts` handler for both, same pattern as the existing `pendingLibrarySearch`/`pendingExplore`/`pendingManaColorChoice` handlers.
-- `resolveSacrificeQueue`, `resolveKeepOneSacrificeRestQueue`, and `isLegalPendingTarget` all DO have AI handling already — not gaps, just confirming the pattern that's missing for surveil/hideaway.
+- `resolveSacrificeQueue`, `resolveKeepOneSacrificeRestQueue`, `isLegalPendingTarget`, `pendingReanimate`, `pendingPlayerTarget`, and `pendingScryBeforeExile` all DO have AI handling now — the last two (`pendingPlayerTarget`, `pendingScryBeforeExile`) were fixed this session (first one was a genuine pre-existing gap — `drawCardsFromTargetPlayer`/Collective Effort had silently had no AI resolver at all until now; it just always targets itself). Not gaps anymore, just confirming the pattern that's still missing for surveil/hideaway above.
 
 ## Legend rule
 
@@ -111,11 +113,23 @@ after a transform (left for the caller).
 - **Ultima, Origin of Oblivion**'s blight-counter override only actually consumes the mana-production half (`overridesProducesMana`); `overridesSubtype` is registered but nothing reads it. `combat.ts:15`
 - No emblem system, no spell-copy mechanism, no "play from a zone other than hand" persistent mechanic, and no forced-block enforcement exist anywhere yet — each blocks a small handful of cards listed above under "Mode/clause omissions."
 - No general replacement-effect system for amounts (damage/mill/life-gain) beyond the one-off cases already built (Hardened Scales, finality counters, `onDeathExileAndCreateTokens`) — blocks The Water/Wind/Earth Crystal.
+- **Convoke** (Clever Concealment) — the engine greedily assigns each tapped creature to a still-unpaid colored pip it matches before falling back to generic, rather than asking the player which pip to cover; a creature's own "color" is approximated as the colored symbols in its own printed cost (same approximation Arcane Signet's commander-color-identity already uses), since there's no separate color-identity field anywhere.
+- **Colossus Hammer**'s "loses flying" is wired through exactly ONE combat call site (`declareBlockers`'s attacker-flying check) — the only place losing flying actually changes anything mechanically. It does NOT affect other 'flying' checks elsewhere (e.g. `artifactEnchantmentOrFlyingCreature` targeting filters), which exist for unrelated cards.
+- **Alisaie Leveilleur**'s Partner search targets a card named "Alphinaud Leveilleur", which doesn't exist in the card pool yet — the search machinery is real and will work the moment that card is added, but currently always "finds nothing."
 
-## This session's own new caveats (2026-10-02 batch — recap, already flagged in chat)
+## Recent session's new reusable infra (2026-10-05/06 — five batches: batch 13 finish-up, Chaos Warp/Clever Concealment/Cloud's Limit Break/Colossus Hammer, Explorer's Scope, a 12-card batch, and a 6-card batch)
 
-- **Gatta and Luzzu** — damage-prevention scoped to combat damage only (same `markDamage`-is-the-only-choke-point reason as the general note above).
-- **Forgotten Ancient** — counter redistribution moves ALL counters to ONE target, not a player-chosen split (see "Targeting/distribution" above — this is the same family, just called out again since it's new).
-- **Rampant Rejuvenator**'s death search now allows duplicate basic-land names (fixed this session) — no longer a gap.
-- **Scholar of New Horizons**'s battlefield-vs-hand choice is now a real player decision (fixed this session) — no longer a gap.
-- **Path of Ancestry**'s mana-identity scry now works via the "next spell cast" approximation described above under "Mana / provenance gaps" — not a full fix, but a real implementation rather than a no-op.
+New general-purpose mechanics added that future cards can reuse directly,
+rather than building one-offs again:
+
+- **Phasing** (`CardInstance.phasedOut`, Clever Concealment) — scoped to block attacking/blocking/targeting/tapping; clears at the controller's next untap step. NOT excluded from other board-wide "for each creature you control" counts (devotion, anthems) — a documented, deliberate gap, not an oversight.
+- **Convoke** (`CardDefinition.convoke`, Clever Concealment) — see the approximation note above.
+- **"Keep up to N, sacrifice the rest"** (`chooseUpToNCreaturesSacrificeRest`, Archfiend of Depravity) — generalizes the old keep-exactly-one-only queue to a single player, configurable count, with the 'ai' player auto-resolving inline.
+- **Player-targeting library search** (`mayPutExactNamedCardFromLibraryToHandForTargetPlayer`, Alisaie Leveilleur) — extends `pendingPlayerTarget`/`CHOOSE_PLAYER_TARGET` (previously only drawing cards or placing counters) to also drive an ordinary library search for whichever player is chosen.
+- **"Choose exactly N modes"** (`chooseExactlyNModes`, Austere Command) — generalizes `chooseExactlyOneMode` to any fixed N > 1; `ModalSpellModal` caps checkbox selection at N.
+- **Color-gated "whenever you cast a spell" trigger** (`onOwnCastColorSpellTrigger`, Ardbert, Warrior of Darkness) — the first cast trigger in this engine keyed on the cast spell's own color rather than its type; only wired through `castCard`'s main path (not `castFromGraveyard`/flashback/exile casts), same scoped-down convention as `NoncreatureCastTrigger`.
+- **Opponent-graveyard-size cost reduction** (`costReductionIfOpponentGraveyardAtLeast`, Into the Story) — `effectiveCastCost`/`dynamicCostReduction` now both take an optional `opponent` parameter for this one field; updated at all 5 call sites across server+client (2 server, 3 client UI affordability checks).
+- **A real Scry implementation** (`pendingScryBeforeExile`, Cait Sith) — see the Mana/provenance note above; not yet generalized into a standalone `ScryEffect`.
+- **"Then do X on MY OWN source, after a pending choice resolves"** (`ReanimateTargetFromGraveyardEffect.thenPutCounterOnSourceEqualToControlledCreatureCount`, General Leo Cristophe) — a real bug was caught here: this engine's effect lists resolve fully synchronously, so a second list entry that depends on a FIRST entry's pending choice (e.g. "reanimate, THEN put a counter for each creature you control") would read the board state BEFORE the reanimate actually resolves, not after. Fixed by threading the follow-up through the reanimate resolver itself (fires on both accept and decline) rather than as a sibling list entry. Worth remembering as the reference pattern if another card needs "do X, then Y where Y depends on X's outcome."
+- **A new `DestroyTargetEffect`/`DestroyAllEffect` filter vocabulary** — `tappedCreature`, `opponentNonlandPermanent`, `opponentNonbasicLand`, `artifact`, `enchantment`, `creatureWithManaValueAtMost`/`AtLeast` all added this session; check these before adding a near-duplicate filter for a future card.
+- **Chained `pendingLibrarySearch` for two different players** (`chainedSearchForPlayerId`, Demolition Field) — the first documented case of sequencing two players through the SAME single-slot pending state one after another, rather than needing a second parallel slot.

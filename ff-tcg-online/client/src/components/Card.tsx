@@ -85,6 +85,7 @@ export default function Card({
     revealedInHand ? 'card-revealed-in-hand' : '',
     onClick ? 'card-clickable' : '',
     instance?.tapped ? 'card-tapped' : '',
+    instance?.phasedOut ? 'card-phased-out' : '',
     dimmed ? 'card-dimmed' : '',
   ]
     .filter(Boolean)

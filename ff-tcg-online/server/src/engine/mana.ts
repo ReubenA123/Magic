@@ -102,7 +102,7 @@ export function manaValue(cost: ParsedCost): number {
  * against the full printed cost, so a card like Diamond Weapon could sit
  * looking unplayable (dimmed in hand, Cast button disabled) even once its
  * graveyard discount made it actually affordable. */
-export function dynamicCostReduction(def: CardDefinition, player: PlayerState): number {
+export function dynamicCostReduction(def: CardDefinition, player: PlayerState, opponent?: PlayerState): number {
   const graveyardPermanentCount = def.costReductionPerGraveyardPermanent
     ? player.zones.graveyard.filter((c) => {
         const d = getCardDefinition(c.defId);
@@ -115,6 +115,16 @@ export function dynamicCostReduction(def: CardDefinition, player: PlayerState): 
   const controlledTypeCount = def.costReductionPerControlledType
     ? player.zones.battlefield.filter((c) => getCardDefinition(c.defId).type === def.costReductionPerControlledType!.type).length
     : 0;
+  // "This spell costs {3} less to cast if an opponent has seven or more
+  // cards in their graveyard" (Into the Story) - `opponent` is optional
+  // (the two display-only client call sites that only want a ballpark
+  // affordability check can omit it; the real cast-time call sites always
+  // pass it), so this simply contributes 0 when omitted rather than
+  // erroring.
+  const opponentGraveyardDiscount =
+    def.costReductionIfOpponentGraveyardAtLeast && opponent && opponent.zones.graveyard.length >= def.costReductionIfOpponentGraveyardAtLeast.minCount
+      ? def.costReductionIfOpponentGraveyardAtLeast.amount
+      : 0;
 
   // Board-wide reducers (The Water Crystal/The Wind Crystal's "[Color]
   // spells you cast cost {N} less", Serah Farron/Crystallized Serah's
@@ -132,12 +142,16 @@ export function dynamicCostReduction(def: CardDefinition, player: PlayerState): 
     if (other.reducesCastCostForFirstLegendaryCreatureSpellEachTurn && isLegendaryCreature && !player.usedFirstLegendaryCreatureSpellDiscountThisTurn) {
       boardWideReduction += other.reducesCastCostForFirstLegendaryCreatureSpellEachTurn;
     }
+    if (other.reducesCastCostForSecondSpellEachTurn && (player.spellsCastThisTurn ?? 0) === 1) {
+      boardWideReduction += other.reducesCastCostForSecondSpellEachTurn;
+    }
   }
 
   return (
     (def.costReductionPerGraveyardPermanent ? def.costReductionPerGraveyardPermanent * graveyardPermanentCount : 0) +
     (def.costReductionPerControlledSubtype ? def.costReductionPerControlledSubtype.amountPerUnit * controlledSubtypeCount : 0) +
     (def.costReductionPerControlledType ? def.costReductionPerControlledType.amountPerUnit * controlledTypeCount : 0) +
+    opponentGraveyardDiscount +
     boardWideReduction
   );
 }
@@ -146,8 +160,8 @@ export function dynamicCostReduction(def: CardDefinition, player: PlayerState): 
  * and capped - the actual cost `player` would pay to cast `def` right now.
  * Shared convenience wrapper so call sites don't have to repeat the
  * cap-and-apply arithmetic themselves. */
-export function effectiveCastCost(def: CardDefinition, player: PlayerState): ParsedCost {
+export function effectiveCastCost(def: CardDefinition, player: PlayerState, opponent?: PlayerState): ParsedCost {
   const printed = parseCostLabel(def.costLabel);
-  const reduction = Math.min(printed.generic, dynamicCostReduction(def, player));
+  const reduction = Math.min(printed.generic, dynamicCostReduction(def, player, opponent));
   return reduction > 0 ? { ...printed, generic: printed.generic - reduction } : printed;
 }
