@@ -179,6 +179,41 @@ export function useLocalGame(initialState: GameState) {
     return () => clearTimeout(timer);
   }, [state, dispatch]);
 
+  // --- AI: resolve its own pending return-from-graveyard (Aerith, Last ----
+  // Ancient's Raise) ---------------------------------------------------------
+  // Same "nobody else can choose for it" problem again. Deliberately
+  // simple: always picks the first eligible creature card (or declines if
+  // none), same heuristic as the generic pendingTarget resolver's fallback.
+  useEffect(() => {
+    if (state.winnerId) return;
+    if (state.mutualAdjustment.status !== 'inactive') return;
+    const pending = state.pendingReturnCreatureFromGraveyardHandOrBattlefield;
+    if (!pending || pending.controllerId !== AI_PLAYER_ID) return;
+
+    const timer = setTimeout(() => {
+      const ai = state.players.find((p) => p.id === AI_PLAYER_ID)!;
+      const eligible = ai.zones.graveyard.find((c) => getCardDefinition(c.defId).type === 'creature');
+      dispatch({ type: 'RESOLVE_RETURN_CREATURE_FROM_GRAVEYARD_HAND_OR_BATTLEFIELD', instanceId: eligible?.instanceId ?? null }, AI_PLAYER_ID);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [state, dispatch]);
+
+  // --- AI: resolve its own pending Espers to Magicite choice --------------
+  // Same "nobody else can choose for it" problem again. Deliberately
+  // simple: always copies the first eligible exiled creature card (or
+  // declines if none).
+  useEffect(() => {
+    if (state.winnerId) return;
+    if (state.mutualAdjustment.status !== 'inactive') return;
+    const pending = state.pendingEspersToMagiciteChoice;
+    if (!pending || pending.controllerId !== AI_PLAYER_ID) return;
+
+    const timer = setTimeout(() => {
+      dispatch({ type: 'RESOLVE_ESPERS_TO_MAGICITE_CHOICE', instanceId: pending.eligibleInstanceIds[0] ?? null }, AI_PLAYER_ID);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [state, dispatch]);
+
   // --- AI: choose a card to discard for its own pending discard ----------
   // Without this, ANY card that makes an opponent discard (Malboro's Bad
   // Breath, Braska's Final Aeon's Jecht Beam, ...) would leave
@@ -297,6 +332,22 @@ export function useLocalGame(initialState: GameState) {
 
     const timer = setTimeout(() => {
       dispatch({ type: 'CHOOSE_MANA_COLOR', color: 'B' }, AI_PLAYER_ID);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [state, dispatch]);
+
+  // --- AI: resolve its own pending "add one mana of any color" choice -----
+  // (The Warring Triad) ----------------------------------------------------
+  // Same "nobody else can choose for it" problem again. Deliberately
+  // simple: always picks the same fixed color.
+  useEffect(() => {
+    if (state.winnerId) return;
+    if (state.mutualAdjustment.status !== 'inactive') return;
+    const pending = state.pendingAddManaOfChosenColor;
+    if (!pending || pending.controllerId !== AI_PLAYER_ID) return;
+
+    const timer = setTimeout(() => {
+      dispatch({ type: 'RESOLVE_ADD_MANA_OF_CHOSEN_COLOR', color: 'B' }, AI_PLAYER_ID);
     }, 800);
     return () => clearTimeout(timer);
   }, [state, dispatch]);
@@ -437,6 +488,62 @@ export function useLocalGame(initialState: GameState) {
     const timer = setTimeout(() => {
       const ai = state.players.find((p) => p.id === AI_PLAYER_ID)!;
       dispatch({ type: 'RESOLVE_OPTIONAL_PAY_LIFE', accept: pending.lifeCost < ai.life }, AI_PLAYER_ID);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [state, dispatch]);
+
+  // --- AI: resolve its own pending Throw Wide the Gates choice ------------
+  // (G'raha Tia, Scion Reborn) -------------------------------------------
+  // Same "nobody else can choose for it" problem as pendingOptionalPayLife
+  // above. Pays if it can afford to without dropping to 0 or below,
+  // declines otherwise.
+  useEffect(() => {
+    if (state.winnerId) return;
+    if (state.mutualAdjustment.status !== 'inactive') return;
+    const pending = state.pendingThrowWideTheGatesChoice;
+    if (!pending || pending.controllerId !== AI_PLAYER_ID) return;
+
+    const timer = setTimeout(() => {
+      const ai = state.players.find((p) => p.id === AI_PLAYER_ID)!;
+      dispatch({ type: 'RESOLVE_THROW_WIDE_THE_GATES', accept: pending.manaValue < ai.life }, AI_PLAYER_ID);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [state, dispatch]);
+
+  // --- AI: resolve its own pending Snort choice ---------------------------
+  // Same "nobody else can choose for it" problem again. Deliberately
+  // simple: accepts (discards and redraws) only when it has life to spare
+  // and a weak hand worth refreshing, declines otherwise.
+  useEffect(() => {
+    if (state.winnerId) return;
+    if (state.mutualAdjustment.status !== 'inactive') return;
+    const pending = state.pendingSnortChoice;
+    if (!pending || pending.pendingPlayerIds[0] !== AI_PLAYER_ID) return;
+
+    const timer = setTimeout(() => {
+      const ai = state.players.find((p) => p.id === AI_PLAYER_ID)!;
+      const accept = ai.life > pending.damageAmount + 5 && ai.zones.hand.length < pending.drawCount;
+      dispatch({ type: 'RESOLVE_SNORT_CHOICE', accept }, AI_PLAYER_ID);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [state, dispatch]);
+
+  // --- AI: resolve its own pending Kefka, Dancing Mad choice --------------
+  // Same "nobody else can choose for it" problem again. Deliberately
+  // simple: always casts the first eligible (non-land) exiled card if one
+  // exists, declines otherwise - land exile is pre-filtered client-side
+  // too (see GameBoard.tsx's own pendingKefkaChoice modal).
+  useEffect(() => {
+    if (state.winnerId) return;
+    if (state.mutualAdjustment.status !== 'inactive') return;
+    const pending = state.pendingKefkaChoice;
+    if (!pending || pending.controllerId !== AI_PLAYER_ID) return;
+
+    const timer = setTimeout(() => {
+      const eligible = state.players
+        .flatMap((p) => p.zones.exile)
+        .filter((c) => pending.eligibleInstanceIds.includes(c.instanceId) && getCardDefinition(c.defId).type !== 'land');
+      dispatch({ type: 'RESOLVE_KEFKA_CHOICE', instanceId: eligible[0]?.instanceId ?? null }, AI_PLAYER_ID);
     }, 800);
     return () => clearTimeout(timer);
   }, [state, dispatch]);
@@ -611,6 +718,7 @@ export function useLocalGame(initialState: GameState) {
     if (state.pendingDiscard?.controllerId === AI_PLAYER_ID) return;
     if (state.pendingLibrarySearch?.controllerId === AI_PLAYER_ID) return;
     if (state.pendingManaColorChoice?.controllerId === AI_PLAYER_ID) return;
+    if (state.pendingAddManaOfChosenColor?.controllerId === AI_PLAYER_ID) return;
     if (state.pendingWardPayment?.controllerId === AI_PLAYER_ID) return;
     if (state.pendingAttackTaxPayment?.controllerId === AI_PLAYER_ID) return;
     if (state.pendingCounterTransferQueue[0]?.controllerId === AI_PLAYER_ID) return;

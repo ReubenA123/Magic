@@ -16,7 +16,7 @@
 
 import { CardDefinition, CardInstance } from '../types';
 
-export type CombatKeyword = 'flying' | 'first strike' | 'double strike' | 'deathtouch' | 'trample' | 'lifelink' | 'vigilance' | 'reach' | 'menace' | 'haste' | 'flash' | 'defender' | 'hexproof' | 'indestructible' | 'unblockable' | 'islandwalk';
+export type CombatKeyword = 'flying' | 'first strike' | 'double strike' | 'deathtouch' | 'trample' | 'lifelink' | 'vigilance' | 'reach' | 'menace' | 'haste' | 'flash' | 'defender' | 'hexproof' | 'indestructible' | 'unblockable' | 'islandwalk' | 'nonbasic landwalk';
 export function hasKeyword(def: CardDefinition, keyword: CombatKeyword): boolean {
   if (def.excludeSelfKeywords?.includes(keyword)) return false;
   return def.text.toLowerCase().includes(keyword);

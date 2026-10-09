@@ -6,6 +6,7 @@ import { CardDefinition, CardEffect, CardInstance, CharacteristicOverride, GameS
 import { getCardDefinition, frontFaceDefId } from '../data/cards';
 import { getOpponent, getPlayer, updatePlayer, detachEverythingFrom, nextInstanceId } from './state';
 import { hasKeyword, hasKeywordEffective } from './keywords';
+import { parseCostLabel } from './mana';
 
 /** The global "mini layer system" registry - see types.ts:
  * CharacteristicOverride for why this is keyed by counter label in one
@@ -84,6 +85,41 @@ function creatureCountBaseStat(state: GameState, controllerId: string, def: Card
   return controller.zones.battlefield.filter((c) => getCardDefinition(c.defId).type === 'creature').length;
 }
 
+/** Base power override for CardDefinition.basePowerEqualsOpponentControlledArtifactCount
+ * (Avalanche of Sector 7) - counts every artifact on the controller's
+ * OPPONENT's battlefield. */
+function opponentArtifactCountBaseStat(state: GameState, controllerId: string, def: CardDefinition): number | null {
+  if (!def.basePowerEqualsOpponentControlledArtifactCount) return null;
+  const opponent = getOpponent(state, controllerId);
+  return opponent.zones.battlefield.filter((c) => getCardDefinition(c.defId).type === 'artifact').length;
+}
+
+/** "Modified" (Sephiroth, Fallen Hero's own reminder text: "Equipment,
+ * Auras you control, and counters are modifications.") - narrower than
+ * real Magic's broader "modified" (which also counts tokens), matching
+ * exactly what THIS card's own printed reminder says, since that's the
+ * only card in this pool that currently cares about the concept. Used by
+ * both JenovaCellsAttackTriggerEffect's base-stat grant and
+ * CardAbility.cost.sacrificeAnotherModifiedCreature. */
+export function isModifiedCreature(state: GameState, instance: CardInstance): boolean {
+  if (instance.counters.length > 0) return true;
+  return state.players.some((p) => p.zones.battlefield.some((c) => c.attachedToInstanceId === instance.instanceId));
+}
+
+/** Base power/toughness override for PlayerState.
+ * modifiedCreaturesHaveBasePowerToughnessUntilEndOfTurn (Sephiroth, Fallen
+ * Hero's Jenova Cells) - re-evaluated every call, so a creature that
+ * becomes modified LATER the same turn (e.g. a counter added afterward)
+ * still picks this up retroactively, matching real Magic's continuous
+ * (not snapshotted) base-stat-setting effects. */
+function modifiedCreatureBaseStat(state: GameState, controllerId: string, instance: CardInstance, stat: 'power' | 'toughness'): number | null {
+  const controller = state.players.find((p) => p.id === controllerId);
+  const grant = controller?.modifiedCreaturesHaveBasePowerToughnessUntilEndOfTurn;
+  if (!grant) return null;
+  if (!isModifiedCreature(state, instance)) return null;
+  return grant[stat];
+}
+
 /** Whether `instanceId` currently has `keyword` from an attached Equipment's
  * "During your turn, equipped creature has KEYWORD" grant (e.g. Dragoon's
  * Lance's flying) - true only while it's this creature's controller's own
@@ -147,6 +183,15 @@ export function hasBoardGrantedKeyword(state: GameState, controllerId: string, i
     return anthem.subtype === '*' ? def.type === 'creature' : hasSubtype(anthem.subtype);
   });
   if (viaStaticAnthem) return true;
+  // "Commander creatures you control have [grantKeywords]" (Bastion
+  // Protector) - same always-on anthem shape as viaStaticAnthem above,
+  // just matched by "is this creature the controller's commander" instead
+  // of subtype.
+  const isCommander = def.type === 'creature' && !!controller.commanderDefId && frontFaceDefId(instance.defId) === controller.commanderDefId;
+  const viaCommanderAnthem =
+    isCommander &&
+    controller.zones.battlefield.some((c) => !!getCardDefinition(c.defId).staticAnthemForCommanderCreaturesYouControl?.grantKeywords?.includes(keyword));
+  if (viaCommanderAnthem) return true;
   const viaCounterAnthem = controller.zones.battlefield.some((c) => {
     const anthem = getCardDefinition(c.defId).staticAnthemForCreaturesWithCounter;
     if (!anthem?.grantKeywords?.includes(keyword)) return false;
@@ -217,7 +262,7 @@ export function addLife(state: GameState, playerId: string, amount: number): Gam
  * currently active player and whose OPPONENT is the one losing life -
  * "during your turn" is what the currently-active-player check captures. */
 export function loseLife(state: GameState, playerId: string, amount: number): GameState {
-  let next = updatePlayer(state, playerId, (p) => ({ ...p, life: p.life - amount }));
+  let next = updatePlayer(state, playerId, (p) => ({ ...p, life: p.life - amount, lifeLostThisTurn: p.lifeLostThisTurn + Math.max(0, amount) }));
   if (amount <= 0) return next;
   const activePlayer = next.players.find((p) => p.id === next.activePlayerId);
   if (!activePlayer || activePlayer.id === playerId) return next;
@@ -284,6 +329,18 @@ export function hasGrantedSubtype(state: GameState, controllerId: string, instan
   );
 }
 
+/** How many DISTINCT colors appear among `controller`'s own controlled
+ * permanents' printed costLabels - see CardDefinition.
+ * equipBuffPerDistinctControlledColor's own doc comment for the
+ * approximation this relies on. */
+function distinctControlledColorCount(controller: GameState['players'][number]): number {
+  const colors = new Set<string>();
+  for (const c of controller.zones.battlefield) {
+    for (const color of Object.keys(parseCostLabel(getCardDefinition(c.defId).costLabel).colors)) colors.add(color);
+  }
+  return colors.size;
+}
+
 function equipBuffBonus(state: GameState, controllerId: string, instanceId: string): { power: number; toughness: number } {
   const controller = state.players.find((p) => p.id === controllerId);
   if (!controller) return { power: 0, toughness: 0 };
@@ -296,9 +353,21 @@ function equipBuffBonus(state: GameState, controllerId: string, instanceId: stri
       const perCounterAmount = perCounter ? (c.counters.find((ctr) => ctr.label === perCounter.counterLabel)?.amount ?? 0) : 0;
       const perType = cDef.equipBuffPerControlledType;
       const perTypeCount = perType ? controller.zones.battlefield.filter((c2) => getCardDefinition(c2.defId).type === perType.type).length : 0;
+      const perColor = cDef.equipBuffPerDistinctControlledColor;
+      const perColorCount = perColor ? distinctControlledColorCount(controller) : 0;
       return {
-        power: acc.power + fixed.power + (perCounter ? perCounter.power * perCounterAmount : 0) + (perType ? perType.power * perTypeCount : 0),
-        toughness: acc.toughness + fixed.toughness + (perCounter ? perCounter.toughness * perCounterAmount : 0) + (perType ? perType.toughness * perTypeCount : 0),
+        power:
+          acc.power +
+          fixed.power +
+          (perCounter ? perCounter.power * perCounterAmount : 0) +
+          (perType ? perType.power * perTypeCount : 0) +
+          (perColor ? perColor.power * perColorCount : 0),
+        toughness:
+          acc.toughness +
+          fixed.toughness +
+          (perCounter ? perCounter.toughness * perCounterAmount : 0) +
+          (perType ? perType.toughness * perTypeCount : 0) +
+          (perColor ? perColor.toughness * perColorCount : 0),
       };
     },
     { power: 0, toughness: 0 }
@@ -335,8 +404,11 @@ export function equipmentContributions(state: GameState, controllerId: string, i
     const perCounterAmount = perCounter ? (c.counters.find((ctr) => ctr.label === perCounter.counterLabel)?.amount ?? 0) : 0;
     const perType = cDef.equipBuffPerControlledType;
     const perTypeCount = perType ? controller.zones.battlefield.filter((c2) => getCardDefinition(c2.defId).type === perType.type).length : 0;
-    const power = fixed.power + (perCounter ? perCounter.power * perCounterAmount : 0) + (perType ? perType.power * perTypeCount : 0);
-    const toughness = fixed.toughness + (perCounter ? perCounter.toughness * perCounterAmount : 0) + (perType ? perType.toughness * perTypeCount : 0);
+    const perColor = cDef.equipBuffPerDistinctControlledColor;
+    const perColorCount = perColor ? distinctControlledColorCount(controller) : 0;
+    const power = fixed.power + (perCounter ? perCounter.power * perCounterAmount : 0) + (perType ? perType.power * perTypeCount : 0) + (perColor ? perColor.power * perColorCount : 0);
+    const toughness =
+      fixed.toughness + (perCounter ? perCounter.toughness * perCounterAmount : 0) + (perType ? perType.toughness * perTypeCount : 0) + (perColor ? perColor.toughness * perColorCount : 0);
     const keywords: string[] = [];
     if (cDef.equipGrantsKeyword) keywords.push(...(Array.isArray(cDef.equipGrantsKeyword) ? cDef.equipGrantsKeyword : [cDef.equipGrantsKeyword]));
     if (cDef.equipGrantsKeywordDuringOwnTurn && state.activePlayerId === controllerId) keywords.push(cDef.equipGrantsKeywordDuringOwnTurn);
@@ -351,14 +423,22 @@ export function equipmentContributions(state: GameState, controllerId: string, i
  * "Vehicles you control get +1/+1") matching `def`'s own subtype. Unlike
  * equipBuffBonus (attachment-based), this scans the controller's WHOLE
  * battlefield for a matching source. */
-function anthemBuffBonus(state: GameState, controllerId: string, def: CardDefinition): { power: number; toughness: number } {
+function anthemBuffBonus(state: GameState, controllerId: string, def: CardDefinition, instance: CardInstance): { power: number; toughness: number } {
   const controller = state.players.find((p) => p.id === controllerId);
-  if (!controller || !def.subtype) return { power: 0, toughness: 0 };
+  if (!controller) return { power: 0, toughness: 0 };
+  const isCommander = !!controller.commanderDefId && frontFaceDefId(instance.defId) === controller.commanderDefId;
   return controller.zones.battlefield.reduce(
     (acc, c) => {
-      const anthem = getCardDefinition(c.defId).staticAnthemForControlledSubtype;
-      if (!anthem || !def.subtype!.toLowerCase().includes(anthem.subtype.toLowerCase())) return acc;
-      return { power: acc.power + anthem.power, toughness: acc.toughness + anthem.toughness };
+      let next = acc;
+      const subtypeAnthem = def.subtype ? getCardDefinition(c.defId).staticAnthemForControlledSubtype : null;
+      if (subtypeAnthem && def.subtype!.toLowerCase().includes(subtypeAnthem.subtype.toLowerCase())) {
+        next = { power: next.power + subtypeAnthem.power, toughness: next.toughness + subtypeAnthem.toughness };
+      }
+      const commanderAnthem = isCommander ? getCardDefinition(c.defId).staticAnthemForCommanderCreaturesYouControl : null;
+      if (commanderAnthem) {
+        next = { power: next.power + commanderAnthem.power, toughness: next.toughness + commanderAnthem.toughness };
+      }
+      return next;
     },
     { power: 0, toughness: 0 }
   );
@@ -369,7 +449,9 @@ export function effectivePower(def: CardDefinition, instance: CardInstance, stat
     instance.temporaryBaseStats?.power ??
     (instance.copiedStatsFromDefId ? getCardDefinition(instance.copiedStatsFromDefId).power ?? 0 : undefined) ??
     lifeBasedBaseStat(state, controllerId, instance.instanceId) ??
+    modifiedCreatureBaseStat(state, controllerId, instance, 'power') ??
     creatureCountBaseStat(state, controllerId, def) ??
+    opponentArtifactCountBaseStat(state, controllerId, def) ??
     (def.power ?? 0);
   const plus = instance.counters.find((c) => c.label === '+1/+1')?.amount ?? 0;
   const minus = instance.counters.find((c) => c.label === '-1/-1')?.amount ?? 0;
@@ -381,7 +463,7 @@ export function effectivePower(def: CardDefinition, instance: CardInstance, stat
   const typeBuff = hasActiveControlledTypeCountBuff(def, state, controllerId) ? def.controlledTypeCountBuff!.power : 0;
   const temp = instance.temporaryBuff?.power ?? 0;
   const equip = equipBuffBonus(state, controllerId, instance.instanceId).power;
-  const anthem = anthemBuffBonus(state, controllerId, def).power;
+  const anthem = anthemBuffBonus(state, controllerId, def, instance).power;
   return base + plus - minus + buff + perLand + perGraveyard + typeBuff + temp + equip + anthem;
 }
 
@@ -390,6 +472,7 @@ export function effectiveToughness(def: CardDefinition, instance: CardInstance, 
     instance.temporaryBaseStats?.toughness ??
     (instance.copiedStatsFromDefId ? getCardDefinition(instance.copiedStatsFromDefId).toughness ?? 0 : undefined) ??
     lifeBasedBaseStat(state, controllerId, instance.instanceId) ??
+    modifiedCreatureBaseStat(state, controllerId, instance, 'toughness') ??
     (def.toughness ?? 0);
   const plus = instance.counters.find((c) => c.label === '+1/+1')?.amount ?? 0;
   const minus = instance.counters.find((c) => c.label === '-1/-1')?.amount ?? 0;
@@ -400,7 +483,7 @@ export function effectiveToughness(def: CardDefinition, instance: CardInstance, 
   const typeBuff = hasActiveControlledTypeCountBuff(def, state, controllerId) ? def.controlledTypeCountBuff!.toughness : 0;
   const temp = instance.temporaryBuff?.toughness ?? 0;
   const equip = equipBuffBonus(state, controllerId, instance.instanceId).toughness;
-  const anthem = anthemBuffBonus(state, controllerId, def).toughness;
+  const anthem = anthemBuffBonus(state, controllerId, def, instance).toughness;
   return base + plus - minus + buff + perGraveyard + typeBuff + temp + equip + anthem;
 }
 
@@ -483,6 +566,9 @@ export function isLegalPendingTarget(state: GameState, pendingTarget: NonNullabl
   if (effect.type === 'putCounterOnTarget') {
     return def.type === 'creature';
   }
+  if (effect.type === 'jenovaCellsAttackTrigger') {
+    return def.type === 'creature';
+  }
   if (effect.type === 'putCounterOnTargetLand') {
     return def.type === 'land';
   }
@@ -517,6 +603,9 @@ export function isLegalPendingTarget(state: GameState, pendingTarget: NonNullabl
   }
   if (effect.type === 'tapTarget') {
     return effect.targetFilter === 'nonlandPermanent' ? def.type !== 'land' : def.type === 'creature';
+  }
+  if (effect.type === 'tapTargetThenExileIfMetalcraft') {
+    return def.type === 'creature';
   }
   if (effect.type === 'putCounterOnUpToOneOwnCreature') {
     return def.type === 'creature' && (effect.anyController || ownerId === pendingTarget.controllerId);
@@ -693,7 +782,9 @@ export function isLegalPendingTarget(state: GameState, pendingTarget: NonNullabl
     (effect.targetFilter === 'opponentNonbasicLand' &&
       def.type === 'land' &&
       !['plains', 'island', 'swamp', 'mountain', 'forest'].includes(def.id) &&
-      ownerId !== pendingTarget.controllerId)
+      ownerId !== pendingTarget.controllerId) ||
+    (effect.targetFilter === 'artifactOrCreature' && (def.type === 'artifact' || def.type === 'creature')) ||
+    (effect.targetFilter === 'creatureOrEnchantment' && (def.type === 'creature' || def.type === 'enchantment'))
   );
 }
 
@@ -774,7 +865,14 @@ export function checkIndestructibleOrShielded(
   instance: CardInstance,
   controllerId: string
 ): { survives: boolean; via: 'indestructible' | 'shield' | null; state: GameState } {
-  const isIndestructible = hasKeywordEffective(def, instance, 'indestructible') || hasBoardGrantedKeyword(state, controllerId, instance, def, 'indestructible');
+  // "During your turn, [this] has indestructible." (Kefka, Dancing Mad) -
+  // a STATIC keyword conditioned on whose turn it currently is, unlike
+  // every other indestructible source here (all unconditional once
+  // granted).
+  const isIndestructible =
+    hasKeywordEffective(def, instance, 'indestructible') ||
+    hasBoardGrantedKeyword(state, controllerId, instance, def, 'indestructible') ||
+    (def.hasIndestructibleDuringControllerTurn === true && state.activePlayerId === controllerId);
   if (isIndestructible) return { survives: true, via: 'indestructible', state };
   const hasShield = instance.counters.some((c) => c.label === 'Shield' && c.amount > 0);
   if (!hasShield) return { survives: false, via: null, state };
@@ -904,6 +1002,37 @@ export function applyDrawTriggers(state: GameState, playerId: string, count: num
       },
     }));
     next = { ...next, log: [...next.log, `${def.name} triggers: gets ${totalAmount} ${counterLabel} counter(s).`] };
+  }
+  // "Scions' Secretary — Whenever an opponent draws a card, if it isn't
+  // that player's turn, create a tapped [tokenId] token. This ability
+  // triggers only once each turn." (Tataru Taru) - checked against the
+  // DRAWING player's opponent's battlefield.
+  if (next.activePlayerId !== playerId) {
+    const opponent = getOpponent(next, playerId);
+    for (const watcher of opponent.zones.battlefield) {
+      const watcherDef = getCardDefinition(watcher.defId);
+      const grant = watcherDef.onOpponentDrawsOffTurnCreateTappedTokenOncePerTurn;
+      if (!grant || watcher.scionsSecretaryTriggeredThisTurn) continue;
+      next = updatePlayer(next, opponent.id, (p) => ({
+        ...p,
+        zones: {
+          ...p.zones,
+          battlefield: p.zones.battlefield.map((c) => (c.instanceId === watcher.instanceId ? { ...c, scionsSecretaryTriggeredThisTurn: true } : c)),
+        },
+      }));
+      const token: CardInstance = {
+        instanceId: nextInstanceId(),
+        defId: grant.tokenId,
+        ownerId: opponent.id,
+        tapped: true,
+        counters: [],
+        damageMarked: 0,
+        summoningSick: true,
+        isToken: true,
+      };
+      next = updatePlayer(next, opponent.id, (p) => ({ ...p, zones: { ...p.zones, battlefield: [...p.zones.battlefield, token] } }));
+      next = { ...next, log: [...next.log, `${watcherDef.name} triggers: ${opponent.name} creates a tapped ${getCardDefinition(grant.tokenId).name} token.`] };
+    }
   }
   return next;
 }

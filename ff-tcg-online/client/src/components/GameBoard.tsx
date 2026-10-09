@@ -2999,6 +2999,10 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                                   ? `Choose another creature you control for ${pendingTargetSourceName} to become a copy of - or Skip.`
                                   : effect.type === 'exileTargetCreatureThenControllerGainsLifeEqualToPower'
                                   ? `Choose target creature for ${pendingTargetSourceName} to exile - its controller gains life equal to its power.`
+                                  : effect.type === 'jenovaCellsAttackTrigger'
+                                  ? `Choose a creature for ${pendingTargetSourceName} to put a ${effect.counterLabel} counter on - or Skip.`
+                                  : effect.type === 'tapTargetThenExileIfMetalcraft'
+                                  ? `Choose a creature for ${pendingTargetSourceName} to tap (or exile with Metalcraft).`
                                   : effect.targetFilter === 'artifactOrEnchantment'
                                   ? `Choose an artifact or enchantment for ${pendingTargetSourceName}'s ability (either player's).`
                                   : effect.targetFilter === 'enchantment'
@@ -3033,6 +3037,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                 effect.type === 'destroyAnyNumberOfTappedCreaturesWithDifferentControllers' ||
                 effect.type === 'phaseOutAnyNumberOfTargetControlledNonlandPermanents' ||
                 effect.type === 'mayBecomeCopyOfAnotherControlledCreatureThenBuffBoth' ||
+                effect.type === 'jenovaCellsAttackTrigger' ||
                 (effect.type === 'pumpUpToTwoTargets' && !!pendingTargetForYou.firstInstanceId)) && (
                 <button className="opponent-view-exit-button" onClick={() => onAction({ type: 'CHOOSE_TARGET', targetInstanceId: null }, pendingTargetForYou.controllerId)}>
                   Skip
@@ -3290,6 +3295,70 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                 Skip
               </button>
             </div>
+          );
+        })()}
+
+      {state.pendingThrowWideTheGatesChoice &&
+        (state.pendingThrowWideTheGatesChoice.controllerId === yourPlayerId || soloControl) &&
+        (() => {
+          const pending = state.pendingThrowWideTheGatesChoice;
+          const sourceFound = findCard(state, pending.sourceInstanceId);
+          const sourceName = sourceFound ? getCardDefinition(sourceFound.card.defId).name : 'This permanent';
+          return (
+            <div className="pending-target-banner">
+              <span>
+                {sourceName}: you may pay {pending.manaValue} life to create a Hero token with {pending.manaValue} +1/+1 counter(s).
+              </span>
+              <button className="opponent-view-exit-button" onClick={() => onAction({ type: 'RESOLVE_THROW_WIDE_THE_GATES', accept: true }, pending.controllerId)}>
+                Pay {pending.manaValue} Life
+              </button>
+              <button className="opponent-view-exit-button" onClick={() => onAction({ type: 'RESOLVE_THROW_WIDE_THE_GATES', accept: false }, pending.controllerId)}>
+                Skip
+              </button>
+            </div>
+          );
+        })()}
+
+      {state.pendingSnortChoice &&
+        (state.pendingSnortChoice.pendingPlayerIds[0] === yourPlayerId || soloControl) &&
+        (() => {
+          const pending = state.pendingSnortChoice;
+          const sourceFound = findCard(state, pending.sourceInstanceId);
+          const sourceName = sourceFound ? getCardDefinition(sourceFound.card.defId).name : 'This spell';
+          const decider = pending.pendingPlayerIds[0];
+          return (
+            <div className="pending-target-banner">
+              <span>
+                {sourceName}: you may discard your hand and draw {pending.drawCount} cards (then take {pending.damageAmount} damage if you do).
+              </span>
+              <button className="opponent-view-exit-button" onClick={() => onAction({ type: 'RESOLVE_SNORT_CHOICE', accept: true }, decider)}>
+                Discard &amp; Draw {pending.drawCount}
+              </button>
+              <button className="opponent-view-exit-button" onClick={() => onAction({ type: 'RESOLVE_SNORT_CHOICE', accept: false }, decider)}>
+                Skip
+              </button>
+            </div>
+          );
+        })()}
+
+      {state.pendingKefkaChoice &&
+        (state.pendingKefkaChoice.controllerId === yourPlayerId || soloControl) &&
+        (() => {
+          const pending = state.pendingKefkaChoice;
+          const sourceFound = findCard(state, pending.sourceInstanceId);
+          const sourceName = sourceFound ? getCardDefinition(sourceFound.card.defId).name : 'This ability';
+          const eligible = state.players
+            .flatMap((p) => p.zones.exile)
+            .filter((c) => pending.eligibleInstanceIds.includes(c.instanceId) && getCardDefinition(c.defId).type !== 'land');
+          return (
+            <ReturnFromGraveyardModal
+              sourceName={sourceName}
+              title="Cast for free?"
+              description="Choose a card exiled this way to cast without paying its mana cost - its owner then loses life equal to its mana value."
+              cards={eligible.map((c) => ({ definition: getCardDefinition(c.defId), instance: c }))}
+              onChoose={(instanceId) => onAction({ type: 'RESOLVE_KEFKA_CHOICE', instanceId }, pending.controllerId)}
+              onCancel={() => onAction({ type: 'RESOLVE_KEFKA_CHOICE', instanceId: null }, pending.controllerId)}
+            />
           );
         })()}
 
@@ -3958,6 +4027,49 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           );
         })()}
 
+      {state.pendingReturnCreatureFromGraveyardHandOrBattlefield &&
+        (() => {
+          const pending = state.pendingReturnCreatureFromGraveyardHandOrBattlefield;
+          const sourceFound = findCard(state, pending.sourceInstanceId);
+          const sourceName = sourceFound ? getCardDefinition(sourceFound.card.defId).name : 'This ability';
+          const controller = state.players.find((p) => p.id === pending.controllerId)!;
+          const eligible = controller.zones.graveyard.filter((c) => getCardDefinition(c.defId).type === 'creature');
+          return (
+            <ReturnFromGraveyardModal
+              sourceName={sourceName}
+              title={pending.toBattlefield ? 'Return a creature to the battlefield' : 'Return a creature to your hand'}
+              description={
+                pending.toBattlefield
+                  ? 'Choose a creature card from your graveyard to return to the battlefield.'
+                  : 'Choose a creature card from your graveyard to return to your hand.'
+              }
+              cards={eligible.map((c) => ({ definition: getCardDefinition(c.defId), instance: c }))}
+              onChoose={(instanceId) => onAction({ type: 'RESOLVE_RETURN_CREATURE_FROM_GRAVEYARD_HAND_OR_BATTLEFIELD', instanceId }, pending.controllerId)}
+              onCancel={() => onAction({ type: 'RESOLVE_RETURN_CREATURE_FROM_GRAVEYARD_HAND_OR_BATTLEFIELD', instanceId: null }, pending.controllerId)}
+            />
+          );
+        })()}
+
+      {state.pendingEspersToMagiciteChoice &&
+        (() => {
+          const pending = state.pendingEspersToMagiciteChoice;
+          const sourceFound = findCard(state, pending.sourceInstanceId);
+          const sourceName = sourceFound ? getCardDefinition(sourceFound.card.defId).name : 'This ability';
+          const eligible = state.players
+            .flatMap((p) => p.zones.exile)
+            .filter((c) => pending.eligibleInstanceIds.includes(c.instanceId));
+          return (
+            <ReturnFromGraveyardModal
+              sourceName={sourceName}
+              title="Create a token copy?"
+              description="Choose up to one creature card exiled this way to create a token copy of."
+              cards={eligible.map((c) => ({ definition: getCardDefinition(c.defId), instance: c }))}
+              onChoose={(instanceId) => onAction({ type: 'RESOLVE_ESPERS_TO_MAGICITE_CHOICE', instanceId }, pending.controllerId)}
+              onCancel={() => onAction({ type: 'RESOLVE_ESPERS_TO_MAGICITE_CHOICE', instanceId: null }, pending.controllerId)}
+            />
+          );
+        })()}
+
       {/* Like pendingSurveil, this shows the controller's own hand - private
           information, so only the controller (or soloControl) ever renders it. */}
       {state.pendingDiscard &&
@@ -4418,6 +4530,33 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                       key={color}
                       className={`mana-choice-button mana-${color}`}
                       onClick={() => onAction({ type: 'CHOOSE_MANA_COLOR', color }, pending.controllerId)}
+                    >
+                      {color}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+      {state.pendingAddManaOfChosenColor &&
+        (state.pendingAddManaOfChosenColor.controllerId === yourPlayerId || soloControl) &&
+        (() => {
+          const pending = state.pendingAddManaOfChosenColor;
+          const colors: ManaColor[] = ['W', 'U', 'B', 'R', 'G'];
+          return (
+            <div className="card-drawer-overlay">
+              <div className="card-actions-panel">
+                <div className="card-actions-header">
+                  <strong>Choose a color - add one mana</strong>
+                </div>
+                <div className="card-actions-bottom-row">
+                  {colors.map((color) => (
+                    <button
+                      key={color}
+                      className={`mana-choice-button mana-${color}`}
+                      onClick={() => onAction({ type: 'RESOLVE_ADD_MANA_OF_CHOSEN_COLOR', color }, pending.controllerId)}
                     >
                       {color}
                     </button>

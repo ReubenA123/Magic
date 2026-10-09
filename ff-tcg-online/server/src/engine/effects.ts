@@ -953,6 +953,13 @@ export function resolveCardEffects(
           logLines.push(`${getCardDefinition(found.card.defId).name} untaps.`);
         }
       }
+    } else if (effect.type === 'untapAllControlledCreatures') {
+      const player = getPlayer(next, playerId);
+      next = updatePlayer(next, playerId, (p) => ({
+        ...p,
+        zones: { ...p.zones, battlefield: p.zones.battlefield.map((c) => (getCardDefinition(c.defId).type === 'creature' ? { ...c, tapped: false } : c)) },
+      }));
+      logLines.push(`${player.name} untaps all creatures they control.`);
     } else if (effect.type === 'queueExtraCombatPhaseIfFirstCombatPhaseOfTurn') {
       if (next.combatPhaseNumberThisTurn === 1) {
         next = { ...next, extraCombatPhasesQueued: next.extraCombatPhasesQueued + 1 };
@@ -1021,6 +1028,8 @@ export function resolveCardEffects(
       }
     } else if (effect.type === 'chooseManaColor') {
       next = { ...next, pendingManaColorChoice: { instanceId: sourceInstanceId, controllerId: playerId } };
+    } else if (effect.type === 'addOneManaOfChosenColor') {
+      next = { ...next, pendingAddManaOfChosenColor: { controllerId: playerId } };
     } else if (effect.type === 'sacrificeCreature') {
       const opponent = getOpponent(next, playerId);
       const result = resolveSacrificeQueue(next, sourceInstanceId, Array(effect.count ?? 1).fill(opponent.id), effect.filter ?? 'creature');
@@ -1208,7 +1217,9 @@ export function resolveCardEffects(
             (effect.targetFilter === 'opponentArtifactOrLand' && (d.type === 'artifact' || d.type === 'land') && p.id !== playerId) ||
             (effect.targetFilter === 'tappedCreature' && d.type === 'creature' && c.tapped) ||
             (effect.targetFilter === 'opponentNonlandPermanent' && d.type !== 'land' && p.id !== playerId) ||
-            (effect.targetFilter === 'opponentNonbasicLand' && isNonbasicLand(d) && p.id !== playerId)
+            (effect.targetFilter === 'opponentNonbasicLand' && isNonbasicLand(d) && p.id !== playerId) ||
+            (effect.targetFilter === 'artifactOrCreature' && (d.type === 'artifact' || d.type === 'creature')) ||
+            (effect.targetFilter === 'creatureOrEnchantment' && (d.type === 'creature' || d.type === 'enchantment'))
           );
         })
       );
@@ -1784,6 +1795,24 @@ export function resolveCardEffects(
       } else {
         next = { ...next, pendingTarget: { sourceInstanceId, controllerId: playerId, effect } };
       }
+    } else if (effect.type === 'jenovaCellsAttackTrigger') {
+      next = updatePlayer(next, playerId, (p) => ({
+        ...p,
+        modifiedCreaturesHaveBasePowerToughnessUntilEndOfTurn: { power: effect.power, toughness: effect.toughness },
+      }));
+      logLines.push(`${getPlayer(next, playerId).name}'s modified creatures have base power and toughness ${effect.power}/${effect.toughness} until end of turn.`);
+      const hasLegalTarget = [...next.players[0].zones.battlefield, ...next.players[1].zones.battlefield].some((c) => getCardDefinition(c.defId).type === 'creature');
+      if (hasLegalTarget) {
+        next = { ...next, pendingTarget: { sourceInstanceId, controllerId: playerId, effect } };
+      }
+    } else if (effect.type === 'tapTargetThenExileIfMetalcraft') {
+      const hasLegalTarget = [...next.players[0].zones.battlefield, ...next.players[1].zones.battlefield].some((c) => getCardDefinition(c.defId).type === 'creature');
+      const sourceName = getCardDefinition(findCardAnywhere(next, sourceInstanceId)!.card.defId).name;
+      if (!hasLegalTarget) {
+        logLines.push(`${sourceName}'s ability has no legal target.`);
+      } else {
+        next = { ...next, pendingTarget: { sourceInstanceId, controllerId: playerId, effect } };
+      }
     } else if (effect.type === 'chooseOneMode') {
       next = { ...next, pendingChooseOneMode: { sourceInstanceId, controllerId: playerId, modes: effect.modes } };
     } else if (
@@ -1841,6 +1870,19 @@ export function resolveCardEffects(
         zones: { ...p.zones, hand: drawn, graveyard: [...p.zones.graveyard, ...discarded.map((c) => ({ ...c, graveyardEntrySource: 'other' as const }))], library: p.zones.library.slice(drawn.length) },
       }));
       logLines.push(`${player.name} discards their hand (${discarded.length}) and draws ${drawn.length}.`);
+    } else if (effect.type === 'eachPlayerMayDiscardHandAndDrawThenDamageOpponentsWhoDid') {
+      const opponent = getOpponent(next, playerId);
+      next = {
+        ...next,
+        pendingSnortChoice: {
+          sourceInstanceId,
+          casterId: playerId,
+          drawCount: effect.drawCount,
+          damageAmount: effect.damageAmount,
+          pendingPlayerIds: [playerId, opponent.id],
+          discardedPlayerIds: [],
+        },
+      };
     } else if (effect.type === 'addManaEqualToOwnLoreCounter') {
       const source = findCardAnywhere(next, sourceInstanceId);
       const loreCount = source?.card.counters.find((c) => c.label === 'lore')?.amount ?? 0;
@@ -2022,6 +2064,13 @@ export function resolveCardEffects(
       // The no-cost cousin of mayPayLifeThenEffect above - see GameState.
       // pendingMayEffect and engine/actions.ts: resolveMayEffect.
       next = { ...next, pendingMayEffect: { sourceInstanceId, controllerId: playerId, effects: effect.effects } };
+    } else if (effect.type === 'drawThenTargetOpponentMayDraw') {
+      const player = getPlayer(next, playerId);
+      const drawn = player.zones.library.slice(0, 1);
+      next = updatePlayer(next, playerId, (p) => ({ ...p, zones: { ...p.zones, library: p.zones.library.slice(1), hand: [...p.zones.hand, ...drawn] } }));
+      logLines.push(`${player.name} draws a card.`);
+      const opponent = getOpponent(next, playerId);
+      next = { ...next, pendingMayEffect: { sourceInstanceId, controllerId: opponent.id, effects: [{ type: 'drawCards', amount: 1 }] } };
     } else if (effect.type === 'destroyOpponentCreature') {
       const opponent = getOpponent(next, playerId);
       const hasLegalTarget = opponent.zones.battlefield.some((c) => getCardDefinition(c.defId).type === 'creature');
@@ -2221,6 +2270,17 @@ export function resolveCardEffects(
         }));
         logLines.push(`${opponent.name} mills ${count} card(s) (${player.name} gained ${player.lifeGainedThisTurn} life this turn).`);
       }
+    } else if (effect.type === 'returnTargetCreatureFromGraveyardToHandOrBattlefieldIfLifeGainedAtLeast') {
+      const player = getPlayer(next, playerId);
+      const hasLegalTarget = player.lifeGainedThisTurn > 0 && player.zones.graveyard.some((c) => getCardDefinition(c.defId).type === 'creature');
+      if (!hasLegalTarget) {
+        logLines.push(`${player.name} gained no life this turn (or has no creature card in their graveyard) - Raise doesn't trigger.`);
+      } else {
+        next = {
+          ...next,
+          pendingReturnCreatureFromGraveyardHandOrBattlefield: { sourceInstanceId, controllerId: playerId, toBattlefield: player.lifeGainedThisTurn >= effect.minLifeGained },
+        };
+      }
     } else if (effect.type === 'pumpSelf') {
       next = applyTemporaryBuff(next, sourceInstanceId, effect.power, effect.toughness);
       if (effect.grantKeyword) next = grantTemporaryKeyword(next, sourceInstanceId, effect.grantKeyword);
@@ -2263,6 +2323,25 @@ export function resolveCardEffects(
       const opponent = getOpponent(next, playerId);
       next = loseLife(next, opponent.id, effect.amount);
       logLines.push(`${opponent.name} loses ${effect.amount} life.`);
+    } else if (effect.type === 'eachOpponentSacrificesCreatureWithGreatestPower') {
+      const opponent = getOpponent(next, playerId);
+      const creatures = opponent.zones.battlefield.filter((c) => getCardDefinition(c.defId).type === 'creature');
+      if (creatures.length === 0) {
+        logLines.push(`${opponent.name} has no creature to sacrifice.`);
+      } else {
+        let best = creatures[0];
+        let bestPower = effectivePower(getCardDefinition(best.defId), best, next, opponent.id);
+        for (const c of creatures.slice(1)) {
+          const p = effectivePower(getCardDefinition(c.defId), c, next, opponent.id);
+          if (p > bestPower) {
+            best = c;
+            bestPower = p;
+          }
+        }
+        const sacResult = moveCreaturesToGraveyardAndTrigger(next, [best.instanceId], 'is sacrificed');
+        next = sacResult.state;
+        logLines.push(`${opponent.name} sacrifices ${getCardDefinition(best.defId).name} (greatest power).`, ...sacResult.logLines);
+      }
     } else if (effect.type === 'tapAllOpponentLands') {
       const opponent = getOpponent(next, playerId);
       next = updatePlayer(next, opponent.id, (p) => ({
@@ -2370,6 +2449,33 @@ export function resolveCardEffects(
         next = updatePlayer(next, p.id, (pl) => ({ ...pl, zones: { ...pl.zones, graveyard: [], exile: [...pl.zones.exile, ...graveyard] } }));
       }
       logLines.push(`${exiledCount} card(s) exiled from graveyards.`);
+    } else if (effect.type === 'exileEachOpponentGraveyardThenMayCopyExiledCreatureAsToken') {
+      const opponent = getOpponent(next, playerId);
+      const graveyard = opponent.zones.graveyard;
+      let exiledCreatureIds: string[] = [];
+      if (graveyard.length > 0) {
+        exiledCreatureIds = graveyard.filter((c) => getCardDefinition(c.defId).type === 'creature').map((c) => c.instanceId);
+        next = updatePlayer(next, opponent.id, (p) => ({ ...p, zones: { ...p.zones, graveyard: [], exile: [...p.zones.exile, ...graveyard] } }));
+        logLines.push(`${opponent.name}'s graveyard (${graveyard.length} card(s)) is exiled.`);
+      } else {
+        logLines.push(`${opponent.name} has no graveyard to exile.`);
+      }
+      if (exiledCreatureIds.length > 0) {
+        next = { ...next, pendingEspersToMagiciteChoice: { sourceInstanceId, controllerId: playerId, eligibleInstanceIds: exiledCreatureIds } };
+      }
+    } else if (effect.type === 'exileRandomFromEachOpponentGraveyardThenMayCastFree') {
+      const opponent = getOpponent(next, playerId);
+      if (opponent.zones.graveyard.length === 0) {
+        logLines.push(`${opponent.name} has no graveyard to exile from.`);
+      } else {
+        const picked = opponent.zones.graveyard[Math.floor(Math.random() * opponent.zones.graveyard.length)];
+        next = updatePlayer(next, opponent.id, (p) => ({
+          ...p,
+          zones: { ...p.zones, graveyard: p.zones.graveyard.filter((c) => c.instanceId !== picked.instanceId), exile: [...p.zones.exile, picked] },
+        }));
+        logLines.push(`${getCardDefinition(picked.defId).name} is exiled at random from ${opponent.name}'s graveyard.`);
+        next = { ...next, pendingKefkaChoice: { sourceInstanceId, controllerId: playerId, eligibleInstanceIds: [picked.instanceId] } };
+      }
     } else if (effect.type === 'damageEachCreature') {
       const dead: string[] = [];
       for (const p of next.players) {
@@ -3002,6 +3108,32 @@ export function triggerCreatureEnterWatchers(state: GameState, playerId: string,
   let next = state;
   const logLines: string[] = [];
 
+  // "Creatures your opponents control enter tapped. Whenever a creature
+  // an opponent controls enters, you gain [lifeGain] life." (Authority of
+  // the Consuls) - checked against the ENTERING creature's controller's
+  // OPPONENT's battlefield (watcher.controller must be an opponent of
+  // playerId), tapping the entering creature retroactively since this
+  // runs right after entry. Known gap: a token entering via CreateTokenEffect
+  // never calls this hook at all (same limitation already accepted
+  // elsewhere for this exact watcher point), so it won't see this bonus.
+  const consulsOpponent = getOpponent(next, playerId);
+  const consulsWatchers = consulsOpponent.zones.battlefield.filter((c) => getCardDefinition(c.defId).opponentCreaturesEnterTappedAndYouGainLife);
+  if (consulsWatchers.length > 0) {
+    const entered = findCardAnywhere(next, enteredInstanceId);
+    if (entered && entered.zone === 'battlefield' && getCardDefinition(entered.card.defId).type === 'creature') {
+      next = updatePlayer(next, playerId, (p) => ({
+        ...p,
+        zones: { ...p.zones, battlefield: p.zones.battlefield.map((c) => (c.instanceId === enteredInstanceId ? { ...c, tapped: true } : c)) },
+      }));
+      for (const watcher of consulsWatchers) {
+        const watcherDef = getCardDefinition(watcher.defId);
+        const { lifeGain } = watcherDef.opponentCreaturesEnterTappedAndYouGainLife!;
+        next = addLife(next, consulsOpponent.id, lifeGain);
+        logLines.push(`${watcherDef.name} triggers: ${getCardDefinition(entered.card.defId).name} enters tapped, ${consulsOpponent.name} gains ${lifeGain} life.`);
+      }
+    }
+  }
+
   for (const card of getPlayer(next, playerId).zones.battlefield) {
     if (card.instanceId === enteredInstanceId) continue;
     const def = getCardDefinition(card.defId);
@@ -3275,6 +3407,23 @@ export function triggerNoncreatureCastAbilities(
       const sacResult = moveCreaturesToGraveyardAndTrigger(next, [card.instanceId], 'is sacrificed');
       next = sacResult.state;
       logLines.push(`${casterName} sacrifices ${def.name}: ${opponent.name} loses ${amount} life.`, ...sacResult.logLines);
+    }
+    if (trigger.damageEachOpponentAndGainLifeIfManaValueAtLeast && manaSpent >= trigger.damageEachOpponentAndGainLifeIfManaValueAtLeast.minManaValue) {
+      const { amount } = trigger.damageEachOpponentAndGainLifeIfManaValueAtLeast;
+      const opponent = getOpponent(next, playerId);
+      const dealt = amount * damageMultiplierFor(next, playerId, def);
+      next = loseLife(next, opponent.id, dealt);
+      next = addLife(next, playerId, amount);
+      next = applyGainLifeTriggers(next, playerId);
+      logLines.push(`${def.name} triggers: ${opponent.name} loses ${dealt} life and ${getPlayer(next, playerId).name} gains ${amount} life.`);
+    }
+    if (trigger.mayPayLifeEqualToManaSpentCreateHeroTokenOncePerTurn && !card.throwWideTheGatesTriggeredThisTurn) {
+      next = updatePlayer(next, playerId, (p) => ({
+        ...p,
+        zones: { ...p.zones, battlefield: p.zones.battlefield.map((c) => (c.instanceId === card.instanceId ? { ...c, throwWideTheGatesTriggeredThisTurn: true } : c)) },
+      }));
+      next = { ...next, pendingThrowWideTheGatesChoice: { sourceInstanceId: card.instanceId, controllerId: playerId, manaValue: manaSpent } };
+      logLines.push(`${def.name} triggers: ${getPlayer(next, playerId).name} may pay ${manaSpent} life to create a Hero token.`);
     }
   }
 

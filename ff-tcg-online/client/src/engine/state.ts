@@ -134,6 +134,7 @@ export function createStateFromDeck(deck: SavedDeck, humanName: string): GameSta
       commanderDefId: deck.commanderId,
       commanderDamageTaken: 0,
       lifeGainedThisTurn: 0,
+      lifeLostThisTurn: 0,
     };
   }
 
@@ -156,6 +157,7 @@ export function createStateFromDeck(deck: SavedDeck, humanName: string): GameSta
     pendingTarget: null,
     pendingReveal: null,
     pendingManaColorChoice: null,
+    pendingAddManaOfChosenColor: null,
     pendingSacrifice: null,
     pendingKeepOneSacrificeRest: null,
     pendingChooseUpToNCreaturesSacrificeRest: null,
@@ -189,6 +191,11 @@ export function createStateFromDeck(deck: SavedDeck, humanName: string): GameSta
     creaturesDiedThisTurn: 0,
     pendingReanimate: null,
     pendingReturnCreaturesFromGraveyard: null,
+    pendingReturnCreatureFromGraveyardHandOrBattlefield: null,
+    pendingEspersToMagiciteChoice: null,
+    pendingThrowWideTheGatesChoice: null,
+    pendingSnortChoice: null,
+    pendingKefkaChoice: null,
     pendingOptionalTransform: null,
     pendingOptionalBecomeCopy: null,
     pendingLibraryPlacementChoice: null,

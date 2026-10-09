@@ -45,6 +45,7 @@ function buildPlayer(id: string, name: string): PlayerState {
     hasDrawnThisTurn: false,
     commanderDamageTaken: 0,
     lifeGainedThisTurn: 0,
+    lifeLostThisTurn: 0,
   };
 }
 
@@ -67,6 +68,7 @@ export function createInitialState(player1Name: string, player2Name: string, pla
     pendingTarget: null,
     pendingReveal: null,
     pendingManaColorChoice: null,
+    pendingAddManaOfChosenColor: null,
     pendingSacrifice: null,
     pendingKeepOneSacrificeRest: null,
     pendingChooseUpToNCreaturesSacrificeRest: null,
@@ -100,6 +102,11 @@ export function createInitialState(player1Name: string, player2Name: string, pla
     pendingCastFromGraveyardAnyMana: null,
     pendingMillThenPutLandIntoHand: null,
     pendingReturnCreaturesFromGraveyard: null,
+    pendingReturnCreatureFromGraveyardHandOrBattlefield: null,
+    pendingEspersToMagiciteChoice: null,
+    pendingThrowWideTheGatesChoice: null,
+    pendingSnortChoice: null,
+    pendingKefkaChoice: null,
     pendingOptionalTransform: null,
     pendingOptionalBecomeCopy: null,
     pendingLibraryPlacementChoice: null,
