@@ -258,6 +258,21 @@ export const CARD_POOL: CardDefinition[] = [
     // needs a damage-redirection replacement effect; neither exists yet.
   },
   {
+    id:'angel-of-the-ruins',
+    name:'Angel of the Ruins',
+    type:'creature',
+    subtype:'Artifact Creature Angel',
+    costLabel:'{5}{W}{W}',
+    power: 5,
+    toughness: 7,
+    text:'Flying\n'+
+    'When this creature enters, exile up to two target artifacts and/or enchantments.\n'+
+    'Plainscycling {2} ({2}, Discard this card: Search your library for a Plains card, reveal it, put it into your hand, then shuffle.)',
+    imagePath:'/assets/cards/angel-of-the-ruins.webp',
+    onEnter: [{ type: 'exileTargetPermanent', targetFilter: 'artifactOrEnchantment', upToTwo: true }],
+    cycling: { cost: '{2}', searchLandName: 'Plains' },
+  },
+  {
     id:'arcane-signet',
     name:'Arcane Signet',
     type:'artifact',
@@ -317,6 +332,19 @@ export const CARD_POOL: CardDefinition[] = [
       { color: 'W', effects: [{ type: 'putCounterOnEachControlledCreatureMatchingSubtype', subtype: 'Legendary', counterLabel: '+1/+1', counterAmount: 1, grantKeyword: 'vigilance' }] },
       { color: 'B', effects: [{ type: 'putCounterOnEachControlledCreatureMatchingSubtype', subtype: 'Legendary', counterLabel: '+1/+1', counterAmount: 1, grantKeyword: 'menace' }] },
     ],
+  },
+  {
+    id:'arcane-sanctum',
+    name:'Arcane Sanctum',
+    type:'land',
+    costLabel:'-',
+    text:'This land enters tapped.\n'+
+    '{T}: Add {W}, {U}, or {B}.\n'+
+    '“None of us were prepared for the spectacle that awaited us when we first stepped into the tower. To be surrounded by the marvels of a lost age took our breath away.”\n'+
+    '—Ironworks datalog 2.5',
+    imagePath:'/assets/cards/arcane-sanctum.webp',
+    entersTapped: true,
+    producesMana: ['W', 'U', 'B'],
   },
   {
     id: 'ardyn-the-usurper',
@@ -650,6 +678,19 @@ export const CARD_POOL: CardDefinition[] = [
 
   },
   {
+    id:'battlefield-forge',
+    name:'Battlefield Forge',
+    type:'land',
+    costLabel:'-',
+    text:'{T}: Add {C}.\n'+
+    '{T}: Add {R} or {W}. This land deals 1 damage to you.\n'+
+    '“Welcome to the new world order.”\n'+
+    '—Rufus Shinra',
+    imagePath:'/assets/cards/battlefield-forge.webp',
+    producesMana: 'C',
+    altProducesMana: { colors: ['R', 'W'], payLife: 1 },
+  },
+  {
     id: 'battle-menu',
     name: 'Battle Menu',
     type: 'instant',
@@ -963,6 +1004,23 @@ export const CARD_POOL: CardDefinition[] = [
     imagePath: '/assets/cards/cecil-redeemed-paladin.webp',
   },
   {
+    id:'champions-from-beyond',
+    name:'Champions from Beyond',
+    type:'enchantment',
+    costLabel:'{X}{W}{W}',
+    text:'When this enchantment enters, create X 1/1 colorless Hero creature tokens.\n'+
+    'Light Party — Whenever you attack with four or more creatures, scry 2, then draw a card.\n'+
+    'Full Party — Whenever you attack with eight or more creatures, those creatures get +4/+4 until end of turn.',
+    imagePath:'/assets/cards/champions-from-beyond.webp',
+    onEnter: [{ type: 'createToken', tokenId: 'token-hero', count: 'chosenX' }],
+    // "Scry 2" has no dedicated mechanic in this engine - approximated as
+    // Surveil 2 (look at the top 2, choice is top-or-graveyard instead of
+    // top-or-bottom), the closest existing "look at the top of your
+    // library and rearrange" effect.
+    onAttackWithAtLeastNCreatures: { minCount: 4, effects: [{ type: 'surveil', count: 2, thenDrawCount: 1 }] },
+    pumpAllAttackersIfAttackedWithAtLeastNCreatures: { minCount: 8, power: 4, toughness: 4 },
+  },
+  {
     id:'chasm-skulker',
     name: 'Chasm Skulker',
     type: 'creature',
@@ -1054,6 +1112,19 @@ export const CARD_POOL: CardDefinition[] = [
   },
   // --- Cid put in later, he has multiple cards all with the same text but different images -------------------------------------------------------
   {
+    id:'cinder-glade',
+    name:'Cinder Glade',
+    type:'land',
+    costLabel:'-',
+    text:'({T}: Add {R} or {G}.)\n'+
+    'This land enters tapped unless you control two or more basic lands.\n'+
+    '“After we lost the war, we got peace, but with that, we lost something else. Now look at Wutai…”\n'+
+    '—Yuffie Kisaragi',
+    imagePath:'/assets/cards/cinder-glade.webp',
+    entersTappedUnlessControlBasicLandCount: 2,
+    producesMana: ['R', 'G'],
+  },
+  {
     id: 'circle-of-power',
     name: 'Circle of Power',
     type: 'sorcery',
@@ -1095,6 +1166,19 @@ export const CARD_POOL: CardDefinition[] = [
     imagePath:'/assets/cards/clever-concealment.webp',
     convoke: true,
     onCast: [{ type: 'phaseOutAnyNumberOfTargetControlledNonlandPermanents' }],
+  },
+  {
+    id:'clifftop-retreat',
+    name:'Clifftop Retreat',
+    type:'land',
+    costLabel:'-',
+    text:'This land enters tapped unless you control a Mountain or a Plains.\n'+
+    '{T}: Add {R} or {W}.\n'+
+    '“Our mission is to survey a run-down reactor.”\n'+
+    '—Sephiroth',
+    imagePath:'/assets/cards/clifftop-retreat.webp',
+    entersTappedUnlessControlLandNames: ['Mountain', 'Plains'],
+    producesMana: ['R', 'W'],
   },
   {
     id: 'clive-ifrits-dominant',
@@ -1422,6 +1506,27 @@ export const CARD_POOL: CardDefinition[] = [
     imagePath: '/assets/cards/cornered-by-black-mages.webp'
   },
   {
+    id:'coveted-jewel',
+    name:'Coveted Jewel',
+    type:'artifact',
+    costLabel:'{6}',
+    text:'When this artifact enters, draw three cards.\n'+
+    '{T}: Add three mana of any one color.\n'+
+    'Whenever one or more creatures an opponent controls attack you and aren\u2019t blocked, that player draws three cards and gains control of this artifact. Untap it.',
+    imagePath:'/assets/cards/coveted-jewel.webp',
+    onEnter: [{ type: 'drawCards', amount: 3 }],
+    abilities: [
+      {
+        id: 'coveted-jewel-add',
+        label: 'Add three mana of any one color',
+        cost: { tap: true },
+        effects: [{ type: 'addOneManaOfChosenColor', amount: 3 }],
+        effectText: 'Add three mana of any one color.',
+      },
+    ],
+    onUnblockedOpponentAttackGrantsControlAndDraws: { drawCount: 3 },
+  },
+  {
     id:'crackling-doom',
     name: 'Crackling Doom',
     type:'instant',
@@ -1442,6 +1547,26 @@ export const CARD_POOL: CardDefinition[] = [
     onEnter: [{ type: 'chooseManaColor' }],
   },
   {
+    id:'crux-of-fate',
+    name:'Crux of Fate',
+    type:'sorcery',
+    costLabel:'{3}{B}{B}',
+    text:'Choose one —\n'+
+    '• Destroy all Dragon creatures.\n'+
+    '• Destroy all non-Dragon creatures.\n'+
+    '“Thou art weak, Hraesvelgr—a slithering wyrm who fawneth on the vermin who should rightly be his prey.”',
+    imagePath:'/assets/cards/crux-of-fate.webp',
+    onCast: [
+      {
+        type: 'chooseOneMode',
+        modes: [
+          { label: 'Destroy all Dragon creatures.', effects: [{ type: 'destroyAll', targetFilter: 'creatureMatchingSubtype', requiredSubtype: 'Dragon' }] },
+          { label: 'Destroy all non-Dragon creatures.', effects: [{ type: 'destroyAll', targetFilter: 'creatureNotMatchingSubtype', requiredSubtype: 'Dragon' }] },
+        ],
+      },
+    ],
+  },
+  {
     id: 'crystal-fragments',
     name: 'Crystal Fragments',
     type: 'artifact',
@@ -1452,6 +1577,17 @@ export const CARD_POOL: CardDefinition[] = [
     equipCost: '{1}',
     equipBuff: { power: 1, toughness: 1 },
     imagePath: '/assets/cards/crystal-fragments.webp'
+  },
+  {
+    id:'cut-a-deal',
+    name:'Cut a Deal',
+    type:'sorcery',
+    costLabel:'{2}{W}',
+    text:'Each opponent draws a card, then you draw a card for each opponent who drew a card this way.\n'+
+    '“A strong Eorzea will ever have need of a strong Ul\u2019dah.”\n'+
+    '—Nanamo Ul Namo',
+    imagePath:'/assets/cards/cut-a-deal.webp',
+    onCast: [{ type: 'eachOpponentDrawsThenCasterDrawsForEachWhoDid' }],
   },
   {
     id:'damning-verdict',
@@ -1488,6 +1624,24 @@ export const CARD_POOL: CardDefinition[] = [
     equipBuff: { power: 3, toughness: 0 },
     equipGrantsSubtype: 'Knight',
     imagePath: '/assets/cards/dark-knight-s-greatsword.webp'
+  },
+  {
+    id:'darkwater-catacombs',
+    name:'Darkwater Catacombs',
+    costLabel:'-',
+    type:'land',
+    text:'{1}, {T}: Add {U}{B}.\n'+
+    'Thought to have been built by the Nymian civilization, which thrived in the area some fifteen centuries ago, the palace appears to have been dedicated to their patron deity, Oschon, the Wanderer.',
+    imagePath:'/assets/cards/darkwater-catacombs.webp',
+    abilities: [
+      {
+        id: 'darkwater-catacombs-add',
+        label: 'Add {U}{B}',
+        cost: { manaLabel: '{1}', tap: true },
+        effects: [{ type: 'addMana', colors: { U: 1, B: 1 } }],
+        effectText: 'Add {U}{B}.',
+      },
+    ],
   },
   {
     id: 'deadly-embrace',
@@ -1540,7 +1694,7 @@ export const CARD_POOL: CardDefinition[] = [
     type:'land',
     costLabel:'-',
     text:'{T}: Add {C}.\n'+
-    '{2}, {T}, Sacrifice this land: Destroy target nonbasic land an opponent controls. That land’s controller may search their library for a basic land card, put it onto the battlefield, then shuffle. You may search your library for a basic land card, put it onto the battlefield, then shuffle.',
+    '{2}, {T}, Sacrifice this land: Destroy target nonbasic land an opponent controls. That land\u2019s controller may search their library for a basic land card, put it onto the battlefield, then shuffle. You may search your library for a basic land card, put it onto the battlefield, then shuffle.',
     imagePath:'/assets/cards/demolition-field.webp',
     producesMana: 'C',
     abilities: [
@@ -1549,7 +1703,7 @@ export const CARD_POOL: CardDefinition[] = [
         label: 'Sacrifice: Destroy Nonbasic Land',
         cost: { manaLabel: '{2}', tap: true, sacrificeSelf: true },
         effects: [{ type: 'destroyTarget', targetFilter: 'opponentNonbasicLand', thenBothPlayersMaySearchBasicLandToBattlefield: true }],
-        effectText: 'Destroy target nonbasic land an opponent controls. That land’s controller may search their library for a basic land card, put it onto the battlefield, then shuffle. You may search your library for a basic land card, put it onto the battlefield, then shuffle.',
+        effectText: 'Destroy target nonbasic land an opponent controls. That land\u2019s controller may search their library for a basic land card, put it onto the battlefield, then shuffle. You may search your library for a basic land card, put it onto the battlefield, then shuffle.',
       },
     ],
   },
@@ -2059,6 +2213,36 @@ export const CARD_POOL: CardDefinition[] = [
 
   },
   {
+    id:'fetid-heath',
+    name:'Fetid Heath',
+    type:'land',
+    costLabel:'-',
+    text:'{T}: Add {C}.\n'+
+    '{W/B}, {T}: Add {W}{W}, {W}{B}, or {B}{B}.\n'+
+    '“Nowhere… to… run… Nowhere… to… hide… No escape… for… you…”\n'+
+    '—Ghosts on the Phantom Train',
+    imagePath:'/assets/cards/fetid-heath.webp',
+    producesMana: 'C',
+    abilities: [
+      {
+        id: 'fetid-heath-filter',
+        label: 'Add two mana',
+        cost: { manaLabel: '{1}', tap: true },
+        effects: [
+          {
+            type: 'chooseOneMode',
+            modes: [
+              { label: 'Add {W}{W}', effects: [{ type: 'addMana', colors: { W: 2 } }] },
+              { label: 'Add {W}{B}', effects: [{ type: 'addMana', colors: { W: 1, B: 1 } }] },
+              { label: 'Add {B}{B}', effects: [{ type: 'addMana', colors: { B: 2 } }] },
+            ],
+          },
+        ],
+        effectText: 'Add {W}{W}, {W}{B}, or {B}{B}.',
+      },
+    ],
+  },
+  {
     id: "fight-on",
     name: "Fight On!",
     type: 'instant',
@@ -2135,6 +2319,19 @@ export const CARD_POOL: CardDefinition[] = [
     // need real new infrastructure, not just a new CardDefinition field.
   },
   {
+    id:'foreboding-ruins',
+    name:'Foreboding Ruins',
+    type:'land',
+    costLabel:'-',
+    text:'As this land enters, you may reveal a Swamp or Mountain card from your hand. If you don\u2019t, this land enters tapped.\n'+
+    '{T}: Add {B} or {R}.\n'+
+    '“They were storing an awful lot of flame rods in there…”\n'+
+    '—Thamasa elder',
+    imagePath:'/assets/cards/foreboding-ruins.webp',
+    producesMana: ['B', 'R'],
+    entersTappedUnlessRevealLandNames: ['Swamp', 'Mountain'],
+  },
+  {
     id:'forge-of-heroes',
     name: 'Forge of Heroes',
     type: 'land',
@@ -2209,7 +2406,8 @@ export const CARD_POOL: CardDefinition[] = [
     text: "Jump — During your turn, Freya Crescent has flying.\nT: Add R. Spend this mana only to cast an Equipment spell or activate an equip ability",
     grantsSelfKeywordDuringOwnTurn: 'flying',
     imagePath: '/assets/cards/freya-crescent.webp'
-  }, {
+  }, 
+  {
     id: 'from-father-to-son',
     name: 'From Father to Son',
     type: 'sorcery',
@@ -2220,6 +2418,29 @@ export const CARD_POOL: CardDefinition[] = [
     onCast: [{ type: 'searchLibraryForSubtype', subtype: 'Vehicle' }],
     flashback: { cost: '{4}{W}{W}{W}', effects: [{ type: 'searchLibraryForSubtype', subtype: 'Vehicle', toBattlefieldUntapped: true }] },
   }, 
+  {
+    id:'furious-rise',
+    name:'Furious Rise',
+    type:'enchantment',
+    costLabel:'{2}{R}',
+    text:'At the beginning of your end step, if you control a creature with power 4 or greater, exile the top card of your library. You may play that card until you exile another card with this enchantment.\n'+
+    '“You guys are worthless, but my proud creation is a sure thing!”',
+    imagePath:'/assets/cards/furious-rise.webp',
+    onOwnEndStep: [{ type: 'exileTopOfLibraryPlayableUntilAnotherExiledWithSourceIfControlCreaturePowerAtLeast', minPower: 4 }],
+  },
+  {
+    id:'furycalm-snarl',
+    name:'Furycalm Snarl',
+    type:'land',
+    costLabel:'-',
+    text:'As this land enters, you may reveal a Mountain or Plains card from your hand. If you don\u2019t, this land enters tapped.\n'+
+    '{T}: Add {R} or {W}.\n'+
+    '“It sure helped having Cid here. I had no idea he could drive a train…”\n'+
+    '—Red XIII',
+    imagePath:'/assets/cards/furycalm-snarl.webp',
+    producesMana: ['R', 'W'],
+    entersTappedUnlessRevealLandNames: ['Mountain', 'Plains'],
+  },
   {
     id:'g-raha-tia-scion-reborn',
     name:'G\u2019raha Tia, Scion Reborn',
@@ -2274,7 +2495,20 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'Until end of turn, target creature gets +1/+0 and gains “When this creature dies, put a number of +1/+1 counters equal to its power on up to one target creature.”',
     imagePath: '/assets/cards/galuf-s-final-act.webp',
     onCast: [{ type: 'pumpTarget', power: 1, toughness: 0, grantsTemporaryOnDeathPutCountersEqualToPower: true }],
-  }, {
+  }, 
+  {
+    id:'game-trail',
+    name:'Game Trail',
+    type:'land',
+    costLabel:'-',
+    text:'As this land enters, you may reveal a Mountain or Forest card from your hand. If you don\u2019t, this land enters tapped.\n'+
+    '{T}: Add {R} or {G}.\n'+
+    'Many attractions await you here at the Gold Saucer. You will be moved and excited, thrilled and terrified!',
+    imagePath:'/assets/cards/game-trail.webp',
+    producesMana: ['R', 'G'],
+    entersTappedUnlessRevealLandNames: ['Mountain', 'Forest'],
+  },
+  {
     id: 'garland-knight-of-cornelia',
     name: "Garland, Knight of Cornelia",
     type: "creature",
@@ -2384,7 +2618,21 @@ export const CARD_POOL: CardDefinition[] = [
     equipGrantsKeyword: 'double strike',
     equipGrantsOnAttack: [{ type: 'untapSelfIfFirstCombatPhaseOfTurn' }, { type: 'queueExtraCombatPhaseIfFirstCombatPhaseOfTurn' }],
     imagePath: '/assets/cards/genji-glove.webp'
-  }, {
+  }, 
+  {
+    id:'geothermal-bog',
+    name:'Geothermal Bog',
+    costLabel:'-',
+    type:'land',
+    text:'({T}: Add {B} or {R}.)\n'+
+    'This land enters tapped.\n'+
+    '“Legend has it that the Phoenix turned itself to stone ages ago… It seems the story was true.”\n'+
+    '—Locke Cole',
+    imagePath:'/assets/cards/geothermal-bog.webp',
+    entersTapped: true,
+    producesMana: ['B', 'R'],
+  },
+  {
     id: 'gigantoad',
     name: "Gigantoad",
     costLabel: '{3}{G}',
@@ -2574,6 +2822,39 @@ export const CARD_POOL: CardDefinition[] = [
     onCombatDamageToPlayer: [{ type: 'proliferate' }],
   },
   {
+    id:'graven-cairns',
+    name:'Graven Cairns',
+    type:'land',
+    costLabel:'-',
+    text:'{T}: Add {C}.\n'+
+    '{B/R}, {T}: Add {B}{B}, {B}{R}, or {R}{R}.\n'+
+    '“At times we were friendly rivals, and at times we were simply friends. We\u2019d always talk about our dreams… Like which of us would be first to sail beyond the sky to the stars.”\n'+
+    '—Setzer Gabbiani',
+    imagePath:'/assets/cards/graven-cairns.webp',
+    producesMana: 'C',
+    abilities: [
+      {
+        // Real printed cost is the hybrid symbol {B/R} (pay one B or one R) -
+        // approximated as a flat {1} generic, same deviation already used
+        // for Fetid Heath's identical filter-land shape.
+        id: 'graven-cairns-filter',
+        label: 'Add two mana',
+        cost: { manaLabel: '{1}', tap: true },
+        effects: [
+          {
+            type: 'chooseOneMode',
+            modes: [
+              { label: 'Add {B}{B}', effects: [{ type: 'addMana', colors: { B: 2 } }] },
+              { label: 'Add {B}{R}', effects: [{ type: 'addMana', colors: { B: 1, R: 1 } }] },
+              { label: 'Add {R}{R}', effects: [{ type: 'addMana', colors: { R: 2 } }] },
+            ],
+          },
+        ],
+        effectText: 'Add {B}{B}, {B}{R}, or {R}{R}.',
+      },
+    ],
+  },
+  {
     id: 'guadosalam-farplane-gateway',
     name: 'Guadosalam, Farplane Gateway',
     costLabel: '-',
@@ -2649,6 +2930,27 @@ export const CARD_POOL: CardDefinition[] = [
       'Mountaincycling 2(2, Discard this card: Search your library for a Mountain card, reveal it, put it into your hand, then shuffle.)',
     cycling: { cost: '{2}', searchLandName: 'Mountain' },
     imagePath: '/assets/cards/hill-gigas.webp'
+  },
+  {
+    id:'high-market',
+    name:'High Market',
+    costLabel:'-',
+    type:'land',
+    text:'{T}: Add {C}.\n'+
+    '{T}, Sacrifice a creature: You gain 1 life.\n'+
+    '“Pretty impressive that a kid like me can run a business, don\u2019t ya think? You should buy something to encourage me!”\n'+
+    '—Nikeah boy',
+    imagePath:'/assets/cards/high-market.webp',
+    producesMana: 'C',
+    abilities: [
+      {
+        id: 'high-market-sac',
+        label: 'Sacrifice a creature',
+        cost: { tap: true, sacrificeAnother: 'creature' },
+        effects: [{ type: 'gainLife', amount: 1 }],
+        effectText: 'You gain 1 life.',
+      },
+    ],
   },
   {
     id:'hinterland-harbor',
@@ -3069,6 +3371,19 @@ export const CARD_POOL: CardDefinition[] = [
     onAttack: [{ type: 'pumpSelf', power: 9999, toughness: 0 }],
   },
   {
+    id:'jungle-shrine',
+    name:'Jungle Shrine',
+    costLabel:'-',
+    type:'land',
+    text:'This land enters tapped.\n'+
+    '{T}: Add {R}, {G}, or {W}.\n'+
+    '“This is… the Temple of the Ancients. I know… I feel it. The knowledge of the Ancients…”\n'+
+    '—Aerith Gainsborough',
+    imagePath:'/assets/cards/jungle-shrine.webp',
+    entersTapped: true,
+    producesMana: ['R', 'G', 'W'],
+  },
+  {
     id: 'kain-traitorous-dragoon',
     name: 'Kain, Traitorous Dragoon',
     costLabel: '{2}{B}',
@@ -3195,6 +3510,17 @@ export const CARD_POOL: CardDefinition[] = [
     // instead of needing a new pre-cast-cost/choice mechanism.
     onCast: [{ type: 'loot', drawCount: 2, discardCount: 1 }],
     flashback: { cost: '{3}{R}' },
+  },
+  {
+    id:'legions-to-ashes',
+    name:'Legions to Ashes',
+    costLabel:'{1}{W}{B}',
+    type:'sorcery',
+    text:'Exile target nonland permanent an opponent controls and all tokens that player controls with the same name as that permanent.\n'+
+    '“Ha-ha! I\u2019m raring to go! Can\u2019t be leaving everything up to you whippersnappers!”\n'+
+    '—Strago Magus',
+    imagePath:'/assets/cards/legions-to-ashes.webp',
+    onCast: [{ type: 'exileTargetPermanent', targetFilter: 'nonlandPermanent', opponentControlledOnly: true, alsoExileSameNameTokensControlledByTarget: true }],
   },
   {
     id:'lifestream-s-blessing',
@@ -3633,6 +3959,25 @@ export const CARD_POOL: CardDefinition[] = [
     '—Imperial soldier',
     imagePath:'/assets/cards/mortify.webp',
     onCast: [{ type: 'destroyTarget', targetFilter: 'creatureOrEnchantment' }],
+  },
+  {
+    id:'mossfire-valley',
+    name:'Mossfire Valley',
+    costLabel:'-',
+    type:'land',
+    text:'{1}, {T}: Add {R}{G}.\n'+
+    '“Look at this rusted rocket. I was supposed to be the first man in space with this. Everyday, it tilts a little bit more.”\n'+
+    '—Cid Highwind',
+    imagePath:'/assets/cards/mossfire-valley.webp',
+    abilities: [
+      {
+        id: 'mossfire-valley-add',
+        label: 'Add {R}{G}',
+        cost: { manaLabel: '{1}', tap: true },
+        effects: [{ type: 'addMana', colors: { R: 1, G: 1 } }],
+        effectText: 'Add {R}{G}.',
+      },
+    ],
   },
   {
     id: 'mountain',
@@ -4245,6 +4590,17 @@ export const CARD_POOL: CardDefinition[] = [
     onCast: [{ type: 'searchLibraryForBasicLandOrSubtype', subtype: 'Town', toBattlefieldTapped: true, count: 2 }],
   },
   {
+    id:'reanimate',
+    name:'Reanimate',
+    costLabel:'{B}',
+    type:'sorcery',
+    text:'Put target creature card from a graveyard onto the battlefield under your control. You lose life equal to that card\u2019s mana value.\n'+
+    '“The world is about to learn… the meaning of… fear…”\n'+
+    '—Emperor Geshtahl',
+    imagePath:'/assets/cards/reanimate.webp',
+    onCast: [{ type: 'reanimateTargetFromGraveyard', anyGraveyard: true, loseLifeEqualToManaValue: true }],
+  },
+  {
     id: 'red-mage-s-rapier',
     name: "Red Mage's Rapier",
     costLabel: '{1}{R}',
@@ -4259,6 +4615,16 @@ export const CARD_POOL: CardDefinition[] = [
     equipGrantsSubtype: 'Wizard',
     equipGrantsNoncreatureCastTrigger: { pumpSelf: { power: 2, toughness: 0 } },
     imagePath: '/assets/cards/red-mage-s-rapier.webp'
+  },
+  {
+    id:'rejoin-the-fight',
+    name:'Rejoin the Fight',
+    costLabel:'{5}{B}',
+    type:'sorcery',
+    text:'Mill three cards. Then starting with the next opponent in turn order, each opponent chooses a creature card in your graveyard that hasn’t been chosen. Return each card chosen this way to the battlefield under your control.\n'+
+    '“I have to fight… to protect the people I love, and to make the world a safe place for new lives!”',
+    imagePath:'/assets/cards/rejoin-the-fight.webp',
+    onCast: [{ type: 'millThenOpponentChoosesCreatureFromYourGraveyardToBattlefield', millCount: 3 }],
   },
   {
     id: 'relentless-x-atm092',
@@ -4447,6 +4813,38 @@ export const CARD_POOL: CardDefinition[] = [
     // resolution time instead.
   },
   {
+    id:'rise-of-the-dark-realms',
+    name:'Rise of the Dark Realms',
+    costLabel:'{7}{B}{B}',
+    type:'sorcery',
+    text:'Put all creature cards from all graveyards onto the battlefield under your control.\n'+
+    '“You can\u2019t destroy everything! People will always have dreams!”\n'+
+    '—Terra Branford',
+    imagePath:'/assets/cards/rise-of-the-dark-realms.webp',
+    onCast: [{ type: 'putAllCreatureCardsFromAllGraveyardsOntoBattlefield' }],
+  },
+  {
+    id:'rogue-s-passage',
+    name:'Rogue\u2019s Passage',
+    costLabel:'-',
+    type:'land',
+    text:'{T}: Add {C}.\n'+
+    '{4}, {T}: Target creature can\u2019t be blocked this turn.\n'+
+    '“Make your way out of town through the mines! I\u2019ll try to buy you some time.”\n'+
+    '—Old man from Narshe',
+    imagePath:'/assets/cards/rogue-s-passage.webp',
+    producesMana: 'C',
+    abilities: [
+      {
+        id: 'rogue-s-passage-unblockable',
+        label: 'Unblockable',
+        cost: { manaLabel: '{4}', tap: true },
+        effects: [{ type: 'grantKeywordsToTargetPermanent', keywords: ['unblockable'], creatureOnly: true }],
+        effectText: "Target creature can't be blocked this turn.",
+      },
+    ],
+  },
+  {
     id: 'rook-turret',
     name: 'Rook Turret',
     costLabel: '{3}{U}',
@@ -4476,6 +4874,19 @@ export const CARD_POOL: CardDefinition[] = [
     onOwnCombatBegin: [{ type: 'putCounterOnUpToOneOwnCreature', counterLabel: '+1/+1', counterAmount: 1, grantKeyword: 'lifelink' }],
   },
   {
+    id:'rootbound-crag',
+    name:'Rootbound Crag',
+    costLabel:'-',
+    type:'land',
+    text:'This land enters tapped unless you control a Mountain or a Forest.\n'+
+    '{T}: Add {R} or {G}.\n'+
+    '“Did Sephiroth… do this?”\n'+
+    '—Cloud Strife',
+    imagePath:'/assets/cards/rootbound-crag.webp',
+    entersTappedUnlessControlLandNames: ['Mountain', 'Forest'],
+    producesMana: ['R', 'G'],
+  },
+  {
     id: 'rufus-shinra',
     name: 'Rufus Shinra',
     costLabel: '{1}{W}{B}',
@@ -4486,6 +4897,46 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'Whenever Rufus Shinra attacks, if you don’t control a creature named Darkstar, create Darkstar, a legendary 2/2 white and black Dog creature token.',
     imagePath: '/assets/cards/rufus-shinra.webp',
     onAttack: [{ type: 'createTokenIfNotControllingNamed', tokenId: 'token-darkstar', name: 'Darkstar' }],
+  },
+  {
+    id:'ruinous-ultimatum',
+    name:'Ruinous Ultimatum',
+    costLabel:'{R}{R}{W}{W}{W}{B}{B}',
+    type:'sorcery',
+    text:'Destroy all nonland permanents your opponents control.\n'+
+    '“This little hamlet has too much \u2019boring\u2019 and not enough \u2019burning\u2019… Torch everything!”',
+    imagePath:'/assets/cards/ruinous-ultimatum.webp',
+    onCast: [{ type: 'destroyAll', targetFilter: 'nonlandPermanent', opponentControlledOnly: true }],
+  },
+  {
+    id:'rugged-prairie',
+    name:'Rugged Prairie',
+    costLabel:'-',
+    type:'land',
+    text:'{T}: Add {C}.\n'+
+    '{R/W}, {T}: Add {R}{R}, {R}{W}, or {W}{W}.\n'+
+    '“Corel sure has gone to pot. It used to be a famous coal mining town! Now, it\u2019s nothing but a miserable pit! Me, my bulldozer… everything\u2019s out of work.”\n'+
+    '—Corel resident',
+    imagePath:'/assets/cards/rugged-prairie.webp',
+    producesMana: 'C',
+    abilities: [
+      {
+        id: 'rugged-prairie-filter',
+        label: 'Add two mana',
+        cost: { manaLabel: '{1}', tap: true },
+        effects: [
+          {
+            type: 'chooseOneMode',
+            modes: [
+              { label: 'Add {R}{R}', effects: [{ type: 'addMana', colors: { R: 2 } }] },
+              { label: 'Add {R}{W}', effects: [{ type: 'addMana', colors: { R: 1, W: 1 } }] },
+              { label: 'Add {W}{W}', effects: [{ type: 'addMana', colors: { W: 2 } }] },
+            ],
+          },
+        ],
+        effectText: 'Add {R}{R}, {R}{W}, or {W}{W}.',
+      },
+    ],
   },
   {
     id: 'rydia-s-return',
@@ -4864,6 +5315,25 @@ export const CARD_POOL: CardDefinition[] = [
     ],
   },
   {
+    id:'shadowblood-ridge',
+    name:'Shadowblood Ridge',
+    costLabel:'-',
+    type:'land',
+    text:'{1}, {T}: Add {B}{R}.\n'+
+    '“The time has come for us to claim our rightful dominion over the world!”\n'+
+    '—Emperor Gestahl',
+    imagePath:'/assets/cards/shadowblood-ridge.webp',
+    abilities: [
+      {
+        id: 'shadowblood-ridge-add',
+        label: 'Add {B}{R}',
+        cost: { manaLabel: '{1}', tap: true },
+        effects: [{ type: 'addMana', colors: { B: 1, R: 1 } }],
+        effectText: 'Add {B}{R}.',
+      },
+    ],
+  },
+  {
     id: 'shambling-cie-th',
     name: 'Shambling Cie\u2019th',
     costLabel: '{2}{B}',
@@ -4912,6 +5382,18 @@ export const CARD_POOL: CardDefinition[] = [
     '“Truly, I know nothing of the ways of fighting, but I do know some white magic.”',
     imagePath: '/assets/cards/shelinda-yevon-acolyte.webp',
     onAnyOtherControlledCreatureEnterComparePowerPutCounter: { counterLabel: '+1/+1' },
+  },
+  {
+    id:'shineshadow-snarl',
+    name:'Shineshadow Snarl',
+    costLabel:'-',
+    type:'land',
+    text:'As this land enters, you may reveal a Plains or Swamp card from your hand. If you don\u2019t, this land enters tapped.\n'+
+    '{T}: Add {W} or {B}.\n'+
+    'Reports of bloody carnage have reached the Crystarium, and the guard has deployed in force in answer to Holminster\u2019s plea for aid.',
+    imagePath:'/assets/cards/shineshadow-snarl.webp',
+    entersTappedUnlessRevealLandNames: ['Plains', 'Swamp'],
+    producesMana: ['W', 'B'],
   },
   {
     id: 'shinra-reinforcements',
@@ -5148,6 +5630,27 @@ export const CARD_POOL: CardDefinition[] = [
     onCast: [{ type: 'damageTargetCreatureEqualToCreaturesAndEquipment' }],
   },
   {
+    id:'slayers-stronghold',
+    name:'Slayers\u2019 Stronghold',
+    costLabel:'-',
+    type:'land',
+    text:'{T}: Add {C}.\n'+
+    '{R}{W}, {T}: Target creature gets +2/+0 and gains vigilance and haste until end of turn.\n'+
+    '“Today the No. 1 Reactor was bombed. The terrorist group Avalanche has claimed responsibility for the bombing.”\n'+
+    '—President Shinra',
+    imagePath:'/assets/cards/slayers-stronghold.webp',
+    producesMana: 'C',
+    abilities: [
+      {
+        id: 'slayers-stronghold-pump',
+        label: 'Pump',
+        cost: { manaLabel: '{R}{W}', tap: true },
+        effects: [{ type: 'pumpTarget', power: 2, toughness: 0, grantKeyword: ['vigilance', 'haste'] }],
+        effectText: 'Target creature gets +2/+0 and gains vigilance and haste until end of turn.',
+      },
+    ],
+  },
+  {
     id: 'sleep-magic',
     name: 'Sleep Magic',
     costLabel: '{U}',
@@ -5221,6 +5724,40 @@ export const CARD_POOL: CardDefinition[] = [
     flashback: { cost: '{4}{R}' },
   },
   {
+    id:'soldier-military-program',
+    name:'SOLDIER Military Program',
+    costLabel:'{2}{W}',
+    type:'enchantment',
+    text:'At the beginning of combat on your turn, choose one. If you control a commander, you may choose both instead.\n'+
+    '• Create a 1/1 white Soldier creature token.\n'+
+    '• Put a +1/+1 counter on each of up to two Soldiers you control.',
+    imagePath:'/assets/cards/soldier-military-program.webp',
+    onOwnCombatBegin: [
+      {
+        type: 'chooseOneMode',
+        allowBothIfCommander: true,
+        modes: [
+          { label: 'Create a 1/1 white Soldier creature token', effects: [{ type: 'createToken', tokenId: 'token-soldier' }] },
+          { label: 'Put a +1/+1 counter on each of up to two Soldiers you control', effects: [{ type: 'putCounterOnUpToTwoOwnCreatures', counterLabel: '+1/+1', counterAmount: 1, restrictToSubtype: 'Soldier' }] },
+        ],
+      },
+    ],
+  },
+  {
+    id:'solemn-simulacrum',
+    name:'Solemn Simulacrum',
+    costLabel:'{4}',
+    type:'creature',
+    subtype:'Artifact Creature Golem',
+    power: 2,
+    toughness: 2,
+    text:'When this creature enters, you may search your library for a basic land card, put that card onto the battlefield tapped, then shuffle.\n'+
+    'When this creature dies, you may draw a card.',
+    imagePath:'/assets/cards/solemn-simulacrum.webp',
+    onEnter: [{ type: 'searchLibraryForBasicLand', toBattlefieldTapped: true }],
+    onDeath: [{ type: 'mayEffect', effects: [{ type: 'drawCards', amount: 1 }] }],
+  },
+  {
     id:'sphere-grid',
     name:'Sphere Grid',
     costLabel:'{1}{G}',
@@ -5231,6 +5768,28 @@ export const CARD_POOL: CardDefinition[] = [
     imagePath:'/assets/cards/sphere-grid.webp',
     onAnyControlledCreatureCombatDamageToPlayerPutCounterOnThatCreature: { counterLabel: '+1/+1', counterAmount: 1 },
     staticAnthemForCreaturesWithCounter: { counterLabel: '+1/+1', grantKeywords: ['reach', 'trample'] },
+  },
+  {
+    id:'spire-of-industry',
+    name:'Spire of Industry',
+    costLabel:'-',
+    type:'land',
+    text:'{T}: Add {C}.\n'+
+    '{T}, Pay 1 life: Add one mana of any color. Activate only if you control an artifact.\n'+
+    '“A shining monument to corporate greed. One of these days I\u2019m gonna tear it down and burn the rubble.”\n'+
+    '—Barret Wallace',
+    imagePath:'/assets/cards/spire-of-industry.webp',
+    producesMana: 'C',
+    abilities: [
+      {
+        id: 'spire-of-industry-any-color',
+        label: 'Add one mana of any color',
+        cost: { tap: true, payLife: 1 },
+        requiresControlledArtifact: true,
+        effects: [{ type: 'addOneManaOfChosenColor' }],
+        effectText: 'Add one mana of any color. Activate only if you control an artifact.',
+      },
+    ],
   },
   {
     id: 'squall-seed-mercenary',
@@ -5268,6 +5827,16 @@ export const CARD_POOL: CardDefinition[] = [
     // supported: lands always tap via the single fixed producesMana value,
     // not the CardAbility system, so there's no way to offer a second,
     // differently-costed mana option on the same land.
+  },
+  {
+    id:'stitch-together',
+    name:'Stitch Together',
+    costLabel:'{B}{B}',
+    type:'sorcery',
+    text:'Return target creature card from your graveyard to your hand.\n'+
+    'Threshold — Return that card from your graveyard to the battlefield instead if there are seven or more cards in your graveyard.',
+    imagePath:'/assets/cards/stitch-together.webp',
+    onCast: [{ type: 'returnTargetCreatureFromGraveyardToHandOrBattlefieldIfGraveyardCountAtLeast', minGraveyardCount: 7 }],
   },
   {
     id: 'stiltzkin-moogle-merchant',
@@ -5322,6 +5891,18 @@ export const CARD_POOL: CardDefinition[] = [
     onEnter: [{ type: 'attachSelfToTarget', allowAnyController: true, targetTypeFilter: 'artifactOrCreature', tapTarget: true }],
     attachedPreventsUntap: true,
     attachedPreventsAbilities: true,
+  },
+  {
+    id:'sulfurous-springs',
+    name:'Sulfurous Springs',
+    costLabel:'-',
+    type:'land',
+    text:'{T}: Add {C}.\n'+
+    '{T}: Add {B} or {R}. This land deals 1 damage to you.\n'+
+    'The legendary treasure sleeps where the mountains form a star.',
+    imagePath:'/assets/cards/sulfurous-springs.webp',
+    producesMana: 'C',
+    altProducesMana: { colors: ['B', 'R'], payLife: 1 },
   },
   {
     id:'sungrass-prairie',
@@ -6029,6 +6610,21 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'Tap add B',
     imagePath: '/assets/cards/swamp.webp',
     producesMana: 'B'
+  },
+  {
+    id:'swiftfoot-boots',
+    name:'Swiftfoot Boots',
+    costLabel:'{2}',
+    type:'artifact',
+    subtype:'Artifact Equipment',
+    text:'Equipped creature has hexproof and haste. (It can\u2019t be the target of spells or abilities your opponents control. It can attack and {T} no matter when it came under your control.)\n'+
+    'Equip {1} ({1}: Attach to target creature you control. Equip only as a sorcery.)\n'+
+    '“You can gain all kinds of abilities by equipping relics.”\n'+
+    '—South Figaro merchant',
+    imagePath:'/assets/cards/swiftfoot-boots.webp',
+    attachesTo: 'creature',
+    equipCost: '{1}',
+    equipGrantsKeyword: ['hexproof', 'haste'],
   },
   {
     id:'sword-of-the-animist',
@@ -6771,6 +7367,15 @@ export const CARD_POOL: CardDefinition[] = [
     onEnter: [{ type: 'millThenPutLandIntoHandGainLifeIfTown', millCount: 4, lifeGainIfTown: 2 }],
   },
   {
+    id:'tragic-arrogance',
+    name:'Tragic Arrogance',
+    costLabel:'{3}{W}{W}',
+    type:'sorcery',
+    text:'For each player, you choose from among the permanents that player controls an artifact, a creature, an enchantment, and a planeswalker. Then each player sacrifices all other nonland permanents they control.',
+    imagePath:'/assets/cards/tragic-arrogance.webp',
+    onCast: [{ type: 'tragicArrogance' }],
+  },
+  {
     id:'trailblazer-s-boots',
     name:'Trailblazer\u2019s Boots',
     costLabel:'{2}',
@@ -7038,6 +7643,18 @@ export const CARD_POOL: CardDefinition[] = [
     onDeath: [{ type: 'createToken', tokenId: 'token-treasure' }],
   },
   {
+    id:'underground-river',
+    name:'Underground River',
+    type:'land',
+    costLabel:'-',
+    text:'{T}: Add {C}.\n'+
+    '{T}: Add {U} or {B}. This land deals 1 damage to you.\n'+
+    'For years, it was not known how the pirates were able to raid areas so far from the coast, until a local shepherd sighted a band of painted ruffians entering the Sastasha Seagrot…',
+    imagePath:'/assets/cards/underground-river.webp',
+    producesMana: 'C',
+    altProducesMana: { colors: ['U', 'B'], payLife: 1 },
+  },
+  {
     id: 'unexpected-request',
     name: 'Unexpected Request',
     costLabel: '{2}{R}',
@@ -7051,6 +7668,46 @@ export const CARD_POOL: CardDefinition[] = [
     // deferred - needs an optional second targeting step plus a delayed
     // "at the beginning of the next end step" unattach trigger, neither of
     // which exists yet; the core control-change/untap/haste is wired.
+  },
+  {
+    id:'unfinished-business',
+    name:'Unfinished Business',
+    costLabel:'{3}{W}{W}',
+    type:'sorcery',
+    text:'Return target creature card from your graveyard to the battlefield, then return up to two target Aura and/or Equipment cards from your graveyard to the battlefield attached to that creature. (If the Auras can\u2019t enchant that creature, they remain in your graveyard.)\n'+
+    '“If you\u2019re gonna pick a fight with the Turks, you\u2019d better be prepared to leave in a body bag.”',
+    imagePath:'/assets/cards/unfinished-business.webp',
+    onCast: [{ type: 'reanimateTargetFromGraveyard', thenReturnUpToTwoAurasOrEquipmentAttached: true }],
+  },
+  {
+    id:'urianger-augurelt',
+    name:'Urianger Augurelt',
+    costLabel:'{W}{U}',
+    type:'creature',
+    subtype:'Legendary Creature \u2014 Elf Advisor',
+    power: 1,
+    toughness: 3,
+    text:'Whenever you play a land from exile or cast a spell from exile, you gain 2 life.\n'+
+    'Draw Arcanum — {T}: Look at the top card of your library. You may exile it face down.\n'+
+    'Play Arcanum — {T}: Until end of turn, you may play cards exiled with Urianger Augurelt. Spells you cast this way cost {2} less to cast.',
+    imagePath:'/assets/cards/urianger-augurelt.webp',
+    onPlayOrCastFromExileGainLife: 2,
+    abilities: [
+      {
+        id: 'urianger-augurelt-draw-arcanum',
+        label: 'Draw Arcanum',
+        cost: { tap: true },
+        effects: [{ type: 'mayEffect', effects: [{ type: 'exileTopOfLibraryFaceDownTaggedWithSource' }] }],
+        effectText: 'Look at the top card of your library. You may exile it face down.',
+      },
+      {
+        id: 'urianger-augurelt-play-arcanum',
+        label: 'Play Arcanum',
+        cost: { tap: true },
+        effects: [{ type: 'grantTemporaryPlayPermissionForFaceDownExiledBySource', costReduction: 2 }],
+        effectText: 'Until end of turn, you may play cards exiled with Urianger Augurelt. Spells you cast this way cost {2} less to cast.',
+      },
+    ],
   },
   {
     id: 'vaan-street-thief',
@@ -7070,6 +7727,18 @@ export const CARD_POOL: CardDefinition[] = [
     // second needs to track "cast a spell you don't own", a condition this
     // engine (which barely supports casting foreign-owned cards at all) has no
     // way to detect.
+  },
+  {
+    id:'vandalblast',
+    name:'Vandalblast',
+    costLabel:'{R}',
+    type:'sorcery',
+    text:'Destroy target artifact you don\u2019t control.\n'+
+    'Overload {4}{R} (You may cast this spell for its overload cost. If you do, change “target” in its text to “each.”)\n'+
+    '“Danger\u2019s part of the job. Don\u2019t worry about me.”',
+    imagePath:'/assets/cards/vandalblast.webp',
+    onCast: [{ type: 'destroyTarget', targetFilter: 'opponentArtifact' }],
+    overload: { cost: '{4}{R}', effects: [{ type: 'destroyAll', targetFilter: 'artifact', opponentControlledOnly: true }] },
   },
   {
     id: 'valkyrie-aerial-unit',
@@ -7109,6 +7778,19 @@ export const CARD_POOL: CardDefinition[] = [
         effectText: "If you own and control Fang, Fearless l’Cie, exile them both and meld into Ragnarok, Divine Deliverance.",
       },
     ],
+  },
+  {
+    id:'vanquish-the-horde',
+    name:'Vanquish the Horde',
+    costLabel:'{6}{W}{W}',
+    type:'sorcery',
+    text:'This spell costs {1} less to cast for each creature on the battlefield.\n'+
+    'Destroy all creatures.\n'+
+    '“Sir! A mass of high-density energy is heading towards Midgar!”\n'+
+    '—Shinra operator',
+    imagePath:'/assets/cards/vanquish-the-horde.webp',
+    costReductionPerCreatureOnBattlefield: 1,
+    onCast: [{ type: 'destroyAll', targetFilter: 'creature' }],
   },
   {
     id: 'vayne-s-treachery',
@@ -7212,6 +7894,16 @@ export const CARD_POOL: CardDefinition[] = [
     imagePath: '/assets/cards/galian-beast.webp'
   },
   {
+    id:'vindicate',
+    name:'Vindicate',
+    costLabel:'{1}{W}{B}',
+    type:'sorcery',
+    text:'Destroy target permanent.\n'+
+    '“Remember… remember us… remember… that we once lived…”',
+    imagePath:'/assets/cards/vindicate.webp',
+    onCast: [{ type: 'destroyTarget', targetFilter: 'anyPermanent' }],
+  },
+  {
     id:'vineglimmer-snarl',
     name:'Vineglimmer Snarl',
     costLabel:'-',
@@ -7235,6 +7927,20 @@ export const CARD_POOL: CardDefinition[] = [
     text: '{0}: Add X mana in any combination of {U} and/or {R}, where X is Vivi Ornitier\u2019s power. Activate only during your turn and only once each turn. \n' +
       'Whenever you cast a noncreature spell, put a +1/+1 counter on Vivi Ornitier and it deals 1 damage to each opponent',
     imagePath: '/assets/cards/vivi-ornitier.webp'
+  },
+  {
+    id:'void-rend',
+    name:'Void Rend',
+    costLabel:'{W}{U}{B}',
+    type:'instant',
+    text:'This spell can\u2019t be countered.\n'+
+    'Destroy target nonland permanent.\n'+
+    '“I expect some voidsent are more intelligent than others. Perhaps these ones simply do not understand our words.”\n'+
+    '—Y\u2019shtola Rhul',
+    imagePath:'/assets/cards/void-rend.webp',
+    // "Can't be countered" is unreachable - this engine has no counterspell
+    // mechanic at all (spells resolve immediately on cast, no stack).
+    onCast: [{ type: 'destroyTarget', targetFilter: 'nonlandPermanent' }],
   },
   {
     id:'wakka-devoted-guardian',
@@ -7362,6 +8068,18 @@ export const CARD_POOL: CardDefinition[] = [
     imagePath: '/assets/cards/windurst-federation-center.webp',
     entersTapped: true,
     producesMana: ['G', 'W']
+  },
+  {
+    id:'wooded-ridgeline',
+    name:'Wooded Ridgeline',
+    costLabel:'-',
+    type:'land',
+    text:'({T}: Add {R} or {G}.)\n'+
+    'This land enters tapped.\n'+
+    '“Monsters instinctively target weaker prey,” said Cloud. “Hmm… you\u2019d better watch out then,” Aerith teased.',
+    imagePath:'/assets/cards/wooded-ridgeline.webp',
+    producesMana: ['R', 'G'],
+    entersTapped: true,
   },
   {
     id: 'world-map',

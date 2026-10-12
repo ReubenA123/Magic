@@ -508,7 +508,12 @@ export function isLegalPendingTarget(state: GameState, pendingTarget: NonNullabl
   // regardless of what the specific effect below would otherwise allow.
   // Self-targeting is unaffected (real hexproof only stops opponents). See
   // engine/actions.ts: chooseTarget for the matching server-side rejection.
-  if (ownerId !== pendingTarget.controllerId && (hasKeywordEffective(def, card, 'hexproof') || hasBoardGrantedKeyword(state, ownerId, card, def, 'hexproof'))) {
+  if (
+    ownerId !== pendingTarget.controllerId &&
+    (hasKeywordEffective(def, card, 'hexproof') ||
+      hasBoardGrantedKeyword(state, ownerId, card, def, 'hexproof') ||
+      hasEquipGrantedKeyword(state, ownerId, card.instanceId, 'hexproof'))
+  ) {
     return false;
   }
   // Phased out - "treated as though it doesn't exist" - never a legal
@@ -644,6 +649,7 @@ export function isLegalPendingTarget(state: GameState, pendingTarget: NonNullabl
   }
   if (effect.type === 'exileTargetPermanent') {
     if (effect.opponentControlledOnly && ownerId === pendingTarget.controllerId) return false;
+    if (effect.upToTwo && card.instanceId === pendingTarget.firstInstanceId) return false;
     return effect.targetFilter === 'artifact'
       ? def.type === 'artifact'
       : effect.targetFilter === 'creature'
@@ -652,7 +658,9 @@ export function isLegalPendingTarget(state: GameState, pendingTarget: NonNullabl
           ? def.type !== 'land'
           : effect.targetFilter === 'artifactEnchantmentOrTappedCreature'
             ? def.type === 'artifact' || def.type === 'enchantment' || (def.type === 'creature' && card.tapped)
-            : true;
+            : effect.targetFilter === 'artifactOrEnchantment'
+              ? def.type === 'artifact' || def.type === 'enchantment'
+              : true;
   }
   if (effect.type === 'exileTargetCreatureWithLessPowerUntilSourceLeaves') {
     if (def.type !== 'creature' || ownerId === pendingTarget.controllerId) return false;
@@ -675,7 +683,9 @@ export function isLegalPendingTarget(state: GameState, pendingTarget: NonNullabl
     return def.type === 'creature';
   }
   if (effect.type === 'putCounterOnUpToTwoOwnCreatures') {
-    return def.type === 'creature' && ownerId === pendingTarget.controllerId && card.instanceId !== pendingTarget.firstInstanceId;
+    if (def.type !== 'creature' || ownerId !== pendingTarget.controllerId || card.instanceId === pendingTarget.firstInstanceId) return false;
+    if (effect.restrictToSubtype && !def.subtype?.toLowerCase().includes(effect.restrictToSubtype.toLowerCase())) return false;
+    return true;
   }
   if (effect.type === 'moveCounterBetweenTargetCreatures') {
     if (def.type !== 'creature' || ownerId !== pendingTarget.controllerId) return false;
@@ -784,7 +794,8 @@ export function isLegalPendingTarget(state: GameState, pendingTarget: NonNullabl
       !['plains', 'island', 'swamp', 'mountain', 'forest'].includes(def.id) &&
       ownerId !== pendingTarget.controllerId) ||
     (effect.targetFilter === 'artifactOrCreature' && (def.type === 'artifact' || def.type === 'creature')) ||
-    (effect.targetFilter === 'creatureOrEnchantment' && (def.type === 'creature' || def.type === 'enchantment'))
+    (effect.targetFilter === 'creatureOrEnchantment' && (def.type === 'creature' || def.type === 'enchantment')) ||
+    (effect.targetFilter === 'opponentArtifact' && def.type === 'artifact' && ownerId !== pendingTarget.controllerId)
   );
 }
 

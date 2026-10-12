@@ -115,6 +115,15 @@ export function dynamicCostReduction(def: CardDefinition, player: PlayerState, o
   const controlledTypeCount = def.costReductionPerControlledType
     ? player.zones.battlefield.filter((c) => getCardDefinition(c.defId).type === def.costReductionPerControlledType!.type).length
     : 0;
+  // "This spell costs {1} less to cast for each creature on the
+  // battlefield" (Vanquish the Horde) - counts BOTH battlefields, unlike
+  // controlledTypeCount above; only adds the opponent's count when
+  // `opponent` is actually passed in (same optional convention as
+  // opponentGraveyardDiscount below).
+  const creatureOnBattlefieldCount = def.costReductionPerCreatureOnBattlefield
+    ? player.zones.battlefield.filter((c) => getCardDefinition(c.defId).type === 'creature').length +
+      (opponent ? opponent.zones.battlefield.filter((c) => getCardDefinition(c.defId).type === 'creature').length : 0)
+    : 0;
   // "This spell costs {3} less to cast if an opponent has seven or more
   // cards in their graveyard" (Into the Story) - `opponent` is optional
   // (the two display-only client call sites that only want a ballpark
@@ -151,6 +160,7 @@ export function dynamicCostReduction(def: CardDefinition, player: PlayerState, o
     (def.costReductionPerGraveyardPermanent ? def.costReductionPerGraveyardPermanent * graveyardPermanentCount : 0) +
     (def.costReductionPerControlledSubtype ? def.costReductionPerControlledSubtype.amountPerUnit * controlledSubtypeCount : 0) +
     (def.costReductionPerControlledType ? def.costReductionPerControlledType.amountPerUnit * controlledTypeCount : 0) +
+    (def.costReductionPerCreatureOnBattlefield ? def.costReductionPerCreatureOnBattlefield * creatureOnBattlefieldCount : 0) +
     opponentGraveyardDiscount +
     boardWideReduction
   );

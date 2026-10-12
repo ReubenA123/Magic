@@ -600,7 +600,9 @@ export function resolveCardEffects(
           ? getPlayer(next, playerId).zones.battlefield.filter((c) => getCardDefinition(c.defId).type === 'creature').length
           : effect.count === 'perCreatureCardInYourGraveyard'
             ? getPlayer(next, playerId).zones.graveyard.filter((c) => getCardDefinition(c.defId).type === 'creature').length
-            : effect.count ?? 1;
+            : effect.count === 'chosenX'
+              ? chosenX ?? 0
+              : effect.count ?? 1;
 
       const tokens: CardInstance[] = Array.from({ length: count }, () => ({
         instanceId: nextInstanceId(),
@@ -1029,7 +1031,7 @@ export function resolveCardEffects(
     } else if (effect.type === 'chooseManaColor') {
       next = { ...next, pendingManaColorChoice: { instanceId: sourceInstanceId, controllerId: playerId } };
     } else if (effect.type === 'addOneManaOfChosenColor') {
-      next = { ...next, pendingAddManaOfChosenColor: { controllerId: playerId } };
+      next = { ...next, pendingAddManaOfChosenColor: { controllerId: playerId, amount: effect.amount } };
     } else if (effect.type === 'sacrificeCreature') {
       const opponent = getOpponent(next, playerId);
       const result = resolveSacrificeQueue(next, sourceInstanceId, Array(effect.count ?? 1).fill(opponent.id), effect.filter ?? 'creature');
@@ -1219,7 +1221,8 @@ export function resolveCardEffects(
             (effect.targetFilter === 'opponentNonlandPermanent' && d.type !== 'land' && p.id !== playerId) ||
             (effect.targetFilter === 'opponentNonbasicLand' && isNonbasicLand(d) && p.id !== playerId) ||
             (effect.targetFilter === 'artifactOrCreature' && (d.type === 'artifact' || d.type === 'creature')) ||
-            (effect.targetFilter === 'creatureOrEnchantment' && (d.type === 'creature' || d.type === 'enchantment'))
+            (effect.targetFilter === 'creatureOrEnchantment' && (d.type === 'creature' || d.type === 'enchantment')) ||
+            (effect.targetFilter === 'opponentArtifact' && d.type === 'artifact' && p.id !== playerId)
           );
         })
       );
@@ -1267,6 +1270,53 @@ export function resolveCardEffects(
         next = { ...next, exilePlayGrants: [...next.exilePlayGrants, { instanceId: top.instanceId, playerId, requiresControlOfInstanceId: sourceInstanceId }] };
         const sourceName = getCardDefinition(findCardAnywhere(next, sourceInstanceId)!.card.defId).name;
         logLines.push(`${player.name} exiles ${getCardDefinition(top.defId).name} - they may play it for as long as they control ${sourceName}.`);
+      }
+    } else if (effect.type === 'exileTopOfLibraryPlayableUntilAnotherExiledWithSourceIfControlCreaturePowerAtLeast') {
+      const player = getPlayer(next, playerId);
+      const qualifies = player.zones.battlefield.some((c) => {
+        const d = getCardDefinition(c.defId);
+        return d.type === 'creature' && effectivePower(d, c, next, playerId) >= effect.minPower;
+      });
+      if (!qualifies) {
+        logLines.push(`${player.name} doesn't control a creature with power ${effect.minPower} or greater.`);
+      } else {
+        const top = player.zones.library[0];
+        if (!top) {
+          logLines.push(`${player.name} has no cards left to exile.`);
+        } else {
+          next = updatePlayer(next, playerId, (p) => ({ ...p, zones: { ...p.zones, library: p.zones.library.slice(1), exile: [...p.zones.exile, top] } }));
+          // Replaces (doesn't stack with) any still-outstanding grant from
+          // this same source - "until you exile another card with this
+          // enchantment" invalidates the previous one.
+          next = {
+            ...next,
+            exilePlayGrants: [...next.exilePlayGrants.filter((g) => g.requiresControlOfInstanceId !== sourceInstanceId), { instanceId: top.instanceId, playerId, requiresControlOfInstanceId: sourceInstanceId }],
+          };
+          const sourceName = getCardDefinition(findCardAnywhere(next, sourceInstanceId)!.card.defId).name;
+          logLines.push(`${player.name} exiles ${getCardDefinition(top.defId).name} - they may play it until they exile another card with ${sourceName}.`);
+        }
+      }
+    } else if (effect.type === 'exileTopOfLibraryFaceDownTaggedWithSource') {
+      const player = getPlayer(next, playerId);
+      const top = player.zones.library[0];
+      if (!top) {
+        logLines.push(`${player.name} has no cards left to exile.`);
+      } else {
+        const exiledCard = { ...top, faceDown: true, exiledFaceDownBySourceInstanceId: sourceInstanceId };
+        next = updatePlayer(next, playerId, (p) => ({ ...p, zones: { ...p.zones, library: p.zones.library.slice(1), exile: [...p.zones.exile, exiledCard] } }));
+        logLines.push(`${player.name} exiles the top card of their library face down.`);
+      }
+    } else if (effect.type === 'grantTemporaryPlayPermissionForFaceDownExiledBySource') {
+      const player = getPlayer(next, playerId);
+      const matching = player.zones.exile.filter((c) => c.exiledFaceDownBySourceInstanceId === sourceInstanceId);
+      if (matching.length === 0) {
+        const sourceName = getCardDefinition(findCardAnywhere(next, sourceInstanceId)!.card.defId).name;
+        logLines.push(`${player.name} has no cards exiled with ${sourceName} to play.`);
+      } else {
+        const existingIds = new Set(next.exilePlayGrants.filter((g) => g.playerId === playerId).map((g) => g.instanceId));
+        const newGrants = matching.filter((c) => !existingIds.has(c.instanceId)).map((c) => ({ instanceId: c.instanceId, playerId, expiresAtCleanup: true, costReduction: effect.costReduction }));
+        next = { ...next, exilePlayGrants: [...next.exilePlayGrants, ...newGrants] };
+        logLines.push(`${player.name} may play ${matching.length} card(s) exiled with it until end of turn.`);
       }
     } else if (effect.type === 'exileTopOfTargetPlayerLibraryThenOptionalSacrificeToPlay') {
       const opponent = getOpponent(next, playerId);
@@ -1414,6 +1464,17 @@ export function resolveCardEffects(
       const opponent = getOpponent(next, playerId);
       next = updatePlayer(next, opponent.id, (p) => ({ ...p, life: p.life - effect.amount }));
       logLines.push(`${opponent.name} loses ${effect.amount} life.`);
+    } else if (effect.type === 'eachOpponentDrawsThenCasterDrawsForEachWhoDid') {
+      const opponent = getOpponent(next, playerId);
+      const opponentDrawn = opponent.zones.library.slice(0, 1);
+      next = updatePlayer(next, opponent.id, (p) => ({ ...p, zones: { ...p.zones, library: p.zones.library.slice(1), hand: [...p.zones.hand, ...opponentDrawn] } }));
+      logLines.push(opponentDrawn.length > 0 ? `${opponent.name} draws a card.` : `${opponent.name}'s library is empty.`);
+      if (opponentDrawn.length > 0) {
+        const player = getPlayer(next, playerId);
+        const casterDrawn = player.zones.library.slice(0, 1);
+        next = updatePlayer(next, playerId, (p) => ({ ...p, zones: { ...p.zones, library: p.zones.library.slice(1), hand: [...p.zones.hand, ...casterDrawn] } }));
+        logLines.push(`${player.name} draws a card.`);
+      }
     } else if (effect.type === 'pumpControlledSubtype') {
       const player = getPlayer(next, playerId);
       const matching = player.zones.battlefield.filter((c) => {
@@ -1728,7 +1789,9 @@ export function resolveCardEffects(
               ? d.type !== 'land'
               : effect.targetFilter === 'artifactEnchantmentOrTappedCreature'
                 ? d.type === 'artifact' || d.type === 'enchantment' || (d.type === 'creature' && c.tapped)
-                : true;
+                : effect.targetFilter === 'artifactOrEnchantment'
+                  ? d.type === 'artifact' || d.type === 'enchantment'
+                  : true;
       });
       if (!hasLegalTarget) {
         logLines.push(`${sourceName}'s ability has no legal target.`);
@@ -1814,7 +1877,7 @@ export function resolveCardEffects(
         next = { ...next, pendingTarget: { sourceInstanceId, controllerId: playerId, effect } };
       }
     } else if (effect.type === 'chooseOneMode') {
-      next = { ...next, pendingChooseOneMode: { sourceInstanceId, controllerId: playerId, modes: effect.modes } };
+      next = { ...next, pendingChooseOneMode: { sourceInstanceId, controllerId: playerId, modes: effect.modes, allowBothIfCommander: effect.allowBothIfCommander } };
     } else if (
       effect.type === 'drawCardsFromTargetPlayer' ||
       effect.type === 'putCounterOnEachCreatureTargetPlayerControls' ||
@@ -2196,10 +2259,13 @@ export function resolveCardEffects(
       }
     } else if (effect.type === 'reanimateTargetFromGraveyard') {
       const player = getPlayer(next, playerId);
-      const eligible = player.zones.graveyard.filter((c) => matchesReanimateFilter(getCardDefinition(c.defId), effect));
+      // "...from A graveyard" (Reanimate) - widens the eligible pool to
+      // every player's graveyard instead of just the controller's own.
+      const graveyardsToSearch = effect.anyGraveyard ? next.players.map((p) => p.zones.graveyard) : [player.zones.graveyard];
+      const eligible = graveyardsToSearch.flat().filter((c) => matchesReanimateFilter(getCardDefinition(c.defId), effect));
       const sourceName = getCardDefinition(findCardAnywhere(next, sourceInstanceId)!.card.defId).name;
       if (eligible.length === 0) {
-        logLines.push(`${sourceName} has no legal target - ${player.name} has no matching card in their graveyard.`);
+        logLines.push(effect.anyGraveyard ? `${sourceName} has no legal target - no graveyard has a matching card.` : `${sourceName} has no legal target - ${player.name} has no matching card in their graveyard.`);
       } else {
         next = { ...next, pendingReanimate: { sourceInstanceId, controllerId: playerId, effect } };
       }
@@ -2281,6 +2347,17 @@ export function resolveCardEffects(
           pendingReturnCreatureFromGraveyardHandOrBattlefield: { sourceInstanceId, controllerId: playerId, toBattlefield: player.lifeGainedThisTurn >= effect.minLifeGained },
         };
       }
+    } else if (effect.type === 'returnTargetCreatureFromGraveyardToHandOrBattlefieldIfGraveyardCountAtLeast') {
+      const player = getPlayer(next, playerId);
+      const hasLegalTarget = player.zones.graveyard.some((c) => getCardDefinition(c.defId).type === 'creature');
+      if (!hasLegalTarget) {
+        logLines.push(`${player.name} has no creature card in their graveyard - there is nothing to return.`);
+      } else {
+        next = {
+          ...next,
+          pendingReturnCreatureFromGraveyardHandOrBattlefield: { sourceInstanceId, controllerId: playerId, toBattlefield: player.zones.graveyard.length >= effect.minGraveyardCount },
+        };
+      }
     } else if (effect.type === 'pumpSelf') {
       next = applyTemporaryBuff(next, sourceInstanceId, effect.power, effect.toughness);
       if (effect.grantKeyword) next = grantTemporaryKeyword(next, sourceInstanceId, effect.grantKeyword);
@@ -2359,6 +2436,7 @@ export function resolveCardEffects(
     } else if (effect.type === 'destroyAll') {
       const dead: string[] = [];
       for (const p of next.players) {
+        if (effect.opponentControlledOnly && p.id === playerId) continue;
         for (const c of p.zones.battlefield) {
           const d = getCardDefinition(c.defId);
           const matchesFilter =
@@ -2376,7 +2454,15 @@ export function resolveCardEffects(
                         ? d.type === 'creature' && manaValue(parseCostLabel(d.costLabel)) <= (effect.maxManaValue ?? 0)
                         : effect.targetFilter === 'creatureWithManaValueAtLeast'
                           ? d.type === 'creature' && manaValue(parseCostLabel(d.costLabel)) >= (effect.minManaValue ?? 0)
-                          : d.type === 'creature' && c.counters.length === 0;
+                          : effect.targetFilter === 'nonlandPermanent'
+                            ? d.type !== 'land'
+                            : effect.targetFilter === 'creature'
+                              ? d.type === 'creature'
+                              : effect.targetFilter === 'creatureMatchingSubtype'
+                                ? d.type === 'creature' && !!d.subtype?.toLowerCase().includes((effect.requiredSubtype ?? '').toLowerCase())
+                                : effect.targetFilter === 'creatureNotMatchingSubtype'
+                                  ? d.type === 'creature' && !d.subtype?.toLowerCase().includes((effect.requiredSubtype ?? '').toLowerCase())
+                                  : d.type === 'creature' && c.counters.length === 0;
           if (!matchesFilter) continue;
           const survives = checkIndestructibleOrShielded(next, c.instanceId, d, c, p.id);
           next = survives.state;
@@ -2403,7 +2489,15 @@ export function resolveCardEffects(
                     ? `creatures with mana value ${effect.maxManaValue ?? 0} or less`
                     : effect.targetFilter === 'creatureWithManaValueAtLeast'
                       ? `creatures with mana value ${effect.minManaValue ?? 0} or greater`
-                      : 'creatures with no counters';
+                      : effect.targetFilter === 'nonlandPermanent'
+                        ? 'nonland permanents'
+                        : effect.targetFilter === 'creature'
+                          ? 'creatures'
+                          : effect.targetFilter === 'creatureMatchingSubtype'
+                            ? `${effect.requiredSubtype ?? ''} creatures`
+                            : effect.targetFilter === 'creatureNotMatchingSubtype'
+                              ? `non-${effect.requiredSubtype ?? ''} creatures`
+                              : 'creatures with no counters';
       logLines.push(`${dead.length} ${filterNote} destroyed.`);
       if (effect.thenCounterSelfLabel && dead.length > 0) {
         const sourceFound = findCardAnywhere(next, sourceInstanceId);
@@ -2449,6 +2543,61 @@ export function resolveCardEffects(
         next = updatePlayer(next, p.id, (pl) => ({ ...pl, zones: { ...pl.zones, graveyard: [], exile: [...pl.zones.exile, ...graveyard] } }));
       }
       logLines.push(`${exiledCount} card(s) exiled from graveyards.`);
+    } else if (effect.type === 'putAllCreatureCardsFromAllGraveyardsOntoBattlefield') {
+      let moved: CardInstance[] = [];
+      for (const p of next.players) {
+        const creatureCards = p.zones.graveyard.filter((c) => getCardDefinition(c.defId).type === 'creature');
+        if (creatureCards.length === 0) continue;
+        const movedFromThisGraveyard = creatureCards.map((c) => {
+          const d = getCardDefinition(c.defId);
+          return stripSagaProgress({ ...c, tapped: !!d.entersTapped, damageMarked: 0, summoningSick: !hasKeyword(d, 'haste'), counters: [], attachedToInstanceId: undefined });
+        });
+        next = updatePlayer(next, p.id, (pl) => ({ ...pl, zones: { ...pl.zones, graveyard: pl.zones.graveyard.filter((c) => getCardDefinition(c.defId).type !== 'creature') } }));
+        moved = [...moved, ...movedFromThisGraveyard];
+      }
+      if (moved.length === 0) {
+        logLines.push(`${getPlayer(next, playerId).name} has no creature cards in any graveyard to put onto the battlefield.`);
+      } else {
+        next = updatePlayer(next, playerId, (p) => ({ ...p, zones: { ...p.zones, battlefield: [...p.zones.battlefield, ...moved] } }));
+        next = checkLegendRule(next, playerId);
+        for (const movedCard of moved) {
+          const d = getCardDefinition(movedCard.defId);
+          if (d.onEnter && d.onEnter.length > 0) {
+            const resolved = resolveCardEffects(next, playerId, d.onEnter, movedCard.instanceId);
+            next = resolved.state;
+            logLines.push(...resolved.logLines);
+          }
+        }
+        logLines.push(`${getPlayer(next, playerId).name} puts ${moved.length} creature card(s) from all graveyards onto the battlefield under their control.`);
+      }
+    } else if (effect.type === 'millThenOpponentChoosesCreatureFromYourGraveyardToBattlefield') {
+      const player = getPlayer(next, playerId);
+      const opponent = getOpponent(next, playerId);
+      const milled = player.zones.library.slice(0, effect.millCount);
+      next = updatePlayer(next, playerId, (p) => ({ ...p, zones: { ...p.zones, library: p.zones.library.slice(effect.millCount), graveyard: [...p.zones.graveyard, ...milled] } }));
+      logLines.push(`${player.name} mills ${milled.length} card(s).`);
+      const hasEligible = getPlayer(next, playerId).zones.graveyard.some((c) => getCardDefinition(c.defId).type === 'creature');
+      if (!hasEligible) {
+        logLines.push(`${opponent.name} has no creature card to choose from ${player.name}'s graveyard.`);
+      } else {
+        next = { ...next, pendingRejoinTheFightChoice: { sourceInstanceId, casterId: playerId, opponentId: opponent.id } };
+      }
+    } else if (effect.type === 'tragicArrogance') {
+      const caster = getPlayer(next, playerId);
+      const opponent = getOpponent(next, playerId);
+      const remainingSteps: { playerId: string; cardType: 'artifact' | 'creature' | 'enchantment' }[] = [];
+      for (const p of [caster, opponent]) {
+        for (const cardType of ['artifact', 'creature', 'enchantment'] as const) {
+          if (p.zones.battlefield.some((c) => getCardDefinition(c.defId).type === cardType)) {
+            remainingSteps.push({ playerId: p.id, cardType });
+          }
+        }
+      }
+      if (remainingSteps.length === 0) {
+        logLines.push(`No one controls an artifact, creature, or enchantment to exempt - nothing is sacrificed.`);
+      } else {
+        next = { ...next, pendingTragicArroganceChoice: { sourceInstanceId, casterId: playerId, remainingSteps, exemptInstanceIds: [] } };
+      }
     } else if (effect.type === 'exileEachOpponentGraveyardThenMayCopyExiledCreatureAsToken') {
       const opponent = getOpponent(next, playerId);
       const graveyard = opponent.zones.graveyard;

@@ -4497,11 +4497,14 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           const pending = state.pendingChooseOneMode;
           const sourceFound = findCard(state, pending.sourceInstanceId);
           const sourceName = sourceFound ? getCardDefinition(sourceFound.card.defId).name : 'Choose one';
+          const controller = state.players.find((p) => p.id === pending.controllerId);
+          const allowBoth = !!pending.allowBothIfCommander && !!controller?.commanderDefId;
           return (
             <ChooseOneModeModal
               sourceName={sourceName}
               modes={pending.modes}
-              onChoose={(modeIndex) => onAction({ type: 'RESOLVE_CHOOSE_ONE_MODE', modeIndex }, pending.controllerId)}
+              allowBoth={allowBoth}
+              onChoose={(modeIndex, alsoModeIndex) => onAction({ type: 'RESOLVE_CHOOSE_ONE_MODE', modeIndex, alsoModeIndex }, pending.controllerId)}
             />
           );
         })()}
