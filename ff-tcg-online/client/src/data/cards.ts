@@ -1579,6 +1579,16 @@ export const CARD_POOL: CardDefinition[] = [
     imagePath: '/assets/cards/crystal-fragments.webp'
   },
   {
+    id:'cultivate',
+    name:'Cultivate',
+    type:'sorcery',
+    costLabel:'{2}{G}',
+    text:'Search your library for up to two basic land cards, reveal those cards, put one onto the battlefield tapped and the other into your hand, then shuffle.\n'+
+    '“They say you can\u2019t grow grass and flowers in Midgar. But for some reason, the flowers have no trouble blooming here.”',
+    imagePath:'/assets/cards/cultivate.webp',
+    onCast: [{ type: 'cultivate' }],
+  },
+  {
     id:'cut-a-deal',
     name:'Cut a Deal',
     type:'sorcery',
@@ -1651,6 +1661,17 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'Destroy target creature an opponent controls. Then draw a card for each creature that died this turn.',
     onCast: [{ type: 'destroyOpponentCreature', thenDrawForCreaturesDiedThisTurn: true }],
     imagePath: '/assets/cards/deadly-embrace.webp'
+  },
+  {
+    id:'decimate',
+    name:'Decimate',
+    type:'sorcery',
+    costLabel:'{2}{R}{G}',
+    text:'Destroy target artifact, target creature, target enchantment, and target land. (You can\u2019t cast this spell unless you have legal choices for all its targets.)\n'+
+    '“Progress requires sacrifice. Learn to live with it.”\n'+
+    '—President Shinra',
+    imagePath:'/assets/cards/decimate.webp',
+    onCast: [{ type: 'destroyArtifactCreatureEnchantmentAndLand' }],
   },
   {
     id: 'delivery-moogle',
@@ -1952,6 +1973,17 @@ export const CARD_POOL: CardDefinition[] = [
     ],
   },
   {
+    id:'emet-selch-of-the-third-seat',
+    name:'Emet-Selch of the Third Seat',
+    type:'creature',
+    subtype:'Legendary Creature \u2014 Elder Wizard',
+    costLabel:'{2}{U}{B}',
+    text:'Spells you cast from your graveyard cost {2} less to cast.\n'+
+    'Whenever one or more opponents lose life, you may cast target instant or sorcery card from your graveyard. If that spell would be put into your graveyard, exile it instead. Do this only once each turn.',
+    imagePath:'/assets/cards/emet-selch-of-the-third-seat.webp',
+    onOpponentLoseLifeMayCastFromGraveyardOncePerTurn: { discount: 2 },
+  },
+  {
     id: 'emet-selch-unsundered',
     name: "Emet\u2014Selch, Unsundered",
     type: 'creature',
@@ -2026,8 +2058,25 @@ export const CARD_POOL: CardDefinition[] = [
     costLabel:'{3}{B}',
     text:'Exile each opponent\u2019s graveyard. When you do, choose up to one target creature card exiled this way. Create a token that\u2019s a copy of that card, except it’s an artifact and it loses all other card types.\n'+
     '“Come to me, my magicite pretty … come, and help me build the Magitek Empire of Kefka!”',
-    imagePath:"/assets/cards/espers-to-magicite.webp",
+    imagePath:'/assets/cards/espers-to-magicite.webp',
     onCast: [{ type: 'exileEachOpponentGraveyardThenMayCopyExiledCreatureAsToken' }],
+  },
+  {
+    id:'estinien-varlineau',
+    name:'Estinien Varlineau',
+    type:'creature',
+    subtype:'Legendary Creature \u2014 Elf Warrior',
+    costLabel:'{2}{W}{B}',
+    power: 3,
+    toughness: 3,
+    text:'Whenever you cast a noncreature spell, put a +1/+1 counter on Estinien Varlineau. It gains flying until end of turn.\n'+
+    'At the beginning of your second main phase, you draw X cards and lose X life, where X is the number of your opponents who were dealt combat damage by Estinien Varlineau or a Dragon this turn.',
+    imagePath:'/assets/cards/estinien-varlineau.webp',
+    noncreatureCastTrigger: { effects: [{ type: 'putCounterOnSelf', counterLabel: '+1/+1', counterAmount: 1, alsoGrantTemporaryKeyword: 'flying' }] },
+    // The second main-phase draw/life-loss clause is deferred - there's no
+    // "was [this player] dealt combat damage by [this creature or subtype]
+    // this turn" tracker in this engine (same missing-infrastructure class
+    // as Fang, Fearless I'Cie's "cards left your graveyard" clause nearby).
   },
   {
     id: 'ether',
@@ -2141,6 +2190,18 @@ export const CARD_POOL: CardDefinition[] = [
     equipGrantsOnAttack: [{ type: 'mayPutTopLandOntoBattlefieldTapped' }],
     equipCost: '{1}',
     attachesTo: 'creature',
+  },
+  {
+    id:'fandaniel-telophoroi-ascian',
+    name:'Fandaniel, Telophoroi Ascian',
+    type:'creature',
+    subtype:'Legendary Creature \u2014 Elder Wizard',
+    costLabel:'{4}{B}',
+    text:'Whenever you cast an instant or sorcery spell, surveil 1.\n'+
+    'At the beginning of your end step, each opponent may sacrifice a nontoken creature of their choice. Each opponent who doesn’t loses 2 life for each instant and sorcery card in your graveyard.',
+    imagePath:'/assets/cards/fandaniel-telophoroi-ascian.webp',
+    noncreatureCastTrigger: { surveilCount: 1, instantOrSorceryOnly: true },
+    onOwnEndStep: [{ type: 'eachOpponentMaySacrificeNontokenCreatureElseLoseLifePerInstantSorcery', lifePerCard: 2 }],
   },
   {
     id: 'fang-fearless-l-cie',
@@ -2574,6 +2635,24 @@ export const CARD_POOL: CardDefinition[] = [
     onEnter: [{ type: 'grantPreventCombatDamageConvertToCounterToTargetOwnCreature', counterLabel: '+1/+1' }],
   },
   {
+    id:'gau-feral-youth',
+    name:'Gau, Feral Youth',
+    type:'creature',
+    subtype:'Legendary Creature \u2014 Human Berserker',
+    costLabel:'{1}{R}',
+    power: 2,
+    toughness: 2,
+    text:'Rage — Whenever Gau attacks, put a +1/+1 counter on it.\n'+
+    'At the beginning of each end step, if a card left your graveyard this turn, Gau deals damage equal to its power to each opponent.\n'+
+    '“Uwao! Aooh! I\u2019m Gau! Your friend! Frieeend!!!”',
+    imagePath:'/assets/cards/gau-feral-youth.webp',
+    onAttack: [{ type: 'putCounterOnSelf', counterLabel: '+1/+1', counterAmount: 1 }],
+    // The end-step damage clause is deferred - it depends on "a card left
+    // your graveyard this turn", which has no tracking mechanism in this
+    // engine (same documented gap as Fang, Fearless I'Cie's near-identical
+    // clause nearby).
+  },
+  {
     id:'general-leo-cristophe',
     name:'General Leo Christophe',
     type:'creature',
@@ -2910,6 +2989,17 @@ export const CARD_POOL: CardDefinition[] = [
     increasesOwnCounterPlacementsByOne: '+1/+1',
   },
   {
+    id:'harmonize',
+    name:'Harmonize',
+    type:'sorcery',
+    costLabel:'{2}{G}{G}',
+    text:'Draw three cards.\n'+
+    '“Only the Ancients, only Aerith can save us from Meteor.”\n'+
+    '—Cloud Strife',
+    imagePath:'/assets/cards/harmonize.webp',
+    onCast: [{ type: 'drawCards', amount: 3 }],
+  },
+  {
     id: 'hecteyes',
     name: 'Hecteyes',
     costLabel: '{1}{B}',
@@ -2919,7 +3009,38 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'When this creature enters, each opponent discards a card.',
     onEnter: [{ type: 'eachOpponentDiscards', count: 1 }],
     imagePath: '/assets/cards/hecteyes.webp'
-  }, {
+  }, 
+  {
+    id:'hellkite-tyrant',
+    name:'Hellkite Tyrant',
+    costLabel:'{4}{R}{R}',
+    type:'creature',
+    subtype:'Creature \u2014 Dragon',
+    power: 6,
+    toughness: 5,
+    text: 'Flying, trample\n'+
+    'Whenever this creature deals combat damage to a player, gain control of all artifacts that player controls.\n'+
+    'At the beginning of your upkeep, if you control twenty or more artifacts, you win the game.',
+    imagePath:'/assets/cards/hellkite-tyrant.webp',
+    onCombatDamageToPlayer: [{ type: 'gainControlOfAllArtifactsControlledByOpponent' }],
+    onOwnUpkeep: [{ type: 'winGameIfControlAtLeastNOfType', count: 20, cardType: 'artifact' }],
+  },
+  {
+    id:'hermes-overseer-of-elpis',
+    name:'Hermes, Overseer of Elpis',
+    costLabel:'{3}{U}',
+    type:'creature',
+    subtype:'Legendary Creature \u2014 Elder Wizard',
+    power: 2,
+    toughness: 4,
+    text:'Whenever you cast a noncreature spell, create a 1/1 blue Bird creature token with flying and vigilance.\n'+
+    'Whenever you attack with one or more Birds, scry 2.\n'+
+    '“For us, there may be no higher purpose than to live for our world, but what of the other living beings out there?”',
+    imagePath:'/assets/cards/hermes-overseer-of-elpis.webp',
+    noncreatureCastTrigger: { effects: [{ type: 'createToken', tokenId: 'token-bird-flying-vigilance' }] },
+    onAttackWithSubtype: { subtype: 'Bird', effects: [{ type: 'surveil', count: 2 }] },
+  },
+  {
     id: 'hill-gigas',
     name: 'Hill Gigas',
     costLabel: '{4}{R}{R}',
@@ -2977,6 +3098,22 @@ export const CARD_POOL: CardDefinition[] = [
       'At the beginning of your end step, each opponent mills X cards, where X is the amount of life you gained this turn.',
     onOwnEndStep: [{ type: 'millOpponentByLifeGainedThisTurn' }],
     imagePath: '/assets/cards/hope-estheim.webp'
+  },
+  {
+    id:'hraesvelgr-of-the-first-brood',
+    name:'Hraesvelgr of the First Brood',
+    costLabel:'{4}{U}',
+    type:'creature',
+    subtype:'Legendary Creature \u2014 Elder Dragon',
+    power: 5,
+    toughness: 5,
+    text:'Flying, vigilance, ward {2}\n'+
+    'Shiva\u2019s Aid — When Hraesvelgr enters and whenever you cast a noncreature spell, target creature gets +1/+0 until end of turn and can\u2019t be blocked this turn.\n'+
+    '“Never shall our grief be assuaged nor our loss forgotten.”',
+    imagePath:'/assets/cards/hraesvelgr-of-the-first-brood.webp',
+    wardCost: { mana: '{2}' },
+    onEnter: [{ type: 'pumpTarget', power: 1, toughness: 0, grantKeyword: 'unblockable' }],
+    noncreatureCastTrigger: { effects: [{ type: 'pumpTarget', power: 1, toughness: 0, grantKeyword: 'unblockable' }] },
   },
   {
     id: 'ice-flan',
@@ -3130,6 +3267,21 @@ export const CARD_POOL: CardDefinition[] = [
         effectText: 'You gain 3 life.',
       },
     ],
+  },
+  {
+    id:'interceptor-shadow-s-hound',
+    name:'Interceptor, Shadow\u2019s Hound',
+    costLabel:'{2}{B}{B}',
+    type:'creature',
+    subtype:'Legendary Creature Dog',
+    power: 4,
+    toughness: 3,
+    text:'Menace\n'+
+    'Assassins you control have menace.\n'+
+    'Whenever you attack with one or more legendary creatures, you may pay {2}{B}. If you do, return this card from your graveyard to the battlefield tapped and attacking.',
+    imagePath:'/assets/cards/interceptor-shadow-s-hound.webp',
+    staticAnthemForControlledSubtype: { subtype: 'Assassin', power: 0, toughness: 0, grantKeywords: ['menace'] },
+    onAttackWithLegendaryReturnSelfFromGraveyardTappedAndAttacking: { manaCost: '{2}{B}' },
   },
   {
     id:'into-the-story',
@@ -3844,6 +3996,19 @@ export const CARD_POOL: CardDefinition[] = [
     ],
   },
   {
+    id:'mask-of-memory',
+    name:'Mask of Memory',
+    costLabel:'{2}',
+    type:'artifact',
+    subtype:'Artifact \u2014 Equipment',
+    text:'Whenever equipped creature deals combat damage to a player, you may draw two cards. If you do, discard a card.\n'+
+    'Equip {1} ({1}: Attach to target creature you control. Equip only as a sorcery.)',
+    imagePath:'/assets/cards/mask-of-memory.webp',
+    equipGrantsOnCombatDamageToPlayer: [{ type: 'mayEffect', effects: [{ type: 'loot', drawCount: 2, discardCount: 1 }] }],
+    equipCost: '{1}',
+    attachesTo: 'creature',
+  },
+  {
     id: 'matoya-archon-elder',
     name: 'Matoya, Archon Elder',
     costLabel: '{2}{U}',
@@ -3905,12 +4070,33 @@ export const CARD_POOL: CardDefinition[] = [
     name: 'Midgar, City of Mako',
     costLabel: '-',
     type: 'land',
-    text: "This land enters tapped. \nTap: Add B. \nA triumph of technology and testament to man’s potential.\n" +
+    text: "This land enters tapped. \nTap: Add B. \nA triumph of technology and testament to man\u2019s potential.\n" +
       "Reactor Raid 2B \nSorcery — Adventure\n " +
       "You may sacrifice an artifact or creature. If you do, draw two cards. (Then exile this card. You may play the land later from exile.)",
     imagePath: '/assets/cards/midgar-city-of-mako.webp',
     entersTapped: true,
     producesMana: 'B'
+  },
+  {
+    id:'millikin',
+    name:'Millikin',
+    costLabel:'{2}',
+    type:'creature',
+    subtype:'Artifact Creature \u2014 Construct',
+    power: 0,
+    toughness: 1,
+    text:'{T}, Mill a card: Add {C}. (Activate only as an instant. To mill a card, put the top card of your library into your graveyard.)\n'+
+    'machine that dazes and confuses its enemies with bewildering signals.',
+    imagePath:'/assets/cards/millikin.webp',
+    abilities: [
+      {
+        id: 'millikin-mana',
+        label: 'Mill a Card: Add {C}',
+        cost: { tap: true, millSelf: 1 },
+        effects: [{ type: 'addMana', colors: { C: 1 } }],
+        effectText: 'Add {C}.',
+      },
+    ],
   },
   {
     id: 'minwu-white-mage',
@@ -3923,6 +4109,19 @@ export const CARD_POOL: CardDefinition[] = [
     text: "Vigilance, lifelink \nWhenever you gain life, put a +1/+1 counter on each Cleric you control.",
     imagePath: '/assets/cards/minwu-white-mage.webp',
     onGainLifeTrigger: { counterLabel: '+1/+1', counterAmount: 1, subtypeFilter: 'Cleric' },
+  },
+  {
+    id:'mog-moogle-warrior',
+    name:'Mog, Moogle Warrior',
+    costLabel:'{1}{R}{W}',
+    type:'creature',
+    subtype:'Legendary Creature \u2014 Moogle Warrior',
+    power: 1,
+    toughness: 2,
+    text:'Lifelink\n'+
+    'Dance — At the beginning of your end step, each player may discard a card. Each player who discarded a card this way draws a card. If a creature card was discarded this way, you create a 1/2 white Moogle creature token with lifelink. Then if a noncreature card was discarded this way, put a +1/+1 counter on each Moogle you control.',
+    imagePath:'/assets/cards/mog-moogle-warrior.webp',
+    onOwnEndStep: [{ type: 'mogMoogleWarriorDance' }],
   },
   {
     id: 'monk-s-fist',
@@ -3948,6 +4147,20 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'For each creature you control, create a 1/2 white Moogle creature token with lifelink. Then creatures you control gain indestructible until end of turn.',
     onCast: [{ type: 'createToken', tokenId: 'token-moogle', count: 'perCreatureYouControl' }],
     imagePath: '/assets/cards/moogles-valor.webp'
+  },
+  {
+    id:'morbid-opportunist',
+    name:'Morbid Opportunist',
+    costLabel:'{2}{B}',
+    type:'creature',
+    subtype:'Creature \u2014 Human Rogue',
+    power: 1,
+    toughness: 3,
+    text:'Whenever one or more other creatures die, draw a card. This ability triggers only once each turn.\n'+
+    '“Great people here! You can trust everything they say!”\n'+
+    '—Zozo resident',
+    imagePath:'/assets/cards/morbid-opportunist.webp',
+    onAnyCreatureDeathAnywhereDraw: true,
   },
   {
     id:'mortify',
@@ -4013,6 +4226,17 @@ export const CARD_POOL: CardDefinition[] = [
     // The attack-trigger optional sacrifice-then-surveil is deferred - no
     // "whenever this attacks, you may sacrifice X, if you do Y" trigger
     // mechanism exists yet (only unconditional onAttack effects do).
+  },
+  {
+    id:'nature-s-lore',
+    name:'Nature\u2019s Lore',
+    costLabel:'{1}{G}',
+    type:'sorcery',
+    text:'Search your library for a Forest card, put that card onto the battlefield, then shuffle.\n'+
+    '“The spirits that return to the planet, merge with one another and roam the planet. They roam, converge, and divide, becoming a swell, called the lifestream.”\n'+
+    '—Bugenhagen',
+    imagePath:'/assets/cards/nature-s-lore.webp',
+    onCast: [{ type: 'searchLibraryForLand', landName: 'Forest', toBattlefieldUntapped: true }],
   },
   {
     id:'nesting-grounds',
@@ -4093,6 +4317,19 @@ export const CARD_POOL: CardDefinition[] = [
       "If you cast a spell this way, that artifact enters with a finality counter on it.",
     imagePath: '/assets/cards/noctis-prince-of-lucis.webp',
     grantsCastArtifactsFromGraveyardForLife: 3,
+  },
+  {
+    id:'nomad-outpost',
+    name:'Nomad Outpost',
+    costLabel:'-',
+    type:'land',
+    text:'This land enters tapped.\n'+
+    '{T}: Add {R}, {W}, or {B}.\n'+
+    '“The Empire is snuffing out Returners wherever it finds them. We must find a way to strike back before it\u2019s too late…”\n'+
+    '—Returner soldier',
+    imagePath:'/assets/cards/nomad-outpost.webp',
+    entersTapped: true,
+    producesMana: ['R', 'W', 'B'],
   },
   {
     id:'o-aka-traveling-merchant',
@@ -4317,6 +4554,29 @@ export const CARD_POOL: CardDefinition[] = [
     imagePath:'/assets/cards/prairie-stream.webp',
     entersTappedUnlessControlBasicLandCount: 2,
     producesMana: ['W', 'U'],
+  },
+  {
+    id:'priest-of-fell-rites',
+    name:'Priest of Fell Rites',
+    costLabel:'{W}{B}',
+    type:'creature',
+    subtype:'Creature \u2014 Human Warlock',
+    power: 2,
+    toughness: 2,
+    text:'{T}, Pay 3 life, Sacrifice this creature: Return target creature card from your graveyard to the battlefield. Activate only as a sorcery.\n'+
+    'Unearth {3}{W}{B} ({3}{W}{B}: Return this card from your graveyard to the battlefield. It gains haste. Exile it at the beginning of the next end step or if it would leave the battlefield. Unearth only as a sorcery.)',
+    imagePath:'/assets/cards/priest-of-fell-rites.webp',
+    abilities: [
+      {
+        id: 'priest-of-fell-rites-return',
+        label: 'Return a Creature from Your Graveyard',
+        cost: { tap: true, payLife: 3, sacrificeSelf: true },
+        onlyDuringOwnMainPhase: true,
+        effects: [{ type: 'reanimateTargetFromGraveyard' }],
+        effectText: 'Return target creature card from your graveyard to the battlefield.',
+      },
+    ],
+    unearth: { cost: '{3}{W}{B}' },
   },
   {
     id: 'prishe-s-wanderings',
@@ -4974,6 +5234,20 @@ export const CARD_POOL: CardDefinition[] = [
     // filter, neither of which exist.
   },
   {
+    id:'sabin-master-monk',
+    name:'Sabin, Master Monk',
+    costLabel:'{4}{R}',
+    type:'creature',
+    subtype:'Legendary Creature \u2014 Human Noble Monk',
+    power: 4,
+    toughness: 3,
+    text:'Double strike\n'+
+    'Blitz—{2}{R}{R}, Discard a card. (If you cast this spell for its blitz cost, it gains haste and “When this creature dies, draw a card.” Sacrifice it at the beginning of the next end step.)\n'+
+    'You may cast this card from your graveyard using its blitz ability.',
+    imagePath:'/assets/cards/sabin-master-monk.webp',
+    blitz: { cost: '{2}{R}{R}' },
+  },
+  {
     id: 'sabotender',
     name: 'Sabotender',
     costLabel: '{1}{R}',
@@ -5266,6 +5540,19 @@ export const CARD_POOL: CardDefinition[] = [
     onCast: [{ type: 'destroyTarget', targetFilter: 'creature' }, { type: 'gainLife', amount: 2 }],
   },
   {
+    id:'sepulchral-primordial',
+    name:'Sepulchral Primordial',
+    costLabel:'{5}{B}{B}',
+    type:'creature',
+    subtype:'Creature \u2014 Avatar',
+    power: 5,
+    toughness: 4,
+    text:'Intimidate (This creature can\u2019t be blocked except by artifact creatures and/or creatures that share a color with it.)\n'+
+    'When this creature enters, for each opponent, you may put up to one target creature card from that player\u2019s graveyard onto the battlefield under your control.',
+    imagePath:'/assets/cards/sepulchral-primordial.webp',
+    onEnter: [{ type: 'reanimateTargetFromGraveyard', opponentGraveyardOnly: true, optional: true }]
+  },
+  {
     id: 'serah-farron',
     name: 'Serah Farron',
     costLabel: '{1}{G}{W}',
@@ -5297,6 +5584,22 @@ export const CARD_POOL: CardDefinition[] = [
     staticAnthemForControlledSubtype: { subtype: 'legendary', power: 2, toughness: 2 },
   },
   {
+    id:'setzer-wandering-gambler',
+    name:'Setzer, Wandering Gambler',
+    costLabel:'{1}{B}{R}',
+    type:'creature',
+    subtype:'Legendary Creature \u2014 Human Rogue Pilot',
+    power: 2,
+    toughness: 2,
+    text:'When Setzer enters, create The Blackjack, a legendary 3/3 colorless Vehicle artifact token with flying and crew 2.\n'+
+    'Whenever a Vehicle you control deals combat damage to a player, flip a coin.\n'+
+    'Whenever you win a coin flip, create two tapped Treasure tokens.',
+    imagePath:'/assets/cards/setzer-wandering-gambler.webp',
+    onEnter: [{ type: 'createToken', tokenId: 'token-the-blackjack' }],
+    onAnyControlledVehicleCombatDamageToPlayer: [{ type: 'coinFlip', ifWinEffects: [] }],
+    onWinCoinFlip: [{ type: 'createToken', tokenId: 'token-treasure', count: 2, tapped: true }]
+  },
+  {
     id: 'seymour-flux',
     name: 'Seymour Flux',
     costLabel: '{4}{B}',
@@ -5313,6 +5616,19 @@ export const CARD_POOL: CardDefinition[] = [
         effects: [{ type: 'drawCards', amount: 1 }, { type: 'putCounterOnSelf', counterLabel: '+1/+1', counterAmount: 1 }],
       },
     ],
+  },
+  {
+    id:'shadow-mysterious-assassin',
+    name:'Shadow, Mysterious Assassin',
+    costLabel:'{2}{B}',
+    type:'creature',
+    subtype:'Legendary Creature \u2014 Human Assassin',
+    power: 3,
+    toughness: 3,
+    text:'Deathtouch\n'+
+    'Throw — Whenever Shadow deals combat damage to a player, you may sacrifice another nonland permanent. If you do, draw two cards and each opponent loses life equal to the mana value of the sacrificed permanent.',
+    imagePath:'/assets/cards/shadow-mysterious-assassin.webp',
+    onCombatDamageToPlayer: [{ type: 'maySacrificeAnotherNonlandPermanentThenDrawAndOpponentsLoseLifeEqualToManaValue', drawCount: 2 }]
   },
   {
     id:'shadowblood-ridge',
@@ -5555,6 +5871,20 @@ export const CARD_POOL: CardDefinition[] = [
     // no name restriction" search variant.
   },
   {
+    id:'siegfried-famed-swordsman',
+    name:'Siegfried, Famed Swordsman',
+    costLabel:'{3}{B}',
+    type:'creature',
+    subtype:'Legendary Creature \u2014 Human Warrior Rogue',
+    power: 2,
+    toughness: 2,
+    text:'Menace\n'+
+    'When Siegfried enters, mill three cards. Then put X +1/+1 counters on Siegfried, where X is twice the number of creature cards in your graveyard.\n'+
+    'Recent rumors speak of an impostor that shows up and masquerades as Siegfried himself.',
+    imagePath:'/assets/cards/siegfried-famed-swordsman.webp',
+    onEnter: [{ type: 'millSelf', count: 3 }, { type: 'putCounterOnSelf', counterLabel: '+1/+1', counterAmount: 'twiceGraveyardCreatureCount' }]
+  },
+  {
     id: 'sin-spira-s-punishment',
     name: 'Sin, Spira\u2019s Punishment',
     costLabel: '{4}{B}{G}{U}',
@@ -5700,6 +6030,18 @@ export const CARD_POOL: CardDefinition[] = [
     basePowerEqualsControlledCreatureCount: true,
   },
   {
+    id:'snuff-out',
+    name:'Snuff Out',
+    costLabel:'{3}{B}',
+    type:'instant',
+    text:'If you control a Swamp, you may pay 4 life rather than pay this spell\u2019s mana cost.\n'+
+    'Destroy target nonblack creature. It can\u2019t be regenerated.\n'+
+    '“Look, Avere! All these people have come to make you a gift of their souls!”',
+    imagePath:'/assets/cards/snuff-out.webp',
+    alternateCastCostPayLifeIfControlLandName: { landName: 'Swamp', lifeCost: 4 },
+    onCast: [{ type: 'destroyTarget', targetFilter: 'nonblackCreature' }]
+  },
+  {
     id:'sol-ring',
     name:'Sol Ring',
     costLabel:'{1}',
@@ -5839,6 +6181,20 @@ export const CARD_POOL: CardDefinition[] = [
     onCast: [{ type: 'returnTargetCreatureFromGraveyardToHandOrBattlefieldIfGraveyardCountAtLeast', minGraveyardCount: 7 }],
   },
   {
+    id:'stitcher-s-supplier',
+    name:'Stitcher\u2019s Supplier',
+    costLabel:'{B}',
+    type:'creature',
+    subtype:'Creature \u2014 Zombie',
+    power: 1,
+    toughness: 1,
+    text:'When this creature enters or dies, mill three cards. (Put the top three cards of your library into your graveyard.)\n'+
+    'All those wounded by the necromancer\u2019s zombie stick are doomed to a fate of eternal undeath!',
+    imagePath:'/assets/cards/stitcher-s-supplier.webp',
+    onEnter: [{ type: 'millSelf', count: 3 }],
+    onDeath: [{ type: 'millSelf', count: 3 }],
+  },
+  {
     id: 'stiltzkin-moogle-merchant',
     name: 'Stiltzkin, Moogle Merchant',
     costLabel: '{W}',
@@ -5875,6 +6231,27 @@ export const CARD_POOL: CardDefinition[] = [
     // cleanup, so it may remain attached to the borrower's creature.
   },
   {
+    id:'strago-and-relm',
+    name:'Strago and Relm',
+    costLabel:'{2}{R}',
+    type:'creature',
+    subtype:'Legendary Creature \u2014 Human Wizard',
+    power: 1,
+    toughness: 3,
+    text:'Sketch and Lore — {2}{R}, {T}: Target opponent exiles cards from the top of their library until they exile an instant, sorcery, or creature card. You may cast that card without paying its mana cost. If you cast a creature spell this way, it gains haste and “At the beginning of the end step, sacrifice this creature.” Activate only as a sorcery.',
+    imagePath:'/assets/cards/strago-and-relm.webp',
+    abilities: [
+      {
+        id: 'strago-and-relm-sketch-and-lore',
+        label: 'Sketch and Lore',
+        cost: { manaLabel: '{2}{R}', tap: true },
+        onlyDuringOwnMainPhase: true,
+        effects: [{ type: 'exileFromOpponentLibraryUntilTypeThenMayCastFree' }],
+        effectText: 'Target opponent exiles cards from the top of their library until they exile an instant, sorcery, or creature card. You may cast that card without paying its mana cost. If you cast a creature spell this way, it gains haste and "At the beginning of the end step, sacrifice this creature."',
+      },
+    ],
+  },
+  {
     id: 'stuck-in-summoner-s-sanctum',
     name: 'Stuck in Summoner\u2019s Sanctum',
     costLabel: '{2}{U}',
@@ -5891,6 +6268,31 @@ export const CARD_POOL: CardDefinition[] = [
     onEnter: [{ type: 'attachSelfToTarget', allowAnyController: true, targetTypeFilter: 'artifactOrCreature', tapTarget: true }],
     attachedPreventsUntap: true,
     attachedPreventsAbilities: true,
+  },
+  {
+    id:'sublime-epiphany',
+    name:'Sublime Epiphany',
+    costLabel:'{4}{U}{U}',
+    type:'instant',
+    text:'Choose one or more —\n'+
+    '• Counter target spell.\n'+
+    '• Counter target activated or triggered ability.\n'+
+    '• Return target nonland permanent to its owner\u2019s hand.\n'+
+    '• Create a token that\u2019s a copy of target creature you control.\n'+
+    '• Target player draws a card.',
+    imagePath:'/assets/cards/sublime-epiphany.webp',
+    chooseModes: [
+      // Countering a spell/ability is deferred - this engine has no
+      // stack/priority system (see Syncopate's identical note elsewhere
+      // in this file): CAST_CARD resolves a spell's effects immediately,
+      // so there is no "spell sitting on the stack" object left to
+      // counter by the time any other card could respond.
+      { label: 'Counter target spell.', effects: [] },
+      { label: 'Counter target activated or triggered ability.', effects: [] },
+      { label: 'Return target nonland permanent to its owner’s hand.', effects: [{ type: 'bounceTarget', targetFilter: 'nonland' }] },
+      { label: 'Create a token that’s a copy of target creature you control.', effects: [{ type: 'createTokenCopyOfTarget', creatureOnly: true, controlledOnly: true }] },
+      { label: 'Target player draws a card.', effects: [{ type: 'drawCardsFromTargetPlayer', count: 1 }] },
+    ]
   },
   {
     id:'sulfurous-springs',
@@ -6308,6 +6710,29 @@ export const CARD_POOL: CardDefinition[] = [
     },
   },
   {
+    id:'summon-kujata',
+    name:'Summon: Kujata',
+    costLabel:'{5}{R}',
+    type:'creature',
+    subtype:'Enchantment Creature \u2014 Saga Ox',
+    power: 7,
+    toughness: 5,
+    text:'(As this Saga enters and after your draw step, add a lore counter. Sacrifice after III.)\n'+
+    'I — Lightning — This creature deals 3 damage to each of up to two target creatures.\n'+
+    'II — Ice — Up to three target creatures can\u2019t block this turn.\n'+
+    'III — Fire — Discard a card, then draw two cards. When you discard a card this way, this creature deals damage equal to that card\u2019s mana value to each opponent.\n'+
+    'Trample, haste',
+    imagePath:'/assets/cards/summon-kujata.webp',
+    saga: {
+      chapters: [
+        { numbers: [1], effects: [{ type: 'damageTargetCreature', amount: 3, upToTwo: true }] },
+        { numbers: [2], effects: [{ type: 'grantCantBlockToUpToThreeTargets' }] },
+        { numbers: [3], effects: [{ type: 'discardThenDrawThenDamageOpponentsEqualToDiscardedManaValue', drawCount: 2 }] },
+      ],
+      sacrificeAfterFinalChapter: true,
+    },
+  },
+  {
     id: 'summon-leviathan',
     name: 'Summon: Leviathan',
     costLabel: '{4}{U}{U}',
@@ -6316,7 +6741,7 @@ export const CARD_POOL: CardDefinition[] = [
     power: 6,
     toughness: 6,
     text: '(As this Saga enters and after your draw step, add a lore counter. Sacrifice after III.) \n' +
-      'I — Return each creature that isn’t a Kraken, Leviathan, Merfolk, Octopus, or Serpent to its owner\u2019s hand. \n' +
+      'I — Return each creature that isn\u2019t a Kraken, Leviathan, Merfolk, Octopus, or Serpent to its owner\u2019s hand. \n' +
       'II, III — Until end of turn, whenever a Kraken, Leviathan, Merfolk, Octopus, or Serpent attacks, draw a card. \n' +
       'Ward 2',
     imagePath: '/assets/cards/summon-leviathan.webp',
@@ -6667,6 +7092,17 @@ export const CARD_POOL: CardDefinition[] = [
     // responses -> resolve), not just a new effect on this one card.
   },
   {
+    id:'syphon-mind',
+    name:'Syphon Mind',
+    costLabel:'{3}{B}',
+    type:'sorcery',
+    text:'Each other player discards a card. You draw a card for each card discarded this way.\n'+
+    '“\u2019Tis now all but certain that the towers were conceived to facilitate the summoning of primals by those imprisoned within.”\n'+
+    '—Urianger Augurelt',
+    imagePath:'/assets/cards/syphon-mind.webp',
+    onCast: [{ type: 'eachOpponentDiscards', count: 1, thenCasterDrawsForEachDiscarded: true }],
+  },
+  {
     id:'talisman-of-conviction',
     name:'Talisman of Conviction',
     costLabel:'{2}',
@@ -6680,6 +7116,31 @@ export const CARD_POOL: CardDefinition[] = [
     altProducesMana: { colors: ['R', 'W'], payLife: 1 },
   },
   {
+    id:'talisman-of-dominance',
+    name:'Talisman of Dominance',
+    costLabel:'{2}',
+    type:'artifact',
+    text:'{T}: Add {C}.\n'+
+    '{T}: Add {U} or {B}. This artifact deals 1 damage to you.\n'+
+    '“The Ascian used me, as he used so many others-all to further the restoration of his wretched god.”\n'+
+    '—Gaius Baelsar',
+    imagePath:'/assets/cards/talisman-of-dominance.webp',
+    producesMana: ['C'],
+    altProducesMana: { colors: ['U', 'B'], payLife: 1 },
+  },
+  {
+    id:'talisman-of-hierarchy',
+    name:'Talisman of Hierarchy',
+    costLabel:'{2}',
+    type:'artifact',
+    text:'{T}: Add {C}.\n'+
+    '{T}: Add {W} or {B}. This artifact deals 1 damage to you.\n'+
+    '“A red mage\u2019s spells belong to two distinct schools, rooted as they are in the ancient disciplines of black and white magic.”',
+    imagePath:'/assets/cards/talisman-of-hierarchy.webp',
+    producesMana: ['C'],
+    altProducesMana: { colors: ['W', 'B'], payLife: 1 },
+  },
+  {
     id:'talisman-of-indulgence',
     name:'Talisman of Indulgence',
     costLabel:'{2}',
@@ -6690,6 +7151,19 @@ export const CARD_POOL: CardDefinition[] = [
     imagePath:'/assets/cards/talisman-of-indulgence.webp',
     producesMana: ['C'],
     altProducesMana: { colors: ['B', 'R'], payLife: 1 },
+  },
+  {
+    id:'talisman-of-progress',
+    name:'Talisman of Progress',
+    costLabel:'{2}',
+    type:'artifact',
+    text:'{T}: Add {C}.\n'+
+    '{T}: Add {W} or {U}. This artifact deals 1 damage to you.\n'+
+    '“Master Louisoix… I understand now… the choice you made… In death… there is life…”\n'+
+    '—Moenbryda Wilfsunnwyn',
+    imagePath:'/assets/cards/talisman-of-progress.webp',
+    producesMana: ['C'],
+    altProducesMana: { colors: ['W', 'U'], payLife: 1 },
   },
   {
     id:'tangled-islet',
@@ -8474,6 +8948,17 @@ export const TOKEN_POOL: CardDefinition[] = [
     imagePath: '/assets/cards/token-bird.webp',
   },
   {
+    id: 'token-bird-flying-vigilance',
+    name: 'Bird',
+    type: 'creature',
+    subtype: 'Bird Token',
+    costLabel: '-',
+    power: 1,
+    toughness: 1,
+    text: 'Flying, vigilance',
+    imagePath: '/assets/cards/token-bird.webp',
+  },
+  {
     id: 'token-knight',
     name: 'Knight',
     type: 'creature',
@@ -8560,6 +9045,33 @@ export const TOKEN_POOL: CardDefinition[] = [
     toughness: 2,
     text: '',
     imagePath: '/assets/cards/horror.webp',
+  },
+  {
+    // Was missing from the client's own TOKEN_POOL even though SOLDIER
+    // Military Program's onOwnCombatBegin already references tokenId:
+    // 'token-soldier' - getCardDefinition would have thrown client-side
+    // the moment that trigger ever fired. Added to match server exactly.
+    id: 'token-soldier',
+    name: 'Soldier',
+    type: 'creature',
+    subtype: 'Human Soldier Token',
+    costLabel: '-',
+    power: 1,
+    toughness: 1,
+    text: '',
+    imagePath: '/assets/cards/token-soldier.webp',
+  },
+  {
+    id: 'token-the-blackjack',
+    name: 'The Blackjack',
+    type: 'artifact',
+    subtype: 'Legendary Artifact — Vehicle Token',
+    costLabel: '-',
+    power: 3,
+    toughness: 3,
+    text: 'Flying\nCrew 2',
+    imagePath: '/assets/cards/token-the-blackjack.webp',
+    crew: 2,
   },
 ];
 

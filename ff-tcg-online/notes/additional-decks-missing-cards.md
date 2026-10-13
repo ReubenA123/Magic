@@ -1,27 +1,16 @@
 ### Creature (35)
-- Stitcher's Supplier
-- Gau, Feral Youth
-- Millikin
-- Priest of Fell Rites
+- Rampant Growth
+- Thancred Waters
+- Torrential Gearhulk
 - Locke, Treasure Hunter
-- Mog, Moogle Warrior
-- Morbid Opportunist
-- Setzer, Wandering Gambler
-- Shadow, Mysterious Assassin
-- Strago and Relm
 - Celes, Rune Knight
 - Edgar, Master Machinist
-- Interceptor, Shadow's Hound
 - Palace Jailer
 - Pitiless Plunderer
-- Siegfried, Famed Swordsman
-- Sabin, Master Monk
 - Combustible Gearhulk
 - Flayer of the Hatebound
 - Ruin Grinder
-
 - Cyan, Vengeful Samurai
-- Sepulchral Primordial
 - Bugenhagen, Wise Elder
 - Cid, Freeflier Pilot
 - Helitrooper
@@ -34,22 +23,14 @@
 - Barret, Avalanche Leader
 - Heidegger, Shinra Executive
 - Bronze Guardian
-- Hellkite Tyrant
-- Summon: Kujata
 
-### Sorcery (11)
-- Nature's Lore
-- Rampant Growth
-- Cultivate
-- Decimate
-- Harmonize
+
 
 ### Artifact (19)
 - Conformer Shuriken
 - Hero's Blade
 - Hero's Heirloom
 - Lightning Greaves
-- Mask of Memory
 - Wrecking Ball Arm
 - Champion's Helm
 - Darksteel Plate
@@ -67,36 +48,21 @@
 - Papalymo Totolymo
 - Lyse Hext
 - Murderous Rider
-- Emet-Selch of the Third Seat
-- Estinien Varlineau
-- Hermes, Overseer of Elpis
-- Fandaniel, Telophoroi Ascian
-- Hraesvelgr of the First Brood
-- Thancred Waters
-- Torrential Gearhulk
+
 
 ### Sorcery (9)
 - Exsanguinate
-
 - Lingering Souls
 - Rite of Replication
-- Syphon Mind
 - Cleansing Nova
-- Crux of Fate
 - Final Judgment
 
 ### Instant (8)
 - Transpose
 - Lethal Scheme
-- Snuff Out
-- Sublime Epiphany
 - Dig Through Time
 
 ### Artifact (13)
-
-- Talisman of Dominance
-- Talisman of Hierarchy
-- Talisman of Progress
 - Thought Vessel
 - Tome of Legends
 - Archaeomancer's Map
@@ -104,17 +70,12 @@
 - Reaper's Scythe
 - Relic of Legends
 - Dancer's Chakrams
-
-
 ### Enchantment (6)
-
-
 - Eye of Nidhogg
 - Propaganda
 - Observed Stasis
 
 ### Land 
-- Nomad Outpost
 - Path of Ancestry
 - Choked Estuary
 - Contaminated Aquifer
@@ -126,9 +87,6 @@
 - Fire-Lit Thicket
 - Furycalm Snarl
 
-
-(Astrologian's Planisphere, Sage's Nouliths, and White Auracite from this
-deck's artifact list are already in the pool.)
 
 Star of Extinction
 {5}{R}{R}

@@ -3003,6 +3003,8 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                                   ? `Choose a creature for ${pendingTargetSourceName} to put a ${effect.counterLabel} counter on - or Skip.`
                                   : effect.type === 'tapTargetThenExileIfMetalcraft'
                                   ? `Choose a creature for ${pendingTargetSourceName} to tap (or exile with Metalcraft).`
+                                  : effect.type === 'grantCantBlockToUpToThreeTargets'
+                                  ? `Choose up to three creatures for ${pendingTargetSourceName} to stop from blocking this turn - or Skip.`
                                   : effect.targetFilter === 'artifactOrEnchantment'
                                   ? `Choose an artifact or enchantment for ${pendingTargetSourceName}'s ability (either player's).`
                                   : effect.targetFilter === 'enchantment'

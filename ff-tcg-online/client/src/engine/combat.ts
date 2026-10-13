@@ -276,6 +276,39 @@ export function loseLife(state: GameState, playerId: string, amount: number): Ga
     }));
     next = { ...next, log: [...next.log, `${watcherDef.name} triggers: ${activePlayer.name} draws ${drawn.length} card(s).`] };
   }
+  // "Whenever one or more opponents lose life, you may cast target instant
+  // or sorcery card from your graveyard... Do this only once each turn."
+  // (Emet-Selch of the Third Seat) - unlike onOpponentLifeLossDuringYourTurn
+  // above, this has NO "during your turn" restriction: checked against
+  // every OTHER player's battlefield (whoever considers playerId an
+  // opponent), not just the active player's.
+  for (const other of next.players) {
+    if (other.id === playerId) continue;
+    for (const watcher of other.zones.battlefield) {
+      const watcherDef = getCardDefinition(watcher.defId);
+      if (!watcherDef.onOpponentLoseLifeMayCastFromGraveyardOncePerTurn || watcher.onOpponentLoseLifeMayCastFromGraveyardTriggeredThisTurn) continue;
+      if (next.pendingCastFromGraveyardAnyMana) continue;
+      const hasLegalTarget = other.zones.graveyard.some((c) => {
+        const d = getCardDefinition(c.defId);
+        return d.type === 'instant' || d.type === 'sorcery';
+      });
+      if (!hasLegalTarget) continue;
+      next = updatePlayer(next, other.id, (p) => ({
+        ...p,
+        zones: { ...p.zones, battlefield: p.zones.battlefield.map((c) => (c.instanceId === watcher.instanceId ? { ...c, onOpponentLoseLifeMayCastFromGraveyardTriggeredThisTurn: true } : c)) },
+      }));
+      next = {
+        ...next,
+        pendingCastFromGraveyardAnyMana: {
+          sourceInstanceId: watcher.instanceId,
+          controllerId: other.id,
+          ownGraveyardOnly: true,
+          discount: watcherDef.onOpponentLoseLifeMayCastFromGraveyardOncePerTurn.discount,
+        },
+        log: [...next.log, `${watcherDef.name} triggers: ${other.name} may cast an instant or sorcery card from their graveyard.`],
+      };
+    }
+  }
   return next;
 }
 
@@ -642,6 +675,11 @@ export function isLegalPendingTarget(state: GameState, pendingTarget: NonNullabl
     return def.type === 'creature' && ownerId === pendingTarget.controllerId && card.instanceId !== pendingTarget.sourceInstanceId;
   }
   if (effect.type === 'damageTargetCreature') {
+    if (effect.upToTwo && card.instanceId === pendingTarget.firstInstanceId) return false;
+    return def.type === 'creature';
+  }
+  if (effect.type === 'grantCantBlockToUpToThreeTargets') {
+    if (pendingTarget.chosenInstanceIds?.includes(card.instanceId)) return false;
     return def.type === 'creature';
   }
   if (effect.type === 'becomeCopyOfAnyCreatureThenAddCounters') {
@@ -1241,6 +1279,13 @@ export function moveCreaturesToGraveyard(state: GameState, deadIds: string[], ve
     next = detachEverythingFrom(next, id);
   }
 
+  // "Whenever one or more other creatures die, draw a card. This ability
+  // triggers only once each turn." (Morbid Opportunist) - unlike the
+  // per-player onAnyDeathDraw watcher below, this one needs to see
+  // creature deaths on EITHER side, so it's gathered once up front from
+  // the pre-removal `state` rather than per-player inside the loop below.
+  const allCreatureDeaths = state.players.flatMap((p) => p.zones.battlefield.filter((c) => deadIds.includes(c.instanceId) && getCardDefinition(c.defId).type === 'creature'));
+
   for (const player of next.players) {
     const dead = player.zones.battlefield.filter((c) => deadIds.includes(c.instanceId));
     if (dead.length === 0) continue;
@@ -1651,6 +1696,34 @@ export function moveCreaturesToGraveyard(state: GameState, deadIds: string[], ve
             pendingCounterTransferQueue: [...next.pendingCounterTransferQueue, { controllerId: player.id, sourceName: watcherDef.name, amount: totalCounters }],
           };
         }
+      }
+    }
+  }
+
+  // "Whenever one or more other creatures die, draw a card. This ability
+  // triggers only once each turn." (Morbid Opportunist) - a standalone
+  // pass over EVERY player (not nested in the per-player loop above,
+  // which skips a player entirely when THEY have no dead creatures of
+  // their own - this watcher must still fire for a player watching an
+  // OPPONENT's creature die even though nothing of theirs died).
+  if (allCreatureDeaths.length > 0) {
+    for (const player of next.players) {
+      const drawWatchers = player.zones.battlefield.filter((c) => getCardDefinition(c.defId).onAnyCreatureDeathAnywhereDraw && !c.onAnyCreatureDeathAnywhereDrawUsedThisTurn);
+      for (const watcher of drawWatchers) {
+        const otherDeaths = allCreatureDeaths.filter((d) => d.instanceId !== watcher.instanceId);
+        if (otherDeaths.length === 0) continue;
+        const watcherDef = getCardDefinition(watcher.defId);
+        const drawn = getPlayer(next, player.id).zones.library.slice(0, 1);
+        next = updatePlayer(next, player.id, (p) => ({
+          ...p,
+          zones: {
+            ...p.zones,
+            battlefield: p.zones.battlefield.map((c) => (c.instanceId === watcher.instanceId ? { ...c, onAnyCreatureDeathAnywhereDrawUsedThisTurn: true } : c)),
+            library: p.zones.library.slice(1),
+            hand: [...p.zones.hand, ...drawn],
+          },
+        }));
+        next = { ...next, log: [...next.log, `${watcherDef.name} triggers: ${player.name} draws a card.`] };
       }
     }
   }
