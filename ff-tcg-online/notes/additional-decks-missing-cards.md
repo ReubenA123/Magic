@@ -1,12 +1,7 @@
 ### Creature (35)
-- Rampant Growth
-- Thancred Waters
-- Torrential Gearhulk
 - Locke, Treasure Hunter
 - Celes, Rune Knight
 - Edgar, Master Machinist
-- Palace Jailer
-- Pitiless Plunderer
 - Combustible Gearhulk
 - Flayer of the Hatebound
 - Ruin Grinder
@@ -14,17 +9,12 @@
 - Bugenhagen, Wise Elder
 - Cid, Freeflier Pilot
 - Helitrooper
-- Puresteel Paladin
 - Armory Automaton
 - Elena, Turk Recruit
-- Professional Face-Breaker
-- Red XIII, Proud Warrior
 - Vincent, Vengeful Atoner
 - Barret, Avalanche Leader
 - Heidegger, Shinra Executive
 - Bronze Guardian
-
-
 
 ### Artifact (19)
 - Conformer Shuriken
@@ -39,16 +29,12 @@
 - Coin of Fate
 - Key to the City
 - Commander's Sphere
-- The Falcon, Airship Restored
 
 ### Creature (22)
 - Hildibrand Manderville
 - Hypnotic Sprite
-- Krile Baldesion
-- Papalymo Totolymo
 - Lyse Hext
 - Murderous Rider
-
 
 ### Sorcery (9)
 - Exsanguinate
@@ -56,24 +42,6 @@
 - Rite of Replication
 - Cleansing Nova
 - Final Judgment
-
-### Instant (8)
-- Transpose
-- Lethal Scheme
-- Dig Through Time
-
-### Artifact (13)
-- Thought Vessel
-- Tome of Legends
-- Archaeomancer's Map
-- Blue Mage's Cane
-- Reaper's Scythe
-- Relic of Legends
-- Dancer's Chakrams
-### Enchantment (6)
-- Eye of Nidhogg
-- Propaganda
-- Observed Stasis
 
 ### Land 
 - Path of Ancestry

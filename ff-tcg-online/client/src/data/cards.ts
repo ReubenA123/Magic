@@ -347,6 +347,17 @@ export const CARD_POOL: CardDefinition[] = [
     producesMana: ['W', 'U', 'B'],
   },
   {
+    id:'archaeomancer-s-map',
+    name:'Archaeomancer\u2019s Map',
+    type:'artifact',
+    costLabel:'{2}{W}',
+    text:'When this artifact enters, search your library for up to two basic Plains cards, reveal them, put them into your hand, then shuffle.\n'+
+    'Whenever a land an opponent controls enters, if that player controls more lands than you, you may put a land card from your hand onto the battlefield.',
+    imagePath:'/assets/cards/archaeomancer-s-map.webp',
+    onEnter: [{ type: 'searchLibraryForLand', landName: 'Plains', count: 2 }],
+    onOpponentLandEnterIfTheyHaveMoreLands: { effects: [{ type: 'putLandFromHandOntoBattlefield' }] },
+  },
+  {
     id: 'ardyn-the-usurper',
     name: 'Ardyn, the Usurper',
     type: 'creature',
@@ -859,6 +870,23 @@ export const CARD_POOL: CardDefinition[] = [
         // needs yet. Only the unblockable half is implemented.
       },
     ],
+  },
+  {
+    id:'blue-mage-s-cane',
+    name:'Blue Mage\u2019s Cane',
+    type:'artifact',
+    subtype:'Artifact \u2014 Equipment',
+    costLabel:'{2}{U}',
+    text:'Job select\n'+
+    'Equipped creature gets +0/+2, is a Wizard in addition to its other types, and has “Whenever this creature attacks, exile up to one target instant or sorcery card from defending player’s graveyard. If you do, copy it. You may cast the copy by paying {3} rather than paying its mana cost.”\n'+
+    'Spirit of the Whalaqee — Equip {2}',
+    imagePath:'/assets/cards/blue-mage-s-cane.webp',
+    onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
+    attachesTo: 'creature',
+    equipCost: '{2}',
+    equipBuff: { power: 0, toughness: 2 },
+    equipGrantsSubtype: 'Wizard',
+    equipGrantsOnAttack: [{ type: 'exileTargetInstantOrSorceryFromOpponentGraveyardThenMayCastForFixedCost', fixedCost: '{3}' }],
   },
   {
     id:'bred-for-the-hunt',
@@ -1600,6 +1628,24 @@ export const CARD_POOL: CardDefinition[] = [
     onCast: [{ type: 'eachOpponentDrawsThenCasterDrawsForEachWhoDid' }],
   },
   {
+    id:'dancer-s-chakrams',
+    name:'Dancer\u2019s Chakrams',
+    type:'artifact',
+    subtype:'Artifact \u2014 Equipment',
+    costLabel:'{3}{W}',
+    text:'Job select (When this Equipment enters, create a 1/1 colorless Hero creature token, then attach this to it.)\n'+
+    'Equipped creature gets +2/+2, has lifelink and “Other commanders you control get +2/+2 and have lifelink,” and is a Performer in addition to its other types.\n'+
+    'Krishna — Equip {3}',
+    imagePath:'/assets/cards/dancer-s-chakrams.webp',
+    onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
+    attachesTo: 'creature',
+    equipCost: '{3}',
+    equipBuff: { power: 2, toughness: 2 },
+    equipGrantsKeyword: 'lifelink',
+    equipGrantsSubtype: 'Performer',
+    equipGrantsAnthemForOtherCommandersYouControl: { power: 2, toughness: 2, grantKeywords: ['lifelink'] },
+  },
+  {
     id:'damning-verdict',
     name:'Damning Verdict',
     type:'sorcery',
@@ -1776,6 +1822,17 @@ export const CARD_POOL: CardDefinition[] = [
     costReductionPerGraveyardPermanent: 1,
     preventsAllCombatDamage: true,
     imagePath: '/assets/cards/diamond-weapon.webp'
+  },
+  {
+    id:'dig-through-time',
+    name:'Dig Through Time',
+    type:'instant',
+    costLabel:'{6}{U}{U}',
+    text:'Delve (Each card you exile from your graveyard while casting this spell pays for {1}.)\n'+
+    'Look at the top seven cards of your library. Put two of them into your hand and the rest on the bottom of your library in any order.',
+    imagePath:'/assets/cards/dig-through-time.webp',
+    delve: true,
+    onCast: [{ type: 'lookAtTopNPutMToHandRestToBottom', count: 7, keepCount: 2 }],
   },
   {
     id: 'dion-bahamut-dominant',
@@ -2190,6 +2247,29 @@ export const CARD_POOL: CardDefinition[] = [
     equipGrantsOnAttack: [{ type: 'mayPutTopLandOntoBattlefieldTapped' }],
     equipCost: '{1}',
     attachesTo: 'creature',
+  },
+  {
+    id:'eye-of-nidhogg',
+    name:'Eye of Nidhogg',
+    costLabel:'{2}{B}',
+    type:'enchantment',
+    subtype:'Legendary Enchantment \u2014 Aura',
+    text:'Enchant creature\n'+
+    'Enchanted creature is a black Dragon with base power and toughness 4/2, has flying and deathtouch, and is goaded. (It attacks each combat if able and attacks a player other than you if able.)\n'+
+    'When Eye of Nidhogg is put into a graveyard from the battlefield, return it to its owner\u2019s hand.',
+    imagePath:'/assets/cards/eye-of-nidhogg.webp',
+    attachesTo: 'creature',
+    onEnter: [{ type: 'attachSelfToTarget' }],
+    attachedSetsBasePowerToughness: { power: 4, toughness: 2 },
+    equipGrantsKeyword: ['flying', 'deathtouch'],
+    equipGrantsSubtype: 'Dragon',
+    returnsSelfToHandOnDeath: true,
+    // "Is a BLACK Dragon" and "is goaded" are deferred - nothing in this
+    // engine's current card pool ever checks a creature's color against
+    // anything other than its own printed costLabel (overriding that
+    // would have unwanted ripple effects on mana cost display), and
+    // "goaded" (forced to attack) would need new DECLARE_ATTACKERS
+    // validation logic that doesn't exist yet.
   },
   {
     id:'fandaniel-telophoroi-ascian',
@@ -3621,6 +3701,19 @@ export const CARD_POOL: CardDefinition[] = [
     // grant the copied creature's other keywords/abilities/types.
   },
   {
+    id:'krile-baldesion',
+    name:'Krile Baldesion',
+    costLabel:'{W}{U}',
+    type:'creature',
+    subtype:'Legendary Creature \u2014 Dwarf Wizard',
+    power: 2,
+    toughness: 1,
+    text:'Lifelink\n'+
+    'Trace Aether — Whenever you cast a noncreature spell, you may return target creature card with mana value equal to that spell\u2019s mana value from your graveyard to your hand. Do this only once each turn.',
+    imagePath:'/assets/cards/krile-baldesion.webp',
+    noncreatureCastTrigger: { mayReturnCreatureFromGraveyardWithManaValueEqualToSpentOncePerTurn: true },
+  },
+  {
     id: 'kuja-genome-sorcerer',
     name: 'Kuja, Genome Sorcerer',
     costLabel: '{2}{B}{R}',
@@ -3673,6 +3766,18 @@ export const CARD_POOL: CardDefinition[] = [
     '—Strago Magus',
     imagePath:'/assets/cards/legions-to-ashes.webp',
     onCast: [{ type: 'exileTargetPermanent', targetFilter: 'nonlandPermanent', opponentControlledOnly: true, alsoExileSameNameTokensControlledByTarget: true }],
+  },
+  {
+    id:'lethal-scheme',
+    name:'Lethal Scheme',
+    costLabel:'{2}{B}{B}',
+    type:'instant',
+    text:'Convoke (Your creatures can help cast this spell. Each creature you tap while casting this spell pays for {1} or one mana of that creature\u2019s color.)\n'+
+    'Destroy target creature or planeswalker. Each creature that convoked this spell connives. (Draw a card, then discard a card. If you discarded a nonland card, put a +1/+1 counter on that creature.)',
+    imagePath:'/assets/cards/lethal-scheme.webp',
+    convoke: true,
+    onCast: [{ type: 'destroyTarget', targetFilter: 'creature' }, { type: 'conniveConvokingCreatures' }],
+    // "...or planeswalker" is moot - this engine has no planeswalker CardType.
   },
   {
     id:'lifestream-s-blessing',
@@ -4353,6 +4458,27 @@ export const CARD_POOL: CardDefinition[] = [
     ],
   },
   {
+    id:'observed-stasis',
+    name:'Observed Stasis',
+    costLabel:'{3}{U}',
+    type:'enchantment',
+    subtype:'Enchantment \u2014 Aura',
+    text:'Flash\n'+
+    'Enchant creature an opponent controls\n'+
+    'When this Aura enters, remove enchanted creature from combat. Then draw a card for each tapped creature its controller controls.\n'+
+    'Enchanted creature loses all abilities and can\u2019t attack or block.',
+    imagePath:'/assets/cards/observed-stasis.webp',
+    attachesTo: 'creature',
+    onEnter: [{ type: 'attachSelfToTarget', opponentControlledOnly: true, removeFromCombatThenDrawForControllerTappedCreatures: true }],
+    attachedPreventsAttacking: true,
+    attachedPreventsBlocking: true,
+    // "Loses all abilities" is deferred - hasKeywordEffective has no
+    // GameState/attached-card access anywhere it's called, so stripping a
+    // creature's own printed keywords from an attached Aura would need a
+    // signature change across dozens of call sites, disproportionate to
+    // this one clause.
+  },
+  {
     id: 'omega-heartless-evolution',
     name: 'Omega, Heartless Evolution',
     costLabel: '{5}{G}{U}',
@@ -4433,6 +4559,42 @@ export const CARD_POOL: CardDefinition[] = [
     imagePath: '/assets/cards/paladin-s-arms.webp'
   },
   {
+    id:'palace-jailer',
+    name:'Palace Jailer',
+    costLabel:'{2}{W}{W}',
+    type:'creature',
+    subtype:'Creature \u2014 Human Soldier',
+    power: 2,
+    toughness: 2,
+    text:'When this creature enters, you become the monarch.\n'+
+    'When this creature enters, exile target creature an opponent controls until an opponent becomes the monarch.\n'+
+    '“I think we all know who really deserves to be locked up in here…”',
+    imagePath:'/assets/cards/palace-jailer.webp',
+    onEnter: [{ type: 'becomeMonarch' }, { type: 'exileTargetCreatureUntilMonarchChanges' }],
+  },
+  {
+    id:'papalymo-totolymo',
+    name:'Papalymo Totolymo',
+    costLabel:'{W}{B}',
+    type:'creature',
+    subtype:'Legendary Creature \u2014 Dwarf',
+    power: 1,
+    toughness: 2,
+    text:'Whenever you cast a noncreature spell, Papalymo Totolymo deals 1 damage to each opponent and you gain 1 life.\n'+
+    '{4}, {T}, Sacrifice Papalymo Totolymo: Each opponent who lost life this turn sacrifices a creature with the greatest power among creatures they control.',
+    imagePath:'/assets/cards/papalymo-totolymo.webp',
+    noncreatureCastTrigger: { damageEachOpponent: 1, effects: [{ type: 'gainLife', amount: 1 }] },
+    abilities: [
+      {
+        id: 'papalymo-totolymo-sac',
+        label: 'Sacrifice: Each Opponent Who Lost Life Sacrifices Their Greatest Creature',
+        cost: { manaLabel: '{4}', tap: true, sacrificeSelf: true },
+        effects: [{ type: 'eachOpponentWhoLostLifeSacrificesGreatestPowerCreature' }],
+        effectText: 'Each opponent who lost life this turn sacrifices a creature with the greatest power among creatures they control.',
+      },
+    ],
+  },
+  {
     id:'path-of-ancestry',
     name:'Path of Ancestry',
     costLabel:'-',
@@ -4505,6 +4667,19 @@ export const CARD_POOL: CardDefinition[] = [
         effectText: 'Return target creature card with mana value 4 or less from your graveyard to the battlefield tapped.',
       },
     ],
+  },
+  {
+    id:'pitiless-plunderer',
+    name:'Pitiless Plunderer',
+    costLabel:'{3}{B}',
+    type:'creature',
+    subtype:'Creature \u2014 Human Pirate',
+    power: 1,
+    toughness: 4,
+    text:'Whenever another creature you control dies, create a Treasure token. (It\u2019s an artifact with “{T}, Sacrifice this token: Add one mana of any color.”)\n'+
+    '“We\u2019re gonna go into the castle through a secret cave that nobody else knows about!”',
+    imagePath:'/assets/cards/pitiless-plunderer.webp',
+    onAnyDeathCreateToken: { tokenId: 'token-treasure' },
   },
   {
     id: 'plains',
@@ -4593,6 +4768,29 @@ export const CARD_POOL: CardDefinition[] = [
     // library-search flow doesn't hand off to a second pending state).
   },
   {
+    id:'professional-face-breaker',
+    name:'Professional Face-Breaker',
+    costLabel:'{2}{R}',
+    type:'creature',
+    subtype:'Creature \u2014 Human Warrior',
+    power: 2,
+    toughness: 3,
+    text:'Menace\n'+
+    'Whenever one or more creatures you control deal combat damage to a player, create a Treasure token.\n'+
+    'Sacrifice a Treasure: Exile the top card of your library. You may play that card this turn.',
+    imagePath:'/assets/cards/professional-face-breaker.webp',
+    onAnyControlledCreatureCombatDamageToPlayer: [{ type: 'createToken', tokenId: 'token-treasure' }],
+    abilities: [
+      {
+        id: 'professional-face-breaker-sac',
+        label: 'Sacrifice a Treasure',
+        cost: { sacrificeAnotherWithSubtype: 'Treasure' },
+        effects: [{ type: 'exileTopOfLibraryPlayableUntilCleanup', count: 1 }],
+        effectText: 'Exile the top card of your library. You may play that card this turn.',
+      },
+    ],
+  },
+  {
     id:'professor-hojo',
     name:'Professor Hojo',
     costLabel:'{1}{G}',
@@ -4628,6 +4826,17 @@ export const CARD_POOL: CardDefinition[] = [
     text: "Haste \n Selfie Shot — Whenever you cast a noncreature spell, if at least four mana was spent to cast it, create a Treasure token.",
     imagePath: '/assets/cards/prompto-argentum.webp',
     noncreatureCastTrigger: { createTokenIfExpensive: { minManaValue: 4, tokenId: 'token-treasure' } },
+  },
+  {
+    id:'propaganda',
+    name:'Propaganda',
+    costLabel:'{2}{U}',
+    type:'enchantment',
+    text:'Creatures can\u2019t attack you unless their controller pays {2} for each creature they control that\u2019s attacking you.\n'+
+    '“Barring a few exceptions, we have detained all those with allegiance to the Scions. The Rising Stones is also under our control.”\n'+
+    '—Crystal Brave Soldier',
+    imagePath:'/assets/cards/propaganda.webp',
+    staticAttacksYouCostGeneric: 2
   },
   {
     id:'protection-magic',
@@ -4675,6 +4884,20 @@ export const CARD_POOL: CardDefinition[] = [
         effectText: "Until end of turn, this creature\u2019s base power becomes equal to the number of Towns you control.",
       },
     ],
+  },
+  {
+    id:'puresteel-paladin',
+    name:'Puresteel Paladin',
+    costLabel:'{W}{W}',
+    type:'creature',
+    subtype:'Creature \u2014 Human Knight',
+    power: 2,
+    toughness: 2,
+    text:'Whenever an Equipment you control enters, you may draw a card.\n'+
+    'Metalcraft — Equipment you control have equip {0} as long as you control three or more artifacts.',
+    imagePath:'/assets/cards/puresteel-paladin.webp',
+    onAnyControlledSubtypeEnterTrigger: { subtypes: ['Equipment'], effects: [{ type: 'mayEffect', effects: [{ type: 'drawCards', amount: 1 }] }] },
+    reducesEquipCostToZeroIfMetalcraftActive: true
   },
   {
     id: 'qiqirn-merchant',
@@ -4799,6 +5022,17 @@ export const CARD_POOL: CardDefinition[] = [
     onDeath: [{ type: 'destroyTarget', targetFilter: 'anyPermanent' }, { type: 'reanimateTargetFromGraveyard', nonlegendaryPermanentInsteadOfCreature: true }],
   },
   {
+    id:'rampant-growth',
+    name:'Rampant Growth',
+    costLabel:'{1}{G}',
+    type:'sorcery',
+    text:'Search your library for a basic land card, put that card onto the battlefield tapped, then shuffle.\n'+
+    '“It is up to the planet to decide. What is best for the planet. What is bad for the planet. All that is bad will disappear.”\n'+
+    '—Bugenhagen',
+    imagePath:'/assets/cards/rampant-growth.webp',
+    onCast: [{ type: 'searchLibraryForBasicLand', toBattlefieldTapped: true }],
+  },
+  {
     id:'rampant-rejuvenator',
     name:'Rampant Rejuvenator',
     costLabel:'{3}{G}',
@@ -4861,6 +5095,24 @@ export const CARD_POOL: CardDefinition[] = [
     onCast: [{ type: 'reanimateTargetFromGraveyard', anyGraveyard: true, loseLifeEqualToManaValue: true }],
   },
   {
+    id:'reaper-s-scythe',
+    name:'Reaper\u2019s Scythe',
+    costLabel:'{2}{B}',
+    type:'artifact',
+    subtype:'Artifact \u2014 Equipment',
+    text:'Job select\n'+
+    'At the beginning of your end step, put a soul counter on this Equipment for each player who lost life this turn.\n'+
+    'Equipped creature gets +1/+1 for each soul counter on this Equipment and is an Assassin in addition to its other types.\n'+
+    'Death Sickle — Equip {2}',
+    imagePath:'/assets/cards/reaper-s-scythe.webp',
+    onEnter: [{ type: 'createToken', tokenId: 'token-hero', attachSelfToToken: true }],
+    attachesTo: 'creature',
+    equipCost: '{2}',
+    onOwnEndStep: [{ type: 'putCounterOnSelf', counterLabel: 'soul', counterAmount: 'playersWhoLostLifeThisTurnCount' }],
+    equipBuffPerCounter: { counterLabel: 'soul', power: 1, toughness: 1 },
+    equipGrantsSubtype: 'Assassin',
+  },
+  {
     id: 'red-mage-s-rapier',
     name: "Red Mage's Rapier",
     costLabel: '{1}{R}',
@@ -4875,6 +5127,21 @@ export const CARD_POOL: CardDefinition[] = [
     equipGrantsSubtype: 'Wizard',
     equipGrantsNoncreatureCastTrigger: { pumpSelf: { power: 2, toughness: 0 } },
     imagePath: '/assets/cards/red-mage-s-rapier.webp'
+  },
+  {
+    id:'red-xiii-proud-warrior',
+    name:'Red XIII, Proud Warrior',
+    costLabel:'{1}{R}{G}',
+    type:'creature',
+    subtype:'Legendary Creature \u2014 Beast Warrior',
+    power: 3,
+    toughness: 3,
+    text:'Vigilance, trample\n'+
+    'Other modified creatures you control have vigilance and trample. (Equipment, Auras you control, and counters are modifications.)\n'+
+    'Cosmo Memory — When Red XIII enters, return target Aura or Equipment card from your graveyard to your hand.',
+    imagePath:'/assets/cards/red-xiii-proud-warrior.webp',
+    staticAnthemForOtherModifiedCreatures: { grantKeywords: ['vigilance', 'trample'] },
+    onEnter: [{ type: 'returnTargetAuraOrEquipmentFromGraveyardToHand' }],
   },
   {
     id:'rejoin-the-fight',
@@ -4910,6 +5177,27 @@ export const CARD_POOL: CardDefinition[] = [
     // "Can't be blocked except by three or more creatures" is still
     // deferred - needs a numeric block-threshold beyond menace's fixed two,
     // which this engine doesn't support yet.
+  },
+  {
+    id:'relic-of-legends',
+    name:'Relic of Legends',
+    costLabel:'{3}',
+    type:'artifact',
+    text:'{T}: Add one mana of any color.\n'+
+    'Tap an untapped legendary creature you control: Add one mana of any color.\n'+
+    '“A smile better suits a hero.”\n'+
+    '—Haurchefant Greystone',
+    imagePath:'/assets/cards/relic-of-legends.webp',
+    producesMana: 'any',
+    abilities: [
+      {
+        id: 'relic-of-legends-tap-legendary',
+        label: 'Tap a Legendary Creature: Add One Mana of Any Color',
+        cost: { tapAnotherLegendaryCreature: true },
+        effects: [{ type: 'addOneManaOfChosenColor' }],
+        effectText: 'Add one mana of any color.',
+      },
+    ],
   },
   {
     id: 'relm-s-sketching',
@@ -7345,7 +7633,7 @@ export const CARD_POOL: CardDefinition[] = [
     name:'Tifa Martial Artist',
     costLabel:'{1}{R}{G}{W}',
     type:'creature',
-    subtype:'Legendary Creature \u2104 Human Monk',
+    subtype:'Legendary Creature \u2014 Human Monk',
     power: 4,
     toughness: 4,
     text:'Melee (Whenever this creature attacks, it gets +1/+1 until end of turn for each opponent you attacked this combat.)\n'+
@@ -7360,6 +7648,21 @@ export const CARD_POOL: CardDefinition[] = [
       minPower: 7,
       effects: [{ type: 'untapAllControlledCreatures' }, { type: 'queueExtraCombatPhaseIfFirstCombatPhaseOfTurn' }],
     },
+  },
+  {
+    id:'thancred-waters',
+    name:'Thancred Waters',
+    costLabel:'{4}{W}',
+    type:'creature',
+    subtype:'Legendary Creature \u2014 Human Warrior',
+    power: 3,
+    toughness: 5,
+    text:'Flash\n'+
+    'Royal Guard — When Thancred Waters enters, another target legendary permanent you control gains indestructible for as long as you control Thancred Waters.\n'+
+    'Whenever you cast a noncreature spell, Thancred Waters gains indestructible until end of turn.',
+    imagePath:'/assets/cards/thancred-waters.webp',
+    onEnter: [{ type: 'grantIndestructibleToTargetWhileSourceInPlay' }],
+    noncreatureCastTrigger: { effects: [{ type: 'grantTemporaryKeywordToSelf', keyword: 'indestructible' }] },
   },
   {
     id: 'the-crystal-s-chosen',
@@ -7434,6 +7737,31 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'Starfall — Whenever The Lord Master of Hell attacks, it deals X damage to each opponent, where X is the number of noncreature, nonland cards in your graveyard.',
     onAttack: [{ type: 'damageEachOpponentEqualToGraveyardNoncreatureNonlandCount' }],
     imagePath: '/assets/cards/the-lord-master-of-hell.webp'
+  },
+  {
+    id:'the-falcon-airship-restored',
+    name:'The Falcon, Airship Restored',
+    costLabel:'{2}{B}',
+    type:'artifact',
+    subtype:'Legendary Artifact \u2014 Vehicle',
+    power: 4,
+    toughness: 3,
+    text:'Flying\n'+
+    'Whenever The Falcon deals combat damage to a player, you may sacrifice it. When you do, return target creature card from your graveyard to the battlefield.\n'+
+    '{4}{B}: Return this card from your graveyard to the battlefield tapped.\n'+
+    'Crew 2',
+    imagePath:'/assets/cards/the-falcon-airship-restored.webp',
+    crew: 2,
+    onCombatDamageToPlayer: [{ type: 'mayEffect', effects: [{ type: 'sacrificeSelf' }, { type: 'reanimateTargetFromGraveyard' }] }],
+    abilities: [
+      {
+        id: 'the-falcon-airship-restored-return',
+        label: 'Return',
+        cost: { manaLabel: '{4}{B}' },
+        effectText: 'Return this card from your graveyard to the battlefield tapped.',
+        returnSelfFromGraveyard: { tapped: true },
+      },
+    ],
   },
   {
     id: 'the-final-days',
@@ -7675,6 +8003,21 @@ export const CARD_POOL: CardDefinition[] = [
     imagePath: '/assets/cards/thief-s-knife.webp'
   },
   {
+    id:'thought-vessel',
+    name:'Thought Vessel',
+    costLabel:'{2}',
+    type:'artifact',
+    text:'You have no maximum hand size.\n'+
+    '{T}: Add {C}.\n'+
+    'Initiating… Performing diagnostics… Diagnostics complete. To proceed, please agree to the terms and conditions of use.',
+    imagePath:'/assets/cards/thought-vessel.webp',
+    // "You have no maximum hand size" needs no field at all - this engine
+    // never actually enforces a hand-size discard in the first place (the
+    // end-of-turn ">7 cards" check is only a log reminder, not a forced
+    // discard), so every player already effectively has no maximum.
+    producesMana: 'C',
+  },
+  {
     id:'three-visits',
     name:'Three Visits',
     costLabel:'{1}{G}',
@@ -7796,6 +8139,27 @@ export const CARD_POOL: CardDefinition[] = [
     ],
   },
   {
+    id:'tome-of-legends',
+    name:'Tome of Legends',
+    costLabel:'{2}',
+    type:'artifact',
+    text:'This artifact enters with a page counter on it.\n'+
+    'Whenever your commander enters or attacks, put a page counter on this artifact.\n'+
+    '{1}, {T}, Remove a page counter from this artifact: Draw a card.',
+    imagePath:'/assets/cards/tome-of-legends.webp',
+    onEnter: [{ type: 'putCounterOnSelf', counterLabel: 'page', counterAmount: 1 }],
+    onCommanderEnterOrAttack: [{ type: 'putCounterOnSelf', counterLabel: 'page', counterAmount: 1 }],
+    abilities: [
+      {
+        id: 'tome-of-legends-draw',
+        label: 'Remove a Page Counter: Draw a Card',
+        cost: { manaLabel: '{1}', tap: true, removeCounterFromSelf: { label: 'page' } },
+        effects: [{ type: 'drawCards', amount: 1 }],
+        effectText: 'Draw a card.',
+      },
+    ],
+  },
+  {
     id: 'tonberry',
     name: 'Tonberry',
     costLabel: '{B}',
@@ -7827,6 +8191,19 @@ export const CARD_POOL: CardDefinition[] = [
     // tracker plus modifying the ETB of a DIFFERENT permanent than the one
     // carrying the trigger, neither of which exists.
     producesMana: 'any',
+  },
+  {
+    id:'torrential-gearhulk',
+    name:'Torrential Gearhulk',
+    costLabel:'{4}{U}{U}',
+    type:'creature',
+    subtype:'Artifact Creature \u2014 Construct',
+    power: 5,
+    toughness: 6,
+    text:'Flash\n'+
+    'When this creature enters, you may cast target instant card from your graveyard without paying its mana cost. If that spell would be put into your graveyard, exile it instead.\n',
+    imagePath:'/assets/cards/torrential-gearhulk.webp',
+    onEnter: [{ type: 'castTargetInstantOrSorceryFromGraveyardAnyMana', instantOnly: true, ownGraveyardOnly: true, free: true }],
   },
   {
     id: 'town-greeter',
@@ -7863,6 +8240,17 @@ export const CARD_POOL: CardDefinition[] = [
     attachesTo: 'creature',
     equipCost: '{2}',
     equipGrantsKeyword: 'nonbasic landwalk',
+  },
+  {
+    id:'transpose',
+    name:'Transpose',
+    costLabel:'{2}{B}',
+    type:'instant',
+    text:'Draw a card, then discard a card. You lose 1 life. If this spell was cast from your hand, create a 0/1 black Wizard creature token with “Whenever you cast a noncreature spell, this token deals 1 damage to each opponent.”\n'+
+    'Rebound (If you cast this spell from your hand, exile it as it resolves. At the beginning of your next upkeep, you may cast this card from exile without paying its mana cost.)',
+    imagePath:'/assets/cards/transpose.webp',
+    onCast: [{ type: 'loot', drawCount: 1, discardCount: 1 }, { type: 'loseLife', amount: 1 }, { type: 'createToken', tokenId: 'token-wizard' }],
+    rebound: { effects: [{ type: 'loot', drawCount: 1, discardCount: 1 }, { type: 'loseLife', amount: 1 }] },
   },
   {
     id: 'traveling-chocobo',

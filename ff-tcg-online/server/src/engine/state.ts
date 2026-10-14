@@ -109,6 +109,10 @@ export function createInitialState(player1Name: string, player2Name: string, pla
     pendingKefkaChoice: null,
     pendingRejoinTheFightChoice: null,
     pendingFandanielChoice: null,
+    pendingReboundChoice: null,
+    pendingLookAtTopNPutMToHandRestToBottom: null,
+    monarchPlayerId: null,
+    exileUntilMonarchChangesFrom: [],
     pendingTragicArroganceChoice: null,
     pendingAttachFromGraveyardChoice: null,
     pendingMaySacrificeForDrawAndDrainChoice: null,
@@ -177,6 +181,18 @@ export function detachEverythingFrom(state: GameState, anchorInstanceId: string)
     for (const child of attached) {
       const childDef = getCardDefinition(child.defId);
       if (childDef.type === 'enchantment') {
+        // "When [this] is put into a graveyard from the battlefield,
+        // return it to its owner's hand." (Eye of Nidhogg) - falling off
+        // IS being put into a graveyard from the battlefield, so this
+        // redirects the destination to hand instead.
+        if (childDef.returnsSelfToHandOnDeath) {
+          next = updatePlayer(next, p2.id, (p) => ({
+            ...p,
+            zones: { ...p.zones, battlefield: p.zones.battlefield.filter((c) => c.instanceId !== child.instanceId), hand: [...p.zones.hand, { ...child, attachedToInstanceId: undefined, tapped: false }] },
+          }));
+          next = { ...next, log: [...next.log, `${childDef.name} falls off and returns to its owner's hand.`] };
+          continue;
+        }
         next = updatePlayer(next, p2.id, (p) => ({
           ...p,
           zones: { ...p.zones, battlefield: p.zones.battlefield.filter((c) => c.instanceId !== child.instanceId), graveyard: [...p.zones.graveyard, { ...child, attachedToInstanceId: undefined, tapped: false }] },

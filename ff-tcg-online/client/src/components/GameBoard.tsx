@@ -3005,6 +3005,14 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                                   ? `Choose a creature for ${pendingTargetSourceName} to tap (or exile with Metalcraft).`
                                   : effect.type === 'grantCantBlockToUpToThreeTargets'
                                   ? `Choose up to three creatures for ${pendingTargetSourceName} to stop from blocking this turn - or Skip.`
+                                  : effect.type === 'grantIndestructibleToTargetWhileSourceInPlay'
+                                  ? `Choose another legendary permanent you control to gain indestructible for as long as you control ${pendingTargetSourceName}.`
+                                  : effect.type === 'exileTargetCreatureUntilMonarchChanges'
+                                  ? `Choose a creature an opponent controls for ${pendingTargetSourceName} to exile until an opponent becomes the monarch.`
+                                  : effect.type === 'exileTargetInstantOrSorceryFromOpponentGraveyardThenMayCastForFixedCost'
+                                  ? `Choose up to one instant or sorcery card in an opponent's graveyard for ${pendingTargetSourceName} to exile and copy - or Skip.`
+                                  : effect.type === 'returnTargetCreatureFromGraveyardWithManaValueEqualTo'
+                                  ? `Choose a creature card in your graveyard with mana value ${effect.manaValue} to return to your hand - or Skip.`
                                   : effect.targetFilter === 'artifactOrEnchantment'
                                   ? `Choose an artifact or enchantment for ${pendingTargetSourceName}'s ability (either player's).`
                                   : effect.targetFilter === 'enchantment'

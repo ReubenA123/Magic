@@ -601,7 +601,13 @@ export function resolveCardEffects(
   // the counter count into the pendingTarget it arms (see
   // engine/actions.ts: castCard, the only caller that ever has a real X to
   // pass here). Every other effect/caller ignores it.
-  chosenX?: number
+  chosenX?: number,
+  // "Each creature that convoked this spell connives." (Lethal Scheme) -
+  // only ever read by conniveConvokingCreatures below, to know WHICH
+  // creatures convoked (see engine/actions.ts: castCard, the only caller
+  // that ever has real Convoke creatures to report). Every other
+  // effect/caller ignores it.
+  convokedInstanceIds?: string[]
 ): { state: GameState; logLines: string[] } {
   let next = state;
   const logLines: string[] = [];
@@ -1146,6 +1152,17 @@ export function resolveCardEffects(
       } else {
         next = { ...next, pendingReturnFromGraveyard: { sourceInstanceId, controllerId: playerId } };
       }
+    } else if (effect.type === 'returnTargetAuraOrEquipmentFromGraveyardToHand') {
+      const player = getPlayer(next, playerId);
+      const eligible = player.zones.graveyard.filter((c) => {
+        const d = getCardDefinition(c.defId);
+        return d.subtype?.toLowerCase().includes('aura') || d.subtype?.toLowerCase().includes('equipment');
+      });
+      if (eligible.length === 0) {
+        logLines.push(`${player.name} has no Aura or Equipment card in their graveyard to return.`);
+      } else {
+        next = { ...next, pendingReturnFromGraveyard: { sourceInstanceId, controllerId: playerId, filter: 'auraOrEquipment' } };
+      }
     } else if (effect.type === 'loot') {
       const player = getPlayer(next, playerId);
       const drawn = player.zones.library.slice(0, effect.drawCount);
@@ -1411,7 +1428,19 @@ export function resolveCardEffects(
         logLines.push(`${getCardDefinition(findCardAnywhere(next, sourceInstanceId)!.card.defId).name} deals ${equippedCount} damage to ${opponent.name} (equipped creatures).`);
       }
     } else if (effect.type === 'searchLibraryForLand') {
-      const result = beginLibrarySearch(next, playerId, sourceInstanceId, { kind: 'landByName', name: effect.landName }, true, undefined, undefined, undefined, effect.toBattlefieldUntapped);
+      const remainingPicks = effect.count && effect.count > 1 ? effect.count - 1 : undefined;
+      const result = beginLibrarySearch(
+        next,
+        playerId,
+        sourceInstanceId,
+        { kind: 'landByName', name: effect.landName },
+        true,
+        undefined,
+        remainingPicks,
+        undefined,
+        effect.toBattlefieldUntapped,
+        remainingPicks ? true : undefined
+      );
       next = result.state;
       logLines.push(...result.logLines);
     } else if (effect.type === 'searchLibraryForBasicLand') {
@@ -1438,6 +1467,21 @@ export function resolveCardEffects(
       }
     } else if (effect.type === 'grantKeywordsToTargetPermanent') {
       const hasLegalTarget = [...next.players[0].zones.battlefield, ...next.players[1].zones.battlefield].length > 0;
+      const sourceName = getCardDefinition(findCardAnywhere(next, sourceInstanceId)!.card.defId).name;
+      if (!hasLegalTarget) {
+        logLines.push(`${sourceName}'s ability has no legal target.`);
+      } else {
+        next = { ...next, pendingTarget: { sourceInstanceId, controllerId: playerId, effect } };
+      }
+    } else if (effect.type === 'grantTemporaryKeywordToSelf') {
+      next = grantTemporaryKeyword(next, sourceInstanceId, effect.keyword);
+      const sourceDef = getCardDefinition(findCardAnywhere(next, sourceInstanceId)!.card.defId);
+      logLines.push(`${sourceDef.name} gains ${effect.keyword} until end of turn.`);
+    } else if (effect.type === 'grantIndestructibleToTargetWhileSourceInPlay') {
+      const player = getPlayer(next, playerId);
+      const hasLegalTarget = player.zones.battlefield.some(
+        (c) => c.instanceId !== sourceInstanceId && getCardDefinition(c.defId).subtype?.toLowerCase().includes('legendary')
+      );
       const sourceName = getCardDefinition(findCardAnywhere(next, sourceInstanceId)!.card.defId).name;
       if (!hasLegalTarget) {
         logLines.push(`${sourceName}'s ability has no legal target.`);
@@ -1759,9 +1803,26 @@ export function resolveCardEffects(
       }));
       logLines.push(`${sourceDef.name}'s base power becomes ${count} until end of turn.`);
     } else if (effect.type === 'castTargetInstantOrSorceryFromGraveyardAnyMana') {
-      const hasLegalTarget = next.players.some((p) => p.zones.graveyard.some((c) => ['instant', 'sorcery'].includes(getCardDefinition(c.defId).type)));
+      const eligibleTypes = effect.instantOnly ? ['instant'] : ['instant', 'sorcery'];
+      const graveyardsToSearch = effect.ownGraveyardOnly ? [getPlayer(next, playerId)] : next.players;
+      const hasLegalTarget = graveyardsToSearch.some((p) => p.zones.graveyard.some((c) => eligibleTypes.includes(getCardDefinition(c.defId).type)));
       if (hasLegalTarget) {
-        next = { ...next, pendingCastFromGraveyardAnyMana: { sourceInstanceId, controllerId: playerId } };
+        next = {
+          ...next,
+          pendingCastFromGraveyardAnyMana: {
+            sourceInstanceId,
+            controllerId: playerId,
+            ownGraveyardOnly: effect.ownGraveyardOnly,
+            instantOnly: effect.instantOnly,
+            free: effect.free,
+          },
+        };
+      }
+    } else if (effect.type === 'exileTargetInstantOrSorceryFromOpponentGraveyardThenMayCastForFixedCost') {
+      const opponent = getOpponent(next, playerId);
+      const hasLegalTarget = opponent.zones.graveyard.some((c) => ['instant', 'sorcery'].includes(getCardDefinition(c.defId).type));
+      if (hasLegalTarget) {
+        next = { ...next, pendingTarget: { sourceInstanceId, controllerId: playerId, effect } };
       }
     } else if (effect.type === 'millThenPutLandIntoHandGainLifeIfTown') {
       const player = getPlayer(next, playerId);
@@ -1931,7 +1992,11 @@ export function resolveCardEffects(
       }
     } else if (effect.type === 'attachSelfToTarget') {
       const matchesType = (d: CardDefinition) => (effect.targetTypeFilter === 'artifactOrCreature' ? d.type === 'artifact' || d.type === 'creature' : d.type === 'creature');
-      const candidates = effect.allowAnyController ? [...next.players[0].zones.battlefield, ...next.players[1].zones.battlefield] : getPlayer(next, playerId).zones.battlefield;
+      const candidates = effect.opponentControlledOnly
+        ? getOpponent(next, playerId).zones.battlefield
+        : effect.allowAnyController
+          ? [...next.players[0].zones.battlefield, ...next.players[1].zones.battlefield]
+          : getPlayer(next, playerId).zones.battlefield;
       const hasLegalTarget = candidates.some((c) => matchesType(getCardDefinition(c.defId)));
       const sourceName = getCardDefinition(findCardAnywhere(next, sourceInstanceId)!.card.defId).name;
       if (!hasLegalTarget) {
@@ -2028,6 +2093,52 @@ export function resolveCardEffects(
       logLines.push(...result.logLines);
       if (next.pendingLibrarySearch) {
         next = { ...next, pendingLibrarySearch: { ...next.pendingLibrarySearch, chainedSearchToHand: true } };
+      }
+    } else if (effect.type === 'lookAtTopNPutMToHandRestToBottom') {
+      const player = getPlayer(next, playerId);
+      const cards = player.zones.library.slice(0, effect.count);
+      next = updatePlayer(next, playerId, (p) => ({ ...p, zones: { ...p.zones, library: p.zones.library.slice(cards.length) } }));
+      if (cards.length === 0) {
+        logLines.push(`${player.name}'s library is empty.`);
+      } else {
+        next = { ...next, pendingLookAtTopNPutMToHandRestToBottom: { sourceInstanceId, controllerId: playerId, cards, keepCount: Math.min(effect.keepCount, cards.length), chosenInstanceIds: [] } };
+      }
+    } else if (effect.type === 'conniveConvokingCreatures') {
+      if (convokedInstanceIds && convokedInstanceIds.length > 0) {
+        const [first, ...rest] = convokedInstanceIds;
+        const player = getPlayer(next, playerId);
+        const drawn = player.zones.library.slice(0, 1);
+        next = updatePlayer(next, playerId, (p) => ({ ...p, zones: { ...p.zones, library: p.zones.library.slice(drawn.length), hand: [...p.zones.hand, ...drawn] } }));
+        next = { ...next, pendingDiscard: { sourceInstanceId, controllerId: playerId, count: 1, thenCounterOnInstanceIdIfNonland: first, thenContinueConniveQueue: rest } };
+        const connivingDef = findCardAnywhere(next, first);
+        logLines.push(`${connivingDef ? getCardDefinition(connivingDef.card.defId).name : 'A creature'} connives.`);
+      }
+    } else if (effect.type === 'becomeMonarch') {
+      next = { ...next, monarchPlayerId: playerId };
+      const released = releaseExiledUntilMonarchChanges(next);
+      next = released.state;
+      logLines.push(`${getPlayer(next, playerId).name} becomes the monarch.`, ...released.logLines);
+    } else if (effect.type === 'exileTargetCreatureUntilMonarchChanges') {
+      const opponent = getOpponent(next, playerId);
+      const hasLegalTarget = opponent.zones.battlefield.some((c) => getCardDefinition(c.defId).type === 'creature');
+      const sourceName = getCardDefinition(findCardAnywhere(next, sourceInstanceId)!.card.defId).name;
+      if (!hasLegalTarget) {
+        logLines.push(`${sourceName}'s ability has no legal target.`);
+      } else {
+        next = { ...next, pendingTarget: { sourceInstanceId, controllerId: playerId, effect } };
+      }
+    } else if (effect.type === 'eachOpponentWhoLostLifeSacrificesGreatestPowerCreature') {
+      const opponent = getOpponent(next, playerId);
+      if (opponent.lifeLostThisTurn > 0) {
+        const creatures = opponent.zones.battlefield.filter((c) => getCardDefinition(c.defId).type === 'creature');
+        if (creatures.length > 0) {
+          const greatest = creatures.reduce((best, c) =>
+            effectivePower(getCardDefinition(c.defId), c, next, opponent.id) > effectivePower(getCardDefinition(best.defId), best, next, opponent.id) ? c : best
+          );
+          const sacResult = moveCreaturesToGraveyardAndTrigger(next, [greatest.instanceId], 'is sacrificed');
+          next = sacResult.state;
+          logLines.push(...sacResult.logLines);
+        }
       }
     } else if (effect.type === 'eachOpponentMaySacrificeNontokenCreatureElseLoseLifePerInstantSorcery') {
       const opponent = getOpponent(next, playerId);
@@ -2293,7 +2404,9 @@ export function resolveCardEffects(
             ? getPlayer(next, playerId).zones.battlefield.filter((c) => getCardDefinition(c.defId).type === 'creature').length
             : effect.counterAmount === 'twiceGraveyardCreatureCount'
               ? 2 * getPlayer(next, playerId).zones.graveyard.filter((c) => getCardDefinition(c.defId).type === 'creature').length
-              : effect.counterAmount;
+              : effect.counterAmount === 'playersWhoLostLifeThisTurnCount'
+                ? next.players.filter((p) => p.lifeLostThisTurn > 0).length
+                : effect.counterAmount;
       const counterAmount = hardenedScalesAdjustedAmount(next, playerId, counterLabel, rawAmount);
       if (counterAmount > 0) {
         next = updatePlayer(next, playerId, (p) => ({
@@ -3385,6 +3498,32 @@ export function grantTemporaryKeyword(state: GameState, instanceId: string, keyw
   return state;
 }
 
+/** Releases every GameState.exileUntilMonarchChangesFrom entry whose
+ * exiler is no longer the (current) monarch - called right after
+ * `state.monarchPlayerId` is reassigned, whether via BecomeMonarchEffect
+ * or a creature stealing the monarchy via combat damage (see
+ * engine/actions.ts: applyCombatDamageToPlayerTriggers). Returns each
+ * released card to its OWNER's battlefield (summoning sick, same as any
+ * other fresh "exile until X" return elsewhere in this engine). */
+export function releaseExiledUntilMonarchChanges(state: GameState): { state: GameState; logLines: string[] } {
+  let next = state;
+  const logLines: string[] = [];
+  const toRelease = next.exileUntilMonarchChangesFrom.filter((e) => e.exilingControllerId !== next.monarchPlayerId);
+  const toKeep = next.exileUntilMonarchChangesFrom.filter((e) => e.exilingControllerId === next.monarchPlayerId);
+  for (const entry of toRelease) {
+    const owner = getPlayer(next, entry.ownerPlayerId);
+    const exiledCard = owner.zones.exile.find((c) => c.instanceId === entry.exiledInstanceId);
+    if (!exiledCard) continue;
+    next = updatePlayer(next, entry.ownerPlayerId, (p) => ({
+      ...p,
+      zones: { ...p.zones, exile: p.zones.exile.filter((c) => c.instanceId !== entry.exiledInstanceId), battlefield: [...p.zones.battlefield, { ...exiledCard, summoningSick: true }] },
+    }));
+    logLines.push(`${getCardDefinition(exiledCard.defId).name} returns to the battlefield - the monarchy changed.`);
+  }
+  next = { ...next, exileUntilMonarchChangesFrom: toKeep };
+  return { state: next, logLines };
+}
+
 /**
  * Landfall - checks every permanent playerId controls for a landfall
  * trigger and adds its counter. Call this once, right after a land enters
@@ -3478,6 +3617,18 @@ export function triggerCreatureEnterWatchers(state: GameState, playerId: string,
       const resolved = resolveCardEffects(next, playerId, def.onAnyOtherControlledCreatureEnterTrigger, card.instanceId);
       next = resolved.state;
       logLines.push(...resolved.logLines);
+    }
+    // "Whenever your commander enters or attacks, [effects]." (Tome of
+    // Legends) - the "enters" half; see finalizeDeclareAttackers for the
+    // "attacks" half.
+    if (def.onCommanderEnterOrAttack && def.onCommanderEnterOrAttack.length > 0) {
+      const entered = findCardAnywhere(next, enteredInstanceId);
+      const owner = getPlayer(next, playerId);
+      if (entered && owner.commanderDefId && frontFaceDefId(entered.card.defId) === owner.commanderDefId) {
+        const resolved = resolveCardEffects(next, playerId, def.onCommanderEnterOrAttack, card.instanceId);
+        next = resolved.state;
+        logLines.push(...resolved.logLines);
+      }
     }
     // "Each other nontoken creature you control enters with an additional
     // [counterLabel] counter on it." (Tromell, Seymour's Butler) - applied
@@ -3645,6 +3796,30 @@ export function triggerLandfall(state: GameState, playerId: string): { state: Ga
   return { state: next, logLines };
 }
 
+/** "Whenever a land an opponent controls enters, if that player controls
+ * more lands than you, [effects]." (Archaeomancer's Map) - `enteringPlayerId`
+ * is whoever just played the land; checked against the OTHER player's
+ * battlefield for CardDefinition.onOpponentLandEnterIfTheyHaveMoreLands,
+ * gated on enteringPlayerId's land count being strictly greater than the
+ * watcher's controller's own land count (both counted live, right now). */
+export function triggerOpponentLandEnterWatchers(state: GameState, enteringPlayerId: string): { state: GameState; logLines: string[] } {
+  let next = state;
+  const logLines: string[] = [];
+  const watcherPlayer = getOpponent(next, enteringPlayerId);
+  const countLands = (p: GameState['players'][number]) => p.zones.battlefield.filter((c) => getCardDefinition(c.defId).type === 'land').length;
+  if (countLands(getPlayer(next, enteringPlayerId)) <= countLands(watcherPlayer)) return { state: next, logLines };
+
+  for (const card of watcherPlayer.zones.battlefield) {
+    const def = getCardDefinition(card.defId);
+    if (!def.onOpponentLandEnterIfTheyHaveMoreLands || def.onOpponentLandEnterIfTheyHaveMoreLands.effects.length === 0) continue;
+    const resolved = resolveCardEffects(next, watcherPlayer.id, def.onOpponentLandEnterIfTheyHaveMoreLands.effects, card.instanceId);
+    next = resolved.state;
+    logLines.push(`${def.name} triggers.`, ...resolved.logLines);
+  }
+
+  return { state: next, logLines };
+}
+
 /**
  * Checks every permanent playerId controls for a noncreature-cast trigger
  * and applies it. Call this once, right after playerId casts a spell that
@@ -3770,6 +3945,17 @@ export function triggerNoncreatureCastAbilities(
       }));
       next = { ...next, pendingThrowWideTheGatesChoice: { sourceInstanceId: card.instanceId, controllerId: playerId, manaValue: manaSpent } };
       logLines.push(`${def.name} triggers: ${getPlayer(next, playerId).name} may pay ${manaSpent} life to create a Hero token.`);
+    }
+    if (trigger.mayReturnCreatureFromGraveyardWithManaValueEqualToSpentOncePerTurn && !card.traceAetherTriggeredThisTurn) {
+      const hasLegalTarget = getPlayer(next, playerId).zones.graveyard.some((c) => getCardDefinition(c.defId).type === 'creature' && manaValue(parseCostLabel(getCardDefinition(c.defId).costLabel)) === manaSpent);
+      if (hasLegalTarget) {
+        next = updatePlayer(next, playerId, (p) => ({
+          ...p,
+          zones: { ...p.zones, battlefield: p.zones.battlefield.map((c) => (c.instanceId === card.instanceId ? { ...c, traceAetherTriggeredThisTurn: true } : c)) },
+        }));
+        next = { ...next, pendingTarget: { sourceInstanceId: card.instanceId, controllerId: playerId, effect: { type: 'returnTargetCreatureFromGraveyardWithManaValueEqualTo', manaValue: manaSpent } } };
+        logLines.push(`${def.name} triggers: ${getPlayer(next, playerId).name} may return a creature card with mana value ${manaSpent} from their graveyard to their hand.`);
+      }
     }
     if (trigger.effects && trigger.effects.length > 0) {
       const resolved = resolveCardEffects(next, playerId, trigger.effects, card.instanceId);
