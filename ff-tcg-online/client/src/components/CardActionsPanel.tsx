@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { CardAbility, CardDefinition, CardInstance, ManaColor, ManaPool, ZoneName } from '../types';
-import { parseCostLabel, canPay } from '../engine/mana';
+import { parseCostLabel, canPay, manaValue } from '../engine/mana';
 import { EquipmentContribution } from '../engine/combat';
 import { getCardDefinition } from '../data/cards';
 
@@ -69,6 +69,11 @@ interface CardActionsPanelProps {
   instance: CardInstance;
   currentZone: ZoneName;
   ownerManaPool: ManaPool;
+  /** The acting player's current life - only ever consulted for
+   * libraryTopPlayAllowed.payLifeInsteadOfManaCost's affordability check
+   * (Kefka's Tower), same "acting player, not necessarily the card's
+   * owner" caveat exilePlayGrant's mana pool already has. */
+  ownerLife: number;
   ownerCommanderDefId?: string;
   mutualActive: boolean;
   isMyTurn: boolean;
@@ -114,6 +119,16 @@ interface CardActionsPanelProps {
    * to compute affordability the same way engine/actions.ts: castFromExile
    * actually pays it (as pure generic mana value instead of specific colors). */
   exilePlayGrant?: { anyColorMana?: boolean } | null;
+  /** Set (non-null) when this card is genuinely sitting on top of its
+   * OWNER's library AND that owner currently controls a permanent with
+   * CardDefinition.grantsPlayFromTopOfLibrary (Kefka's Tower) - only ever
+   * meaningful while currentZone is 'library'. Computed by GameBoard.tsx
+   * (openCardLibraryTopPlayAllowed), since whether the grant is active is
+   * live board state, not a property of the card itself.
+   * payLifeInsteadOfManaCost mirrors the granting permanent's own field,
+   * used to compute affordability the same way engine/actions.ts:
+   * castFromLibraryTop actually pays it. */
+  libraryTopPlayAllowed?: { payLifeInsteadOfManaCost?: boolean } | null;
   attachedToName: string | null;
   /** RevealTopThenLoseLifeByManaValueEffect's (Dark Confidant) running
    * history - every card this permanent has revealed while continuously on
@@ -174,6 +189,7 @@ interface CardActionsPanelProps {
   onCycle: () => void;
   onFlashback: () => void;
   onPlayFromExile: () => void;
+  onPlayFromLibraryTop: () => void;
   onClose: () => void;
 }
 
@@ -193,6 +209,7 @@ export default function CardActionsPanel({
   instance,
   currentZone,
   ownerManaPool,
+  ownerLife,
   ownerCommanderDefId,
   mutualActive,
   isMyTurn,
@@ -206,6 +223,7 @@ export default function CardActionsPanel({
   ownerBattlefieldDefIds,
   alreadyPlayedLand,
   exilePlayGrant,
+  libraryTopPlayAllowed,
   attachedToName,
   revealedCards,
   equipmentContributions,
@@ -228,6 +246,7 @@ export default function CardActionsPanel({
   onCycle,
   onFlashback,
   onPlayFromExile,
+  onPlayFromLibraryTop,
   onClose,
 }: CardActionsPanelProps) {
   const [showManaChoice, setShowManaChoice] = useState(false);
@@ -265,6 +284,16 @@ export default function CardActionsPanel({
     ? { generic: printedCost.generic + Object.values(printedCost.colors).reduce((a: number, b) => a + (b ?? 0), 0), colors: {}, hasX: printedCost.hasX }
     : printedCost;
   const canPlayFromExile = canPlayFromExileHere && (isLand ? isMyTurn && !alreadyPlayedLand : mutualActive || canPay(ownerManaPool, exilePlayCost, 0));
+  const canPlayFromLibraryTopHere = currentZone === 'library' && !!libraryTopPlayAllowed;
+  // "...pay life equal to its mana value rather than pay its mana cost."
+  // (Kefka's Tower) - a totally different affordability check from every
+  // other play path here (life, not mana), same engine/actions.ts:
+  // castFromLibraryTop payment this mirrors.
+  const canPlayFromLibraryTop =
+    canPlayFromLibraryTopHere &&
+    (isLand
+      ? isMyTurn && !alreadyPlayedLand
+      : mutualActive || (libraryTopPlayAllowed!.payLifeInsteadOfManaCost ? ownerLife > manaValue(printedCost) : canPay(ownerManaPool, printedCost, 0)));
   const isActualCommander = ownerCommanderDefId === definition.id;
   const isOnBattlefield = currentZone === 'battlefield';
   const needsManaChoice = !instance.tapped && !!manaOptions && manaOptions.length > 0;
@@ -639,6 +668,21 @@ export default function CardActionsPanel({
             title={canPlayFromExile ? '' : isLand ? 'Already played a land, or not your turn' : 'Not enough mana'}
           >
             {isLand ? `Play ${definition.name} from exile` : `Play from exile (${definition.costLabel})`}
+          </button>
+        )}
+
+        {!readOnly && canPlayFromLibraryTopHere && (
+          <button
+            className="card-action-button card-action-button-play"
+            disabled={!canPlayFromLibraryTop}
+            onClick={onPlayFromLibraryTop}
+            title={canPlayFromLibraryTop ? '' : isLand ? 'Already played a land, or not your turn' : 'Not enough life'}
+          >
+            {isLand
+              ? `Play ${definition.name} from your library`
+              : libraryTopPlayAllowed!.payLifeInsteadOfManaCost
+                ? `Cast from library (pay ${manaValue(printedCost)} life)`
+                : `Cast from library (${definition.costLabel})`}
           </button>
         )}
       </div>

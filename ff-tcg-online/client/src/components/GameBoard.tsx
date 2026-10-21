@@ -578,7 +578,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     instanceId: string;
     abilityId: string;
     ownerId: string;
-    filter: 'creature' | 'artifact' | 'artifactOrCreature';
+    filter: 'creature' | 'artifact' | 'artifactOrCreature' | 'nonlandPermanent';
     count: number;
     selected: string[];
   } | null>(null);
@@ -807,6 +807,22 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
   // Adjustment does. See GameState.exilePlayGrants.
   const openCardExilePlayGrant =
     openCard?.zone === 'exile' ? (state.exilePlayGrants.find((g) => g.instanceId === openCard.card.instanceId && g.playerId === yourPlayerId) ?? null) : null;
+  // "You may play lands and cast spells from the top of your library."
+  // (Kefka's Tower) - a LIVE board-state permission (unlike exilePlayGrants'
+  // per-card queue), so this just checks whether the open card genuinely IS
+  // the top of ITS OWN owner's library and that owner currently controls a
+  // granting permanent. Always your own library (no cross-player grant
+  // mechanic here), so this never needs to punch through openCardIsReadOnly
+  // below the way openCardExilePlayGrant does - the `=== yourPlayerId` check
+  // already implies it.
+  const openCardLibraryTopGranter =
+    openCard &&
+    openCard.zone === 'library' &&
+    openCard.player.id === yourPlayerId &&
+    openCard.player.zones.library[0]?.instanceId === openCard.card.instanceId
+      ? openCard.player.zones.battlefield.find((c) => !!getCardDefinition(c.defId).grantsPlayFromTopOfLibrary)
+      : undefined;
+  const openCardLibraryTopPlayAllowed = openCardLibraryTopGranter ? getCardDefinition(openCardLibraryTopGranter.defId).grantsPlayFromTopOfLibrary! : null;
   const openCardIsReadOnly = !!openCard && openCard.player.id !== yourPlayerId && !mutualActive && !openCardExilePlayGrant;
 
   // Equipment/Aura attached to a creature on the battlefield - lets the open
@@ -1113,7 +1129,9 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     if (card.instanceId === pendingSacrificeCost.instanceId) return false;
     if (pendingSacrificeCost.selected.includes(card.instanceId)) return false;
     const def = getCardDefinition(card.defId);
-    return pendingSacrificeCost.filter === 'artifactOrCreature' ? def.type === 'artifact' || def.type === 'creature' : def.type === pendingSacrificeCost.filter;
+    if (pendingSacrificeCost.filter === 'artifactOrCreature') return def.type === 'artifact' || def.type === 'creature';
+    if (pendingSacrificeCost.filter === 'nonlandPermanent') return def.type !== 'land';
+    return def.type === pendingSacrificeCost.filter;
   }
 
   /** Click handler for isLegalSacrificeCostChoice - adds `instanceId` to the
@@ -2235,6 +2253,14 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
     // matching red/purple outline on the Dark Confidant permanent itself.
     const pendingReveal = state.pendingRevealPickup?.controllerId === player.id ? state.pendingRevealPickup : null;
     const canActOnLibrary = canDrawHere;
+    // "You may look at the top card of your library any time. You may play
+    // lands and cast spells from the top of your library." (Kefka's Tower) -
+    // shows the real top card face-up instead of the usual face-down
+    // placeholder, same "public once revealed" shape as pendingReveal just
+    // above, clickable to open the card panel (which exposes the actual
+    // Play/Cast action - see CardActionsPanel's libraryTopPlayAllowed).
+    const libraryTopVisible =
+      !pendingReveal && player.zones.battlefield.some((c) => !!getCardDefinition(c.defId).grantsPlayFromTopOfLibrary) ? player.zones.library[0] : null;
 
     // Library/graveyard/exile share one "pile" spot now instead of two
     // separate corners (see activeCornerZone) - whichever is active renders
@@ -2252,14 +2278,36 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
         <div
           className={`library-stack ${isDrawStep ? 'library-stack-draw-highlight' : ''} ${canActOnLibrary ? 'library-stack-clickable' : ''} ${pendingReveal ? 'library-stack-reveal-pending' : ''}`}
           onClick={() => {
+            if (pendingReveal) {
+              if (canActOnLibrary) onAction({ type: 'RESOLVE_REVEAL_PICKUP' }, player.id);
+              return;
+            }
+            // Outside the draw step, a library-top-play grant takes priority
+            // over drawing - the normal "click to draw" affordance still
+            // works during the actual draw step.
+            if (libraryTopVisible && !isDrawStep) {
+              setOpenPanelId(libraryTopVisible.instanceId);
+              return;
+            }
             if (!canActOnLibrary) return;
-            if (pendingReveal) onAction({ type: 'RESOLVE_REVEAL_PICKUP' }, player.id);
-            else onAction({ type: 'DRAW_CARD' }, player.id);
+            onAction({ type: 'DRAW_CARD' }, player.id);
           }}
-          title={pendingReveal ? (canActOnLibrary ? 'Click to pick up the revealed card' : 'Revealed - waiting to be picked up') : canActOnLibrary ? 'Click to draw' : ''}
+          title={
+            pendingReveal
+              ? canActOnLibrary
+                ? 'Click to pick up the revealed card'
+                : 'Revealed - waiting to be picked up'
+              : libraryTopVisible && !isDrawStep
+                ? 'Click to view/play from the top of your library'
+                : canActOnLibrary
+                  ? 'Click to draw'
+                  : ''
+          }
         >
           {pendingReveal ? (
             <Card definition={getCardDefinition(pendingReveal.revealedCard.defId)} instance={pendingReveal.revealedCard} />
+          ) : libraryTopVisible ? (
+            <Card definition={getCardDefinition(libraryTopVisible.defId)} instance={libraryTopVisible} />
           ) : (
             <Card definition={{ id: '', name: '', type: 'creature', costLabel: '', text: '', imagePath: '' }} faceDown />
           )}
@@ -2849,6 +2897,8 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
               ? `Choose a target for ${pendingTargetSourceName}'s ability - click an opponent's ${
                   effect.targetType === 'artifactOrCreature' ? 'artifact or creature' : effect.targetType
                 }.`
+              : effect.type === 'tapTargetThenCounterSelfByPowerDifferenceIfGreater'
+              ? `Choose a creature an opponent controls for ${pendingTargetSourceName} to tap.`
               : effect.type === 'tapStunAndGainLifeForNonbasicLands'
                 ? `Choose up to one opponent's nonland permanent for ${pendingTargetSourceName}'s ability to tap and stun - or Skip.`
               : effect.type === 'chooseCreatureDebuffOthersAndWatchLeave'
@@ -3009,10 +3059,20 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                                   ? `Choose another legendary permanent you control to gain indestructible for as long as you control ${pendingTargetSourceName}.`
                                   : effect.type === 'exileTargetCreatureUntilMonarchChanges'
                                   ? `Choose a creature an opponent controls for ${pendingTargetSourceName} to exile until an opponent becomes the monarch.`
+                                  : effect.type === 'exileUpToOneOtherTargetCreatureThenControllerGainsLifeEqualToItsPower'
+                                  ? `Choose up to one other creature for ${pendingTargetSourceName} to exile - its controller gains life equal to its power. Or Skip.`
+                                  : effect.type === 'pumpTargetOwnCreatureByControlledSubtypeCount'
+                                  ? `Choose a creature you control for ${pendingTargetSourceName} to get +X/+0 until end of turn, where X is the number of ${effect.subtype}s you control.`
+                                  : effect.type === 'grantKeywordToAnotherTargetAttackingCreature'
+                                  ? `Choose another attacking creature to gain ${effect.keyword} until end of turn.`
                                   : effect.type === 'exileTargetInstantOrSorceryFromOpponentGraveyardThenMayCastForFixedCost'
                                   ? `Choose up to one instant or sorcery card in an opponent's graveyard for ${pendingTargetSourceName} to exile and copy - or Skip.`
                                   : effect.type === 'returnTargetCreatureFromGraveyardWithManaValueEqualTo'
                                   ? `Choose a creature card in your graveyard with mana value ${effect.manaValue} to return to your hand - or Skip.`
+                                  : effect.type === 'attachTargetControlledEquipmentToTargetRebel'
+                                  ? pendingTargetForYou.firstInstanceId
+                                    ? `Choose a Rebel you control for ${pendingTargetSourceName} to attach that Equipment to - or Skip.`
+                                    : `Choose up to one Equipment you control for ${pendingTargetSourceName} to attach to a Rebel you control - or Skip.`
                                   : effect.targetFilter === 'artifactOrEnchantment'
                                   ? `Choose an artifact or enchantment for ${pendingTargetSourceName}'s ability (either player's).`
                                   : effect.targetFilter === 'enchantment'
@@ -3037,6 +3097,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
               <span>{text}</span>
               {((effect.type === 'selfFightTarget' && effect.optional) ||
                 (effect.type === 'destroyTarget' && effect.optional) ||
+                (effect.type === 'putCounterOnTarget' && effect.optional) ||
                 (effect.type === 'attachSelfToTarget' && effect.optional) ||
                 effect.type === 'putCounterOnUpToOneOwnCreature' ||
                 effect.type === 'bounceUpToOneOtherNonlandPermanent' ||
@@ -3044,10 +3105,15 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                 effect.type === 'tapStunAndGainLifeForNonbasicLands' ||
                 effect.type === 'attachAllControlledEquipmentToTargetCreature' ||
                 effect.type === 'mayAttachTargetControlledEquipmentToSelf' ||
+                effect.type === 'attachTargetControlledEquipmentToTargetRebel' ||
                 effect.type === 'destroyAnyNumberOfTappedCreaturesWithDifferentControllers' ||
                 effect.type === 'phaseOutAnyNumberOfTargetControlledNonlandPermanents' ||
                 effect.type === 'mayBecomeCopyOfAnotherControlledCreatureThenBuffBoth' ||
                 effect.type === 'jenovaCellsAttackTrigger' ||
+                effect.type === 'exileTargetInstantOrSorceryFromOpponentGraveyardThenMayCastForFixedCost' ||
+                effect.type === 'returnTargetCreatureFromGraveyardWithManaValueEqualTo' ||
+                effect.type === 'exileUpToOneOtherTargetCreatureThenControllerGainsLifeEqualToItsPower' ||
+                (effect.type === 'grantKeywordsToTargetPermanent' && effect.optional) ||
                 (effect.type === 'pumpUpToTwoTargets' && !!pendingTargetForYou.firstInstanceId)) && (
                 <button className="opponent-view-exit-button" onClick={() => onAction({ type: 'CHOOSE_TARGET', targetInstanceId: null }, pendingTargetForYou.controllerId)}>
                   Skip
@@ -3725,6 +3791,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           currentZone={openCard.zone}
           readOnly={openCardIsReadOnly}
           ownerManaPool={exilePlayActingPlayer.manaPool}
+          ownerLife={exilePlayActingPlayer.life}
           ownerCommanderDefId={openCard.player.commanderDefId}
           mutualActive={mutualActive}
           isMyTurn={state.activePlayerId === exilePlayActingPlayer.id}
@@ -3743,6 +3810,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           costReductionSources={costReductionSourcesFor(getCardDefinition(openCard.card.defId), openCard.player)}
           ownerBattlefieldDefIds={openCard.player.zones.battlefield.map((c) => c.defId)}
           exilePlayGrant={openCardExilePlayGrant}
+          libraryTopPlayAllowed={openCardLibraryTopPlayAllowed}
           alreadyPlayedLand={
             exilePlayActingPlayer.landsPlayedThisTurn >=
             1 + exilePlayActingPlayer.zones.battlefield.reduce((sum, c) => sum + (getCardDefinition(c.defId).extraLandsPerTurn ?? 0), 0)
@@ -3824,6 +3892,10 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           }}
           onPlayFromExile={() => {
             onAction({ type: 'CAST_FROM_EXILE', instanceId: openCard.card.instanceId });
+            setOpenPanelId(null);
+          }}
+          onPlayFromLibraryTop={() => {
+            onAction({ type: 'CAST_FROM_LIBRARY_TOP', instanceId: openCard.card.instanceId });
             setOpenPanelId(null);
           }}
           onClose={() => setOpenPanelId(null)}
@@ -4597,6 +4669,8 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                       ? `Target player draws ${pending.effect.count} card(s).`
                       : pending.effect.type === 'mayPutExactNamedCardFromLibraryToHandForTargetPlayer'
                       ? `Target player may put ${pending.effect.name} into their hand from their library, then shuffle.`
+                      : pending.effect.type === 'graveyardToBottomOfLibraryForTargetPlayer'
+                      ? 'Choose up to one target player to put all the cards from their graveyard on the bottom of their library in a random order - or Skip.'
                       : `Put a ${pending.effect.counterLabel} counter on each creature target player controls.`}
                   </span>
                 </div>
@@ -4611,6 +4685,11 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                       {p.id === pending.controllerId ? `${p.name} (yourself)` : p.name}
                     </button>
                   ))}
+                  {pending.effect.type === 'graveyardToBottomOfLibraryForTargetPlayer' && (
+                    <button className="opponent-view-exit-button" onClick={() => onAction({ type: 'CHOOSE_PLAYER_TARGET', targetPlayerId: null }, pending.controllerId)}>
+                      Skip
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

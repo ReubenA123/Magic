@@ -19,16 +19,27 @@ export interface CardAbility {
      * cards is never mechanically relevant elsewhere in this engine, so
      * they're auto-selected (oldest first) rather than player-chosen. */
     exileFromGraveyard?: number;
+    /** "Exile two creature cards from your graveyard" as (part of) the cost
+     * (Coin of Fate) - unlike exileFromGraveyard above, WHICH cards get
+     * exiled genuinely matters here (the ability's own effect later has the
+     * opponent choose between them), so the controller picks via
+     * costTargetInstanceIds (same "strategically meaningful, so player-
+     * chosen" convention as sacrificeAnother). Restricted to creature
+     * cards. See engine/actions.ts: activateAbility, which threads the
+     * resulting exiled ids into resolveCardEffects's exiledCostInstanceIds
+     * parameter for OpponentChoosesOneOfExiledCardsToBottomRestReturnsTappedThenBecomeMonarchEffect
+     * to read. */
+    exileChosenCreatureCardsFromGraveyard?: number;
     /** "Sacrifice another creature/artifact/either" as part of the cost - the
      * controller picks WHICH one(s) client-side before dispatching, and they
      * arrive baked into the ACTIVATE_ABILITY action as costTargetInstanceIds
      * (unlike exileFromGraveyard, this choice is strategically meaningful
      * enough that auto-selecting it wouldn't be right). See
      * engine/actions.ts: activateAbility. */
-    sacrificeAnother?: 'creature' | 'artifact' | 'artifactOrCreature';
+    sacrificeAnother?: 'creature' | 'artifact' | 'artifactOrCreature' | 'nonlandPermanent';
     /** How many "another creature/artifact" permanents sacrificeAnother
      * requires - defaults to 1. The Gold Saucer's "Sacrifice two artifacts"
-     * needs 2. */
+     * needs 2. Kefka's Tower's "Sacrifice ten nonland permanents" needs 10. */
     sacrificeAnotherCount?: number;
     /** "Sacrifice a [subtype]" as (part of) the cost (Scavenger Grounds'
      * "Sacrifice a Desert") - the subtype-matching cousin of
@@ -94,6 +105,12 @@ export interface CardAbility {
      * choice-arrives-baked-in convention as sacrificeAnother. See
      * engine/actions.ts: activateAbility. */
     tapAnotherLegendaryCreature?: boolean;
+    /** "Tap an untapped artifact you control" as (part of) the cost (Terra
+     * Branford's mana ability) - the artifact-filtered cousin of
+     * tapAnotherLegendaryCreature just above, same choice-arrives-baked-in
+     * convention via costTargetInstanceIds. See engine/actions.ts:
+     * activateAbility. */
+    tapAnotherArtifact?: boolean;
   };
   /** Marks this ability's own targeting as ALWAYS restricted to a creature
    * its activator controls (e.g. an ability whose effect sets
@@ -145,6 +162,11 @@ export interface CardAbility {
    * precondition (not a cost), checked the same simple way every other
    * "requires controlling N [thing]" precondition here does. */
   requiresControlledArtifact?: boolean;
+  /** "Activate only if you control a creature with power [N] or greater."
+   * (Bonders' Enclave) - a precondition (not a cost), checked live against
+   * the controller's own board via engine/combat.ts: effectivePower, same
+   * "requires controlling N [thing]" family as the siblings above. */
+  requiresControlledCreaturePowerAtLeast?: number;
   /** "Monstrosity X" (Maester Seymour) - a precondition (not a cost): the
    * ability is illegal to activate at all once CardInstance.monstrous is
    * already set on this permanent ("if this creature isn't monstrous").
@@ -216,11 +238,27 @@ export interface CreateTokenEffect {
    * whatever X value was paid for the SOURCE's own {X} cost, same chosenX
    * parameter resolveCardEffects already threads through for every onEnter
    * (see engine/actions.ts: castCard). 0 if the source had no {X} at all. */
-  count?: number | 'perCreatureYouControl' | 'perCreatureCardInYourGraveyard' | 'chosenX';
+  /** 'd20Roll' ("roll a d20... create a number of Treasure tokens equal to
+   * the result", Dragon of Mount Gulg) - rolls 1-20 immediately via
+   * Math.random(), same "no decision point, so no interactive pause" logic
+   * as shuffle()/RandomGraveyardCopyEffect, unlike the existing
+   * pendingCoinFlip mechanism (which pauses because the real card lets the
+   * player call a side before the flip). */
+  count?: number | 'perCreatureYouControl' | 'perCreatureCardInYourGraveyard' | 'chosenX' | 'd20Roll';
   tapped?: boolean;
   /** Job select style: attach the permanent generating this effect to the
    * (single) token it just created. Only meaningful when count resolves to 1. */
   attachSelfToToken?: boolean;
+  /** "...create a 1/1 white Human creature token that's tapped and
+   * attacking that player..." (Hero of Light) - joins the ALREADY-DECLARED
+   * attack (appended to GameState.declaredAttackers/combatAssignments),
+   * same mechanism as ReturnSelfFromGraveyardTappedAndAttackingEffect, just
+   * for a freshly created token instead of a graveyard return. Always
+   * attacks the controller's one opponent - "for each opponent"/"or a
+   * planeswalker they control" simplifies to the single opponent in this
+   * 2-player, no-planeswalkers engine. Meaningless without `tapped: true`
+   * (nothing currently sets one without the other). */
+  entersAttacking?: boolean;
 }
 
 /** "If you don't control a creature named [name], create [tokenId], a
@@ -279,6 +317,18 @@ export interface TapAndStunEffect {
    * (Tidus, Blitzball Star) - unlike every other use of this effect, which
    * always adds a Stun counter. */
   noStunCounter?: boolean;
+}
+
+/** "Whenever this creature attacks, tap target creature defending player
+ * controls. If that creature has greater power than this creature, put a
+ * number of +1/+1 counters on this creature equal to the difference."
+ * (Conformer Shuriken, granted via equipGrantsOnAttack) - "defending
+ * player" is just the attacker's controller's one opponent in this
+ * 2-player engine. `sourceInstanceId` is the ATTACKING creature itself
+ * (same convention as every other equipGrantsOnAttack effect), which is
+ * also who receives the counters. See engine/actions.ts: chooseTarget. */
+export interface TapTargetThenCounterSelfByPowerDifferenceIfGreaterEffect {
+  type: 'tapTargetThenCounterSelfByPowerDifferenceIfGreater';
 }
 
 /** "Tap up to one target creature and put a stun counter on it" (Summon:
@@ -505,11 +555,27 @@ export interface DestroyTargetEffect {
     /** "target artifact" (Decimate) - standalone, no OR-qualifier (unlike
      * every existing artifact-involving filter above, which all pair it
      * with something else). */
-    | 'artifact';
+    | 'artifact'
+    /** "Destroy target creature if it has mana value [maxManaValue] or
+     * less. Revolt — ...mana value [revoltManaValue] or less instead if a
+     * permanent left the battlefield under your control this turn." (Fatal
+     * Push) - modeled as a hard targeting restriction (same convention as
+     * creatureWithMinPower/creatureWithMinToughness above - a target that
+     * doesn't qualify is simply illegal to choose, not "fizzles at
+     * resolution"), with the THRESHOLD itself picked live at the moment of
+     * targeting by PlayerState.permanentLeftBattlefieldThisTurn. Requires
+     * `maxManaValue` and `revoltManaValue`. */
+    | 'creatureWithManaValueAtMostRevolt';
   /** Only used with targetFilter: 'creatureWithMinPower'. */
   minPower?: number;
   /** Only used with targetFilter: 'creatureWithMinToughness'. */
   minToughness?: number;
+  /** Only used with targetFilter: 'creatureWithManaValueAtMostRevolt' - the
+   * normal (Revolt NOT active) ceiling. */
+  maxManaValue?: number;
+  /** Only used with targetFilter: 'creatureWithManaValueAtMostRevolt' - the
+   * raised ceiling while Revolt is active. */
+  revoltManaValue?: number;
   /** "destroy up to one target [filter]" (Summon: Bahamut) - decline-able via
    * the null-target convention, same as every other "up to one" effect. */
   optional?: boolean;
@@ -537,6 +603,20 @@ export interface DestroyTargetEffect {
    * players may search" - chained via GameState.pendingLibrarySearch.
    * chainedSearchForPlayerId (opponent searches first, then the caster). */
   thenBothPlayersMaySearchBasicLandToBattlefield?: boolean;
+  /** "...an opponent controls." (Feed the Swarm's "target creature or
+   * enchantment an opponent controls") - a general AND-modifier on top of
+   * whichever targetFilter above already matched, rather than a dedicated
+   * filter value (unlike opponentNonlandPermanent/opponentNonbasicLand/
+   * opponentArtifact above, each of which bakes the restriction into a
+   * single-type filter name). See engine/actions.ts: chooseTarget. */
+  opponentControlledOnly?: boolean;
+  /** "You lose life equal to that permanent's mana value." (Feed the
+   * Swarm) - applied to the CONTROLLER after the destroy actually
+   * resolves (not if the target survives via indestructible/Shield), read
+   * from the destroyed permanent's own printed costLabel. The "then"
+   * naming distinguishes this from ReanimateTargetFromGraveyardEffect's
+   * own loseLifeEqualToManaValue (same idea, different trigger). */
+  thenLoseLifeEqualToManaValue?: boolean;
 }
 
 /** "Destroy target artifact, target creature, target enchantment, and
@@ -709,6 +789,18 @@ export interface SearchLibraryForSubtypeEffect {
   toBattlefieldUntapped?: boolean;
 }
 
+/** "When this creature enters, you may search your library for a creature
+ * card with mana value [N] or less, reveal it, put it into your hand, then
+ * shuffle." (Ranger-Captain of Eos) - the mana-value-ceiling cousin of
+ * SearchLibraryForSubtypeEffect above, via LibrarySearchFilter's
+ * 'creatureWithManaValueAtMost' kind. The "may" is just the usual
+ * decline-via-null convention on the resulting pendingLibrarySearch, same
+ * as every other search here. */
+export interface SearchLibraryForCreatureWithManaValueAtMostEffect {
+  type: 'searchLibraryForCreatureWithManaValueAtMost';
+  maxManaValue: number;
+}
+
 /** "All creatures get -X/-Y until end of turn" (Poison the Waters) - unlike
  * BuffOtherCreaturesYouControlEffect (your own, excluding the source), this
  * hits every creature on the battlefield, either player's, no exclusions. */
@@ -742,6 +834,15 @@ export interface DebuffOpponentCreaturesEffect {
  * is a bare mill with no follow-up graveyard return. */
 export interface MillSelfEffect {
   type: 'millSelf';
+  count: number;
+}
+
+/** "{1}{B}: Each player mills a card." (Golbez, Clad in Darkness) - unlike
+ * MillSelfEffect above (caster only), this mills EVERY player, each from
+ * their own library. No existing generic "both players mill" effect
+ * covers this exact shape. */
+export interface EachPlayerMillsEffect {
+  type: 'eachPlayerMills';
   count: number;
 }
 
@@ -861,6 +962,13 @@ export interface CreateTokenCopyOfTargetEffect {
   /** "...target creature YOU CONTROL" (Sublime Epiphany) - every other
    * card using this effect has no owner restriction at all. */
   controlledOnly?: boolean;
+  /** "Create a token that's a copy of target creature. If this spell was
+   * kicked, create five of those tokens instead." (Rite of Replication) -
+   * resolved to a plain number (1 or 5) at ARM time (when this is baked
+   * into GameState.pendingTarget.effect, whose copy of `wasKicked` is still
+   * in scope there, unlike by the time CHOOSE_TARGET later actually creates
+   * the token(s)). Defaults to 1 when omitted. */
+  count?: number | 'fiveIfKicked';
 }
 
 /** "You may have this creature enter as a copy of any creature on the
@@ -1044,6 +1152,20 @@ export interface MillThenReturnEffect {
  * Aura/Equipment cards via GameState.pendingReturnFromGraveyard.filter. */
 export interface ReturnTargetAuraOrEquipmentFromGraveyardToHandEffect {
   type: 'returnTargetAuraOrEquipmentFromGraveyardToHand';
+}
+
+/** "When Elena enters, return target non-Assassin historic card from your
+ * graveyard to your hand. (Artifacts, legendaries, and Sagas are historic.)"
+ * (Elena, Turk Recruit) - the historic-filtered cousin of
+ * ReturnTargetAuraOrEquipmentFromGraveyardToHandEffect above, via the same
+ * GameState.pendingReturnFromGraveyard.filter mechanism. "Historic" is
+ * checked the same way everywhere else in this engine would: def.type ===
+ * 'artifact' (not subtype - see the artifact-counting convention already
+ * used by engine/combat.ts: controlledArtifactCountBaseStat and friends),
+ * !!def.saga, or a 'legendary' subtype substring; "non-Assassin" excludes
+ * anything whose subtype contains that word. */
+export interface ReturnTargetNonAssassinHistoricFromGraveyardToHandEffect {
+  type: 'returnTargetNonAssassinHistoricFromGraveyardToHand';
 }
 
 /**
@@ -1265,6 +1387,18 @@ export interface BecomeMonarchEffect {
   type: 'becomeMonarch';
 }
 
+/** "An opponent chooses one of the exiled cards. You put that card on the
+ * bottom of your library and return the other to the battlefield tapped.
+ * You become the monarch." (Coin of Fate) - reads the two ids exiled by
+ * CardAbility.cost.exileChosenCreatureCardsFromGraveyard via
+ * resolveCardEffects's exiledCostInstanceIds parameter. Arms
+ * GameState.pendingOpponentChoosesExiledCard (the OPPONENT makes this
+ * pick, not the controller) - cleared by RESOLVE_OPPONENT_CHOOSES_EXILED_CARD,
+ * which also resolves the bottom/return/monarch payout. */
+export interface OpponentChoosesOneOfExiledCardsToBottomRestReturnsTappedThenBecomeMonarchEffect {
+  type: 'opponentChoosesOneOfExiledCardsToBottomRestReturnsTappedThenBecomeMonarch';
+}
+
 /** "Exile target creature an opponent controls until an opponent becomes
  * the monarch." (Palace Jailer) - in this 2-player engine, "an opponent
  * becomes the monarch" simplifies to "the monarchy changes away from
@@ -1274,6 +1408,122 @@ export interface BecomeMonarchEffect {
  * reassigned (releases it). */
 export interface ExileTargetCreatureUntilMonarchChangesEffect {
   type: 'exileTargetCreatureUntilMonarchChanges';
+}
+
+/** "When this creature enters, exile up to one other target creature.
+ * That creature's controller gains life equal to its power." (Solitude) -
+ * "other" excludes the source itself (so a creature can never target
+ * itself even though it just entered too); no controller restriction
+ * otherwise. Power is read at the moment of exile (engine/combat.ts:
+ * effectivePower). See engine/actions.ts: chooseTarget. */
+export interface ExileUpToOneOtherTargetCreatureThenControllerGainsLifeEqualToItsPowerEffect {
+  type: 'exileUpToOneOtherTargetCreatureThenControllerGainsLifeEqualToItsPower';
+}
+
+/** "When this creature enters, target opponent reveals their hand. You
+ * choose a nonland card from it. That player discards that card." (Grief) -
+ * "target opponent" simplifies to the one opponent in this 2-player
+ * engine (no separate CHOOSE_PLAYER_TARGET step needed), but unlike
+ * every pendingDiscard-based discard in this engine (chooser === discarder),
+ * here the CONTROLLER picks and the OPPONENT discards - a dedicated
+ * pending state (GameState.pendingChooseCardFromOpponentHandToDiscard),
+ * not pendingDiscard. Mandatory if the opponent has any nonland card. See
+ * engine/actions.ts: resolveChooseCardFromOpponentHandToDiscard. */
+export interface RevealOpponentHandChooseNonlandCardThenDiscardEffect {
+  type: 'revealOpponentHandChooseNonlandCardThenDiscard';
+}
+
+/** "When this creature enters, it deals [totalDamage] damage divided as
+ * you choose among any number of target creatures and/or planeswalkers."
+ * (Fury) - this engine has no 'planeswalker' CardType, so only creatures
+ * are reachable; no controller restriction (either player's creatures are
+ * fair game). Resolved as a sequence of (target, amount) picks via
+ * GameState.pendingDivideDamageAmongTargets/RESOLVE_DIVIDE_DAMAGE_AMONG_TARGETS -
+ * the first pick is mandatory if any legal target exists, each pick must
+ * assign at least 1 of the remaining damage to a NOT-yet-chosen creature,
+ * and the sequence auto-finishes once the full amount is assigned or no
+ * further distinct targets remain. */
+export interface DivideDamageAmongChosenTargetsEffect {
+  type: 'divideDamageAmongChosenTargets';
+  totalDamage: number;
+}
+
+/** "When this creature enters, up to one target player puts all the
+ * cards from their graveyard on the bottom of their library in a random
+ * order." (Endurance) - the first "up to one" (declinable) use of the
+ * existing pendingPlayerTarget/CHOOSE_PLAYER_TARGET flow; every prior
+ * effect sharing that flow is mandatory. See engine/actions.ts:
+ * choosePlayerTarget. */
+export interface GraveyardToBottomOfLibraryForTargetPlayerEffect {
+  type: 'graveyardToBottomOfLibraryForTargetPlayer';
+}
+
+/** "All creatures get -X/-X until end of turn." (Toxic Deluge) - X is
+ * read from the chosenX param (see CardDefinition.additionalCostPayXLife,
+ * the "pay X life" additional cost this always pairs with). Applies to
+ * every creature on BOTH battlefields unconditionally, then sweeps any
+ * that end up with effectiveToughness <= 0 to their owner's graveyard -
+ * indestructible does NOT save a creature from 0 toughness (that's a
+ * state-based "it ceases to exist as a creature" rule in real Magic, not
+ * a destroy effect). See engine/effects.ts's own resolution (no dedicated
+ * action needed - this resolves immediately, same as any other
+ * unconditional board-wide effect). */
+export interface AllCreaturesGetNegativeChosenXUntilEndOfTurnEffect {
+  type: 'allCreaturesGetNegativeChosenXUntilEndOfTurn';
+}
+
+/** "When you cast this spell, any player may pay half their life, rounded
+ * up. If a player does, counter [this]. Take an extra turn after this
+ * one." (Temporal Extortion) - "any player" is approximated as just the
+ * one opponent (same "a rational caster never counters their own spell"
+ * simplification as every other "any/each player" effect in this engine
+ * that only ever matters for an opponent). This engine has no stack, so
+ * "counter" here just means "skip queuing the extra turn" - the spell
+ * still resolves everything else normally (there's nothing else to
+ * resolve). Arms GameState.pendingPayHalfLifeToCounterChoice/
+ * RESOLVE_PAY_HALF_LIFE_TO_COUNTER_CHOICE. */
+export interface AnyPlayerMayPayHalfLifeToCounterThenExtraTurnEffect {
+  type: 'anyPlayerMayPayHalfLifeToCounterThenExtraTurn';
+}
+
+/** "Search target opponent's library for a card and exile it face down.
+ * Then that player shuffles. You may play that card for as long as it
+ * remains exiled." (Praetor's Grasp) - unlike every SearchLibraryFor*Effect
+ * elsewhere (always the searcher's OWN library, result to hand/battlefield),
+ * this searches the OPPONENT's library and exiles the result face down,
+ * granting the CONTROLLER a persistent GameState.exilePlayGrants entry (no
+ * expiresAtCleanup - "for as long as it remains exiled" is just the normal
+ * persistent-grant shape, consumed automatically once actually cast, same
+ * as Lightning, Security Sergeant's own persistent grant). Mandatory if
+ * the opponent's library isn't empty. See GameState.pendingSearchOpponentLibraryToExile,
+ * engine/actions.ts: resolveSearchOpponentLibraryToExile. */
+export interface SearchOpponentLibraryExileFaceDownThenMayPlayEffect {
+  type: 'searchOpponentLibraryExileFaceDownThenMayPlay';
+}
+
+/** "At the beginning of combat on your turn, target creature you control
+ * gets +X/+0 until end of turn, where X is the number of [subtype] you
+ * control." (Heidegger, Shinra Executive's "Soldiers") - the subtype
+ * count is read fresh at the moment the target is actually chosen (not
+ * when this armed), same "live, not snapshotted" convention as every
+ * other dynamic-amount effect here. Always restricted to the controller's
+ * own creatures (the printed text already says "you control", unlike
+ * PutCounterOnUpToOneOtherCreatureEqualToOwnPowerEffect's optional
+ * restrictToOwnCreature). */
+export interface PumpTargetOwnCreatureByControlledSubtypeCountEffect {
+  type: 'pumpTargetOwnCreatureByControlledSubtypeCount';
+  subtype: string;
+}
+
+/** "At the beginning of your end step, create a number of 1/1 white
+ * Soldier creature tokens equal to the number of opponents who control
+ * more creatures than you." (Heidegger, Shinra Executive) - "the number
+ * of opponents who..." simplifies to 0 or 1 in this 2-player engine (the
+ * one opponent either qualifies or doesn't), same established
+ * "each/number of opponents" simplification used throughout this engine. */
+export interface CreateTokenIfOpponentControlsMoreCreaturesThanYouEffect {
+  type: 'createTokenIfOpponentControlsMoreCreaturesThanYou';
+  tokenId: string;
 }
 
 /** "Each opponent who lost life this turn sacrifices a creature with the
@@ -1302,7 +1552,12 @@ export type LibrarySearchFilter =
    * Wanderings' "...or Town card", Sazh Katzroy's "a Bird or basic land
    * card") - an OR of the 'basicLand' and 'subtype' kinds above, since
    * neither alone can express "either of these two, controller's choice". */
-  | { kind: 'basicLandOrSubtype'; subtype: string };
+  | { kind: 'basicLandOrSubtype'; subtype: string }
+  /** "Search your library for a creature card with mana value [N] or less"
+   * (Ranger-Captain of Eos) - same shape as 'subtype' above, just filtered
+   * on type + a manaValue(parseCostLabel(...)) ceiling instead of subtype
+   * text. */
+  | { kind: 'creatureWithManaValueAtMost'; maxManaValue: number };
 
 /** "Target creature gets +X/+Y (and gains [grantKeyword]) until end of turn"
  * (Blitzball Shot) - a SINGLE chosen target, unlike PumpAttackersEffect
@@ -1344,6 +1599,12 @@ export interface GrantKeywordsToTargetPermanentEffect {
    * Magic's "target permanent" uses. See engine/combat.ts:
    * isLegalPendingTarget. */
   creatureOnly?: boolean;
+  /** "Up to one target creature can't be blocked this turn." (Key to the
+   * City) - declinable via CHOOSE_TARGET's null convention, same as
+   * destroyTarget.optional/attachSelfToTarget.optional. Omitted (false)
+   * preserves the default mandatory targeting every other current user of
+   * this effect has. */
+  optional?: boolean;
 }
 
 /** "...Thancred Waters gains indestructible until end of turn." (Thancred
@@ -1439,6 +1700,19 @@ export interface EachOpponentMaySacrificeNontokenCreatureElseLoseLifePerInstantS
   lifePerCard: number;
 }
 
+/** "Target opponent may have you draw [count] cards. If the player
+ * doesn't, you mill [count] cards, then this creature deals damage to
+ * that player equal to the total mana value of those cards." (Combustible
+ * Gearhulk) - "target opponent" is just the one opponent in this 2-player
+ * engine, so this arms GameState.pendingOpponentMayHaveYouDrawElseMillAndDealDamage
+ * for them: accept lets the controller draw, decline mills instead and
+ * deals damage back to the DECIDER equal to the milled cards' total mana
+ * value. See engine/actions.ts: resolveOpponentMayHaveYouDrawElseMillAndDealDamage. */
+export interface OpponentMayHaveYouDrawElseMillAndDealDamageEffect {
+  type: 'opponentMayHaveYouDrawElseMillAndDealDamage';
+  count: number;
+}
+
 /** "Target opponent gains control of another target permanent you
  * control. If they do, you draw a card." (Stiltzkin, Moogle Merchant) -
  * unlike GainControlOfTargetCreatureEffect, this is PERMANENT (no "until
@@ -1482,6 +1756,33 @@ export interface PumpAnotherControlledCreatureEffect {
 export interface GrantKeywordToOtherAttackersEffect {
   type: 'grantKeywordToOtherAttackers';
   keyword: string;
+}
+
+/** "Whenever this creature attacks, another target attacking creature
+ * gains [keyword] until end of turn." (Helitrooper) - unlike
+ * GrantKeywordToOtherAttackersEffect above (ALL other attackers,
+ * unconditional), this is a SINGLE targeted pick, same
+ * pendingTarget/CHOOSE_TARGET flow as UntapTargetAttackerEffect, just
+ * additionally excluding the source itself ("another"). Mandatory - no
+ * "up to one" wording - but only armed if another attacker actually
+ * exists. See engine/actions.ts: chooseTarget. */
+export interface GrantKeywordToAnotherTargetAttackingCreatureEffect {
+  type: 'grantKeywordToAnotherTargetAttackingCreature';
+  keyword: string;
+}
+
+/** "Mug — Whenever Locke attacks, each player mills a card. If a land
+ * card was milled this way, create a Treasure token. Until end of turn,
+ * you may cast a spell from among those cards." (Locke, Treasure Hunter) -
+ * "you" (who may cast) is Locke's controller (the attacker), regardless
+ * of which player's library the eligible card actually came from. Unlike
+ * Flashback (a fixed alternate cost baked into the card), this grants a
+ * ONE-TURN permission to cast the milled card from its OWNER's graveyard
+ * for its normal printed cost - see GameState.graveyardPlayGrants,
+ * engine/actions.ts: castFromGraveyard (extended to also accept a
+ * matching grant, not just def.flashback). */
+export interface MugEffect {
+  type: 'mug';
 }
 
 /** "You lose N life" (Circle of Power) - unlike a negative GainLifeEffect,
@@ -1557,6 +1858,12 @@ export interface PutCounterOnTargetEffect {
    * Mage's "It gains lifelink until end of turn") - applied to the SAME
    * target as the counter, same shot. */
   grantKeyword?: string;
+  /** "...put a -1/-1 counter on up to one target creature..." (The
+   * Emperor, Hell Tyrant's sac ability) - decline-able via the null-target
+   * convention, same as destroyTarget.optional. Omitted (false) preserves
+   * the default mandatory targeting every other current user of this
+   * effect has. */
+  optional?: boolean;
 }
 
 /** "Whenever Sephiroth attacks, you may put a cell counter on target
@@ -1723,6 +2030,19 @@ export interface IfControlAtLeastCreaturesEffect {
   elseEffects: CardEffect[];
 }
 
+/** "At the beginning of your upkeep, if you control a creature with power 7
+ * or greater, draw a card." (Bugenhagen, Wise Elder) - the power-threshold
+ * cousin of IfControlAtLeastCreaturesEffect above, same generic
+ * thenEffects/elseEffects conditional wrapper shape. Checked live against
+ * engine/combat.ts: effectivePower (temporary buffs count), true if ANY
+ * controlled creature meets the threshold. */
+export interface IfControlCreatureWithPowerAtLeastEffect {
+  type: 'ifControlCreatureWithPowerAtLeast';
+  minPower: number;
+  thenEffects: CardEffect[];
+  elseEffects: CardEffect[];
+}
+
 /** "Search your library and/or graveyard for an artifact card with mana
  * value N or less, reveal it, and put it into your hand. If you search
  * your library this way, shuffle" (Delivery Moogle) - unlike every other
@@ -1787,6 +2107,14 @@ export interface QueueEffectsAtNextEndStepEffect {
 export interface ExileTopOfLibraryPlayableUntilCleanupEffect {
   type: 'exileTopOfLibraryPlayableUntilCleanup';
   count: number;
+  /** "Shuffle your library, THEN exile the top card." (Terra Branford) -
+   * shuffles before exiling, unlike every other current caller (which just
+   * exile straight off the top). */
+  shuffleFirst?: boolean;
+  /** "...you may play that card without paying its mana cost." (Terra
+   * Branford) - unlike Opera Love Song's normal-cost grant, this one is
+   * free: baked in as GameState.exilePlayGrants.overrideCostLabel: '{0}'. */
+  free?: boolean;
 }
 
 /** "Lucky Slots — At the beginning of combat on your turn, scry 1, then
@@ -1968,6 +2296,25 @@ export interface ExileThenReturnTargetOwnCreatureEffect {
  * Optional (declined via CHOOSE_TARGET's null convention). */
 export interface AttachAllControlledEquipmentToTargetCreatureEffect {
   type: 'attachAllControlledEquipmentToTargetCreature';
+}
+
+/** "Whenever this creature enters or attacks, you may attach any number of
+ * target Equipment to it. (Control of the Equipment doesn't change.)"
+ * (Armory Automaton) - the attach-to-SELF cousin of
+ * AttachAllControlledEquipmentToTargetCreatureEffect above, same "any
+ * number simplifies to all of them" convention, wrapped in a MayEffectEffect
+ * for the "you may". DEFERRED: the real card's "control doesn't change"
+ * clause lets it borrow ANY Equipment on the battlefield, including an
+ * opponent's, without taking control of it - this engine's equip-bonus
+ * scanning (engine/combat.ts: equipBuffBonus and friends) only ever checks
+ * the EQUIPPED CREATURE's OWN controller's battlefield for attached
+ * Equipment, so a cross-player attachment would silently not grant its
+ * bonus. Stolen Uniform hit the same wall and worked around it by actually
+ * changing control first (CardInstance.temporaryControlUntilEndOfTurn) -
+ * not an option here, since this card's whole point is that control stays
+ * put. Simplified down to "Equipment you control" instead. */
+export interface AttachAllControlledEquipmentToSelfEffect {
+  type: 'attachAllControlledEquipmentToSelf';
 }
 
 /** "If it's the first end step of the turn, there is an additional end
@@ -2262,6 +2609,20 @@ export interface AttachSelfToTargetEffect {
   removeFromCombatThenDrawForControllerTappedCreatures?: boolean;
 }
 
+/** "Whenever a legendary creature you control enters, you may attach this
+ * Equipment to it." (Hero's Blade) - unlike AttachSelfToTargetEffect above
+ * (a pendingTarget pick), the target here is already fully determined by
+ * the triggering event itself (the just-entered creature), so this just
+ * carries that instanceId straight through as a plain parameter and
+ * resolves immediately once accepted. Wrapped in a MayEffectEffect for the
+ * "you may" (see CardDefinition.mayAttachSelfToControlledLegendaryCreatureOnEnter,
+ * engine/effects.ts: triggerCreatureEnterWatchers, which already receives
+ * the entered creature's instanceId for other watchers like this). */
+export interface AttachSelfToFixedTargetEffect {
+  type: 'attachSelfToFixedTarget';
+  targetInstanceId: string;
+}
+
 /** "Then you may attach an Equipment you control to [this creature]."
  * (Yuffie, Materia Hunter) - the reverse of AttachSelfToTargetEffect above
  * (there, the Equipment itself is the source and attaches to a target
@@ -2270,6 +2631,23 @@ export interface AttachSelfToTargetEffect {
  * a null target is always legal. */
 export interface MayAttachTargetControlledEquipmentToSelfEffect {
   type: 'mayAttachTargetControlledEquipmentToSelf';
+}
+
+/** "At the beginning of combat on your turn, attach up to one target
+ * Equipment you control to target Rebel you control." (Barret, Avalanche
+ * Leader) - a genuine two-TARGET pick (unlike
+ * MayAttachTargetControlledEquipmentToSelfEffect above, whose destination is
+ * always the source itself): first pick an Equipment you control (the "up
+ * to one" - declinable via CHOOSE_TARGET's null convention, same as
+ * MoveCounterBetweenTargetCreaturesEffect's own mandatory-first/optional
+ * shape), then a Rebel creature you control to attach it to (mandatory once
+ * the first pick is made - no "up to one" on this half). See
+ * GameState.pendingTarget.firstInstanceId for the two-step pick. Armed only
+ * if the controller has both at least one Equipment and at least one Rebel
+ * creature (otherwise a no-op, same "no legal target" convention used
+ * throughout this engine). */
+export interface AttachTargetControlledEquipmentToTargetRebelEffect {
+  type: 'attachTargetControlledEquipmentToTargetRebel';
 }
 
 /** "Reveal the top card of your library and put it into your hand. You
@@ -2596,6 +2974,13 @@ export interface GrantAttacksCostUntilNextTurnEffect {
  * combat phase 1 rather than an error. */
 export interface UntapSelfIfFirstCombatPhaseOfTurnEffect {
   type: 'untapSelfIfFirstCombatPhaseOfTurn';
+  /** "...untap it and all Samurai you control." (Gilgamesh, Weapon
+   * Collector) - also untaps every OTHER controlled permanent whose
+   * CardDefinition.subtype contains this string (case-insensitive
+   * substring match, same convention as every other subtype check in this
+   * engine), gated by the exact same combat-phase-1-only condition as the
+   * self-untap above. */
+  alsoUntapControlledSubtype?: string;
 }
 
 /** "After this phase, there is an additional combat phase." (Genji Glove) -
@@ -2733,8 +3118,10 @@ export interface BounceTargetEffect {
   type: 'bounceTarget';
   /** 'creature' (Ice Magic's Blizzard tier - "target creature") narrows the
    * legal target set down from the original 'nonland' (Eject - any nonland
-   * permanent, either player's). */
-  targetFilter: 'nonland' | 'creature';
+   * permanent, either player's). 'anyPermanent' (Master Xande's "return
+   * target ... permanent to its owner's hand") widens it the other way -
+   * lands included. */
+  targetFilter: 'nonland' | 'creature' | 'anyPermanent';
 }
 
 /** "The owner of target spell, nonland permanent, or card in a graveyard
@@ -2914,7 +3301,13 @@ export interface EachOpponentDiscardsEffect {
  * opponent" is simply the one. */
 export interface EachOpponentLosesLifeEffect {
   type: 'eachOpponentLosesLife';
-  amount: number;
+  /** 'chosenX' (Exsanguinate's {X}{B}{B}) reads the spell's own paid X value,
+   * same convention as PutCounterOnSelfEffect.counterAmount's 'chosenX'. */
+  amount: number | 'chosenX';
+  /** "You gain life equal to the life lost this way." (Exsanguinate) - life
+   * lost is always exactly `amount` (life has no floor at 0 in this engine,
+   * same as real rules), so this just gives the caster that same amount. */
+  gainLifeEqualToLifeLost?: boolean;
 }
 
 /** "Each opponent draws a card, then you draw a card for each opponent who
@@ -2946,6 +3339,17 @@ export interface PumpSelfByGraveyardCountEffect {
   type: 'pumpSelfByGraveyardCount';
   powerPerUnit: number;
   toughnessPerUnit: number;
+}
+
+/** "Tools — Whenever Edgar attacks, it gets +X/+0 until end of turn, where X
+ * is the greatest mana value among artifacts you control." (Edgar, Master
+ * Machinist) - a dynamic self-buff like PumpSelfByGraveyardCountEffect
+ * above, but reading the MAX mana value among controlled artifacts (def.type
+ * === 'artifact', same artifact-counting convention as
+ * engine/combat.ts: controlledArtifactCountBaseStat) instead of a flat count.
+ * 0 (no pump) if the controller has no artifacts. */
+export interface PumpSelfByGreatestControlledArtifactManaValueEffect {
+  type: 'pumpSelfByGreatestControlledArtifactManaValue';
 }
 
 /** "Each opponent mills X cards, where X is the amount of life you gained
@@ -3064,6 +3468,16 @@ export interface TapAllOpponentLandsEffect {
  * the creature counterpart to TapAllOpponentLandsEffect. */
 export interface TapAllOpponentCreaturesEffect {
   type: 'tapAllOpponentCreatures';
+}
+
+/** "Sacrifice this creature: Your opponents can't cast noncreature spells
+ * this turn." (Ranger-Captain of Eos) - sets PlayerState.
+ * cantCastNoncreatureSpellsThisTurn on the controller's one opponent (2-player
+ * engine, so "your opponents" is just the one). Checked in
+ * engine/actions.ts: castCard's own main path only, same scoped-down
+ * convention as equipGrantsOpponentsCantCastDuringYourTurn. */
+export interface OpponentsCantCastNoncreatureSpellsThisTurnEffect {
+  type: 'opponentsCantCastNoncreatureSpellsThisTurn';
 }
 
 /** "Destroy all artifacts and creatures" (Ultima) - unlike DestroyTargetEffect,
@@ -3592,7 +4006,15 @@ export interface PutCounterOnUpToOneOtherCreatureEqualToOwnPowerEffect {
  * number. Needs its own pending flow - see GameState.pendingDiscardUpToThenDraw. */
 export interface DiscardUpToThenDrawThatManyEffect {
   type: 'discardUpToThenDrawThatMany';
+  /** "...discard ANY NUMBER of cards..." (Celes, Rune Knight) - pass
+   * Infinity; the discard naturally stops once hand is empty regardless
+   * (see engine/actions.ts: resolveDiscardUpToThenDraw's stillEligible
+   * check), so there's no separate "unbounded" flag needed. */
   maxCount: number;
+  /** "...then draw that many cards PLUS ONE." (Celes, Rune Knight) - unlike
+   * every other current card using this effect (which draw EXACTLY how
+   * many were discarded), this draws one extra on top. */
+  plusOne?: boolean;
 }
 
 /** "Deals 5 damage to target creature and X damage to that creature's
@@ -3660,6 +4082,7 @@ export interface PhaseOutAnyNumberOfTargetControlledNonlandPermanentsEffect {
 export type CardEffect =
   | CreateTokenEffect
   | TapAndStunEffect
+  | TapTargetThenCounterSelfByPowerDifferenceIfGreaterEffect
   | UntapTargetAttackerEffect
   | PutStunCounterOnTargetAttackerEffect
   | TapStunAndGainLifeForNonbasicLandsEffect
@@ -3673,6 +4096,7 @@ export type CardEffect =
   | SurveilEffect
   | MillThenReturnEffect
   | ReturnTargetAuraOrEquipmentFromGraveyardToHandEffect
+  | ReturnTargetNonAssassinHistoricFromGraveyardToHandEffect
   | LootEffect
   | GainLifeEffect
   | OptionalBounceEffect
@@ -3688,10 +4112,22 @@ export type CardEffect =
   | LookAtTopNPutMToHandRestToBottomEffect
   | ConniveConvokingCreaturesEffect
   | BecomeMonarchEffect
+  | OpponentChoosesOneOfExiledCardsToBottomRestReturnsTappedThenBecomeMonarchEffect
   | ExileTargetCreatureUntilMonarchChangesEffect
+  | ExileUpToOneOtherTargetCreatureThenControllerGainsLifeEqualToItsPowerEffect
+  | RevealOpponentHandChooseNonlandCardThenDiscardEffect
+  | DivideDamageAmongChosenTargetsEffect
+  | GraveyardToBottomOfLibraryForTargetPlayerEffect
+  | AllCreaturesGetNegativeChosenXUntilEndOfTurnEffect
+  | AnyPlayerMayPayHalfLifeToCounterThenExtraTurnEffect
+  | SearchOpponentLibraryExileFaceDownThenMayPlayEffect
+  | PumpTargetOwnCreatureByControlledSubtypeCountEffect
+  | CreateTokenIfOpponentControlsMoreCreaturesThanYouEffect
   | EachOpponentWhoLostLifeSacrificesGreatestPowerCreatureEffect
   | PumpTargetEffect
   | GrantKeywordToOtherAttackersEffect
+  | GrantKeywordToAnotherTargetAttackingCreatureEffect
+  | MugEffect
   | LoseLifeEffect
   | EachPlayerLosesLifeEffect
   | PumpControlledSubtypeEffect
@@ -3713,6 +4149,7 @@ export type CardEffect =
   | PutCounterOnEachCreatureTargetPlayerControlsEffect
   | PutCounterOnUpToOneOwnCreatureEffect
   | AttachSelfToTargetEffect
+  | AttachSelfToFixedTargetEffect
   | RevealTopThenLoseLifeByManaValueEffect
   | MayPayLifeThenEffect
   | MayEffectEffect
@@ -3746,6 +4183,7 @@ export type CardEffect =
   | ChooseCreatureDealsDamageToOpponentCreatureEffect
   | IfKickedEffect
   | IfControlAtLeastCreaturesEffect
+  | IfControlCreatureWithPowerAtLeastEffect
   | SearchLibraryOrGraveyardForArtifactEffect
   | MillThenPutCreaturesOntoBattlefieldEffect
   | ReturnSpecificInstancesToOwnersHandEffect
@@ -3774,6 +4212,8 @@ export type CardEffect =
   | ExileThenReturnTargetOwnCreatureEffect
   | QueueExtraEndStepIfFirstEndStepOfTurnEffect
   | AttachAllControlledEquipmentToTargetCreatureEffect
+  | AttachAllControlledEquipmentToSelfEffect
+  | AttachTargetControlledEquipmentToTargetRebelEffect
   | DealDamageToAnyOtherTargetAndSelfEffect
   | PutCounterOnTargetLandEffect
   | PutCounterOnTargetCommanderEnteredThisTurnEffect
@@ -3787,6 +4227,7 @@ export type CardEffect =
   | EachOpponentDiscardsEffect
   | EachOpponentLosesLifeEffect
   | PumpSelfByGraveyardCountEffect
+  | PumpSelfByGreatestControlledArtifactManaValueEffect
   | MillOpponentByLifeGainedThisTurnEffect
   | PumpSelfEffect
   | ExileTargetGraveyardCardEffect
@@ -3809,8 +4250,10 @@ export type CardEffect =
   | CreateTokenIfNotControllingNamedEffect
   | DebuffOpponentCreaturesEffect
   | MillSelfEffect
+  | EachPlayerMillsEffect
   | DamageTargetCreatureEqualToCreaturesAndEquipmentEffect
   | TapAllOpponentCreaturesEffect
+  | OpponentsCantCastNoncreatureSpellsThisTurnEffect
   | DestroyAllEffect
   | DamageEachCreatureEffect
   | DamageEachOpponentEqualToGraveyardNoncreatureNonlandCountEffect
@@ -3827,6 +4270,7 @@ export type CardEffect =
   | MillEachOpponentByYourHandSizeEffect
   | DamageTargetCreatureEqualToOtherControlledSubtypePowerEffect
   | SearchLibraryForSubtypeEffect
+  | SearchLibraryForCreatureWithManaValueAtMostEffect
   | ExileTopOfEachOpponentLibraryEffect
   | DamageAnyTargetEffect
   | SupportEffect
@@ -3864,6 +4308,7 @@ export type CardEffect =
   | GainControlOfAllArtifactsControlledByOpponentEffect
   | WinGameIfControlAtLeastNOfTypeEffect
   | EachOpponentMaySacrificeNontokenCreatureElseLoseLifePerInstantSorceryEffect
+  | OpponentMayHaveYouDrawElseMillAndDealDamageEffect
   | MayAttachTargetControlledEquipmentToSelfEffect
   | AddManaEqualToOwnLoreCounterEffect
   | DrawCardsEqualToGreatestPowerEffect
@@ -4330,6 +4775,14 @@ export interface CardDefinition {
    * used everywhere a land's colorless tap is actually added to or refunded
    * from the mana pool. */
   doublesColorlessManaFromLands?: boolean;
+  /** "If you tap a permanent for mana, it produces three times as much of
+   * that mana instead." (The Cloudsea Djinn) - unlike
+   * doublesColorlessManaFromLands above (lands only, {C} only), this
+   * applies unconditionally: any permanent, any color. Stacks
+   * multiplicatively with doublesColorlessManaFromLands when both are
+   * controlled (e.g. a colorless-producing land under both becomes ×6).
+   * See engine/actions.ts: effectiveProducedManaAmount. */
+  triplesAllManaProduced?: boolean;
   abilities?: CardAbility[];
   /** Marks this as an Aura or Equipment - what kind of permanent it can be
    * attached to. See CardInstance.attachedToInstanceId and
@@ -4338,6 +4791,14 @@ export interface CardDefinition {
   /** Equipment only - mana cost to attach/reattach. Auras don't have this;
    * they attach for free once, right after casting, via the same Attach flow. */
   equipCost?: string;
+  /** "Equip legendary creature {3}" alongside a plain "Equip {7}"
+   * (Wrecking Ball Arm) - a CHEAPER alternate cost that only applies when
+   * the chosen target is legendary. Auto-selected whenever the target
+   * qualifies (there's never a reason to pay the pricier equipCost on a
+   * legendary target instead), same "auto-pick the better option" approach
+   * as Metalcraft's whole-cost override - no "which equip ability"
+   * selection UI needed. See engine/actions.ts: attachCard. */
+  equipCostIfTargetLegendary?: string;
   /** "Equipped creature gets +X/+Y" (e.g. Coral Sword) - a static buff applied
    * to whatever this Equipment is currently attached to. See
    * engine/combat.ts: effectivePower/effectiveToughness. Distinct from
@@ -4410,6 +4871,18 @@ export interface CardDefinition {
    * (Xande, Dark Mage) - the graveyard-count cousin of
    * powerBonusPerControlledLand, recomputed live the same way. */
   powerBonusPerGraveyardNoncreatureNonland?: number;
+  /** "This token gets +1/+1 for each artifact you control." (Terra
+   * Branford's Construct token) - the controlled-artifact-count cousin of
+   * powerBonusPerGraveyardNoncreatureNonland above, same "+N/+N applied to
+   * BOTH stats" shape (checked in both effectivePower and
+   * effectiveToughness), recomputed live. Matched by def.type === 'artifact'
+   * only, same convention as every other artifact count in this engine
+   * (e.g. controlledArtifactCountBaseStat) - an Artifact CREATURE (type:
+   * 'creature', "Artifact Creature" only in its subtype text, like this
+   * Construct itself) does NOT self-count, matching real Magic rules too
+   * (the Construct's own ability only counts OTHER/all artifacts, and here
+   * it happens to not be type==='artifact' itself anyway). */
+  powerBonusPerControlledArtifact?: number;
   /** "During your turn, as long as [this] is equipped, it has [keywords]"
    * (Cloud, Planet's Champion's double strike + indestructible) - unlike
    * equipGrantsKeywordDuringOwnTurn (the EQUIPMENT granting a keyword to
@@ -4417,6 +4890,18 @@ export interface CardDefinition {
    * care which Equipment it is, only that it's currently equipped by
    * something. See engine/combat.ts: hasBoardGrantedKeyword. */
   hasKeywordsWhileEquipped?: string[];
+  /** "As long as you've cast two or more noncreature spells this turn, [this]
+   * has double strike." (Lyse Hext) - a STATIC self-grant conditioned on
+   * PlayerState.noncreatureSpellsCastThisTurn, unlike every "gains double
+   * strike until end of turn" reactive grant elsewhere in this file. Checked
+   * in engine/combat.ts: hasBoardGrantedKeyword, not gated to the
+   * controller's own turn (double strike also matters while blocking on the
+   * opponent's turn). Note: this card's own printed text contains the
+   * literal phrase "double strike", so it also needs
+   * excludeSelfKeywords: ['double strike'] - otherwise the naive
+   * substring-based hasKeyword check in engine/keywords.ts would make it
+   * unconditionally true. */
+  hasDoubleStrikeIfControllerCastTwoOrMoreNoncreatureSpellsThisTurn?: boolean;
   /** "Equip abilities you activate that target [this] cost N less to
    * activate" (Cloud, Planet's Champion) - checked against the EQUIP
    * TARGET's own definition (not the equipment's), same generic-cost-only,
@@ -4442,6 +4927,36 @@ export interface CardDefinition {
    * and engine/actions.ts: castCreatureFromGraveyardViaGrant. Sorcery-speed
    * only (own turn, main phase), like an ordinary creature cast. */
   grantsOncePerTurnCastCreatureFromGraveyardIfNotFromBattlefield?: boolean;
+  /** "Once during each of your turns, you may cast an artifact spell from
+   * your graveyard. If you cast a spell this way, that artifact enters
+   * tapped." (Edgar, Master Machinist) - the artifact-filtered cousin of
+   * grantsOncePerTurnCastCreatureFromGraveyardIfNotFromBattlefield just
+   * above: same shared PlayerState.usedGraveyardCastPermissionThisTurn flag
+   * (only one such grant is expected in play at once, under the legend
+   * rule), same NORMAL-cost/sorcery-speed-only shape, but with no
+   * graveyardEntrySource restriction (ANY artifact in the graveyard
+   * qualifies, not just one that entered this turn) and the returned
+   * permanent always enters tapped regardless of its own printed
+   * entersTapped. A separate GameAction/function
+   * (CAST_ARTIFACT_FROM_GRAVEYARD_VIA_GRANT / castArtifactFromGraveyardViaGrant)
+   * rather than generalizing castCreatureFromGraveyardViaGrant itself, to
+   * avoid touching Banon's already-working, differently-conditioned path. */
+  grantsOncePerTurnCastArtifactFromGraveyardEntersTapped?: boolean;
+  /** "You may play lands and cast spells from the top of your library. If
+   * you cast a spell this way, pay life equal to its mana value rather than
+   * pay its mana cost." (Kefka's Tower) - a LIVE, always-on permission
+   * (unlike every exilePlayGrants-based "play from X" mechanic elsewhere in
+   * this engine, which are per-card queued grants): checked fresh every
+   * time against whether the controller currently has ANY permanent with
+   * this field, against whatever card is CURRENTLY sitting on top of their
+   * library. See engine/actions.ts: castFromLibraryTop (its own dedicated
+   * function, mirroring castFromExile/castFromGraveyard's "separate
+   * function per alternate-zone cast source" convention rather than
+   * threading a new lookup branch through castCard's already-enormous
+   * body). "You may look at the top card of your library any time" is
+   * satisfied for free by this - the UI has to show it face-up for it to
+   * be clickable at all. */
+  grantsPlayFromTopOfLibrary?: { payLifeInsteadOfManaCost?: boolean };
   /** "As long as this card is in your graveyard and you control a [landName],
    * creatures you control have [keyword]." (Anger) - the graveyard-sourced
    * sibling of staticAnthemForControlledSubtype's subtype: '*' case (same
@@ -4649,6 +5164,19 @@ export interface CardDefinition {
    * CardInstance flag (onAnyCreatureDeathAnywhereDrawUsedThisTurn). See
    * engine/combat.ts: moveCreaturesToGraveyard. */
   onAnyCreatureDeathAnywhereDraw?: boolean;
+  /** "Whenever another creature dies, ... [this] deals 1 damage to each
+   * opponent." (Golbez, Clad in Darkness) - the damage-dealing cousin of
+   * onAnyCreatureDeathAnywhereDraw just above: same "any board, excluding
+   * the watcher itself" shape, but with NO once-per-turn limiter (the
+   * printed text has none) and fires once PER qualifying death rather than
+   * once per batch, so simultaneous deaths deal cumulative damage. Only
+   * the first of Golbez's three OR'd trigger conditions ("another creature
+   * dies") is implemented - "a creature card is put into a graveyard from
+   * anywhere other than the battlefield" and "a creature card leaves your
+   * graveyard" have no central watcher to hook into and are deferred, same
+   * "implement the reachable majority" convention as Fatal Push's Revolt.
+   * See engine/combat.ts: moveCreaturesToGraveyard. */
+  onAnyCreatureDeathAnywhereDamageEachOpponent?: number;
   /** "Whenever another creature or artifact you control dies, put a
    * [counterLabel] counter on [this]" (Judge Magister Gabranth) - same
    * watcher shape as onAnyDeathDrain, just puts a counter on the watcher
@@ -4688,6 +5216,16 @@ export interface CardDefinition {
    * unblocked attacker the controller has, for every permanent they control
    * carrying this field. See engine/actions.ts: applyCombatDamageToPlayerTriggers. */
   onAnyControlledCreatureCombatDamageToPlayer?: CardEffect[];
+  /** "Whenever one or more creatures you control deal combat damage to a
+   * player, [effect]." (Vincent, Vengeful Atoner) - unlike
+   * onAnyControlledCreatureCombatDamageToPlayer above, which fires once PER
+   * unblocked attacker, this fires at most ONCE per combat regardless of
+   * how many of the controller's creatures connected, matching the printed
+   * "one or more" batching (so a simultaneous multi-attacker alpha strike
+   * doesn't put multiple counters on in a single combat). Computed in a
+   * separate pass after the main per-attacker loop. See engine/actions.ts:
+   * applyCombatDamageToPlayerTriggers. */
+  onAnyControlledCreatureOneOrMoreCombatDamageToPlayer?: CardEffect[];
   /** "Whenever a creature you control deals combat damage to a player, put a
    * [counterLabel] counter on THAT CREATURE" (Sphere Grid) - unlike
    * onAnyControlledCreatureCombatDamageToPlayer above (whose CardEffect list
@@ -4794,6 +5332,37 @@ export interface CardDefinition {
    * check against the FRONT face's own haste (not this back face's). See
    * engine/combat.ts: moveCreaturesToGraveyard. */
   onDeathReturnToBattlefieldTapped?: boolean;
+  /** "Undying (When this creature dies, if it had no +1/+1 counters on it,
+   * return it to the battlefield under its owner's control with a +1/+1
+   * counter on it.)" (Flayer of the Hatebound) - the CONDITIONAL cousin of
+   * onDeathReturnToBattlefieldTapped above: same replacement-effect priority
+   * tier, but only redirects away from the graveyard if the dying instance
+   * had no +1/+1 counters already on it (checked against the dying
+   * CardInstance, before this redirect would add one). Returns UNTAPPED
+   * (unlike Galian Beast's own always-tapped return) with a fresh +1/+1
+   * counter, and a fresh summoning-sickness check against its own haste,
+   * same "genuinely new object" convention. See engine/combat.ts:
+   * moveCreaturesToGraveyard. */
+  hasUndying?: boolean;
+  /** "Whenever this creature or another creature enters from your
+   * graveyard, that creature deals damage equal to its power to any
+   * target." (Flayer of the Hatebound) - unlike every other
+   * graveyard-enters-the-battlefield trigger in this engine (which fire
+   * through engine/effects.ts: triggerCreatureEnterWatchers from a normal
+   * cast/reanimate action in engine/actions.ts), the creatures THIS card
+   * cares about most often arrive via a death-REPLACEMENT effect
+   * (hasUndying above, or onDeathReturnToBattlefieldTapped) that happens
+   * inside engine/combat.ts: moveCreaturesToGraveyard, which can't call
+   * resolveCardEffects directly (same circular-import wall
+   * pendingEquipmentDeathEffects already works around). So this is queued
+   * onto GameState.pendingCreatureEnteredFromGraveyardEffects instead,
+   * drained by engine/effects.ts: resolveOnDeathTriggers right alongside
+   * that queue - which runs after EVERY moveCreaturesToGraveyard call site,
+   * combat or not. Checked against every creature the controller has with
+   * this flag (not just the source), once per creature that returns this
+   * way - "this creature or another creature" are symmetric, each
+   * triggering independently. */
+  dealsDamageEqualToPowerWhenCreatureEntersFromGraveyard?: boolean;
   /** "{T}, Sacrifice this: ..." folded into a single tap (e.g. a Treasure
    * token's "Tap, Sacrifice this token: Add one mana of any color") - copied
    * onto every instance of this token as it's created (see engine/effects.ts:
@@ -4858,8 +5427,14 @@ export interface CardDefinition {
    * sacrifice) - omitted entirely declines to kick. Whether the spell WAS
    * kicked is then threaded into engine/effects.ts: resolveCardEffects as
    * `wasKicked`, consumed by IfKickedEffect wherever onCast/onEnter needs to
-   * branch on it. See engine/actions.ts: castCard. */
-  kicker?: { cost: 'returnLandToHand' | 'sacrificeCreatureOrArtifact' };
+   * branch on it. See engine/actions.ts: castCard.
+   * 'mana' (Rite of Replication's "Kicker {5}") - the much more common real
+   * form of Kicker, a plain additional MANA cost rather than a specific
+   * permanent paid as an alternate cost; `manaCost` holds that cost string,
+   * merged on top of the printed cost the same way Multikicker/TieredMode
+   * are, and the player opts in via GameAction 'CAST_CARD's payManaKicker
+   * instead of naming a permanent. */
+  kicker?: { cost: 'returnLandToHand' | 'sacrificeCreatureOrArtifact' | 'mana'; manaCost?: string };
   /** "Convoke (Your creatures can help cast this spell. Each creature you tap
    * while casting this spell pays for {1} or one mana of that creature's
    * color.)" (Clever Concealment) - see GameAction 'CAST_CARD's
@@ -4871,6 +5446,15 @@ export interface CardDefinition {
    * matches before falling back to generic, rather than asking the player to
    * choose (simpler action shape, same outcome in practice). */
   convoke?: boolean;
+  /** "Nonartifact spells you cast have improvise. (Your artifacts can help
+   * cast those spells. Each artifact you tap after you're done activating
+   * mana abilities pays for {1}.)" (Inspiring Statuary) - unlike convoke
+   * (a property of the SPELL being cast), this is a board-wide grant from
+   * a permanent the controller controls, checked against every OTHER
+   * nonartifact spell they cast. No color-matching (always generic only,
+   * same as real Improvise) - see GameAction 'CAST_CARD's
+   * improviseInstanceIds, engine/actions.ts: castCard. */
+  grantsImproviseToNonartifactSpells?: boolean;
   /** "Multikicker [cost]" (Everflowing Chalice) - like Kicker, an OPTIONAL
    * additional mana cost paid alongside the card's own printed cost, but
    * payable ANY NUMBER of times rather than just once. GameAction
@@ -4896,6 +5480,19 @@ export interface CardDefinition {
    * (never below 0), applied in engine/actions.ts: castCard, before
    * checking affordability. */
   costReductionPerGraveyardPermanent?: number;
+  /** "This spell costs {1} less to cast for each creature card in your
+   * graveyard." (Cyan, Vengeful Samurai) - the CREATURE-only cousin of
+   * costReductionPerGraveyardPermanent above (which also counts artifacts/
+   * enchantments/lands). See engine/mana.ts: dynamicCostReduction. */
+  costReductionPerGraveyardCreature?: number;
+  /** "Whenever one or more creature cards leave your graveyard, put a
+   * [counterLabel] counter on [this]." (Cyan, Vengeful Samurai) - see
+   * engine/actions.ts: checkGraveyardCreatureLeaveWatchers, a global
+   * before/after diff run after every action (same shape as
+   * GameState.battlefieldLeaveWatchers' own check), rather than a flag
+   * threaded through every individual graveyard-removal call site. Fires
+   * at most once per action regardless of how many cards left at once. */
+  onAnyOwnCreatureCardLeaveGraveyardPutCounterOnSelf?: { counterLabel: string; counterAmount: number };
   /** "Affinity for [subtype]s" (Travel the Overworld's "Affinity for Towns")
    * - reduces the GENERIC portion of the cost by `amountPerUnit` for each
    * controlled permanent matching `subtype` (never below 0), same
@@ -4930,6 +5527,11 @@ export interface CardDefinition {
    * other reduction here. See engine/mana.ts: dynamicCostReduction, which
    * now also scans the caster's battlefield for these. */
   reducesCastCostForColor?: { color: Exclude<ManaColor, 'C'>; amount: number };
+  /** "Noncreature spells you cast cost [N] less to cast" (Lyse Hext) - the
+   * type-keyed cousin of reducesCastCostForColor just above: same board-wide
+   * shape, but matched against the cast card's def.type !== 'creature'
+   * instead of a mana color pip. See engine/mana.ts: dynamicCostReduction. */
+  reducesCastCostForNoncreatureSpells?: number;
   /** "The first legendary creature spell you cast each turn costs [N] less
    * to cast" (Serah Farron, Crystallized Serah) - board-wide, like
    * reducesCastCostForColor, but filtered to legendary creature spells and
@@ -4998,6 +5600,15 @@ export interface CardDefinition {
    * was already summoning-sick before the anthem existed, since nothing
    * rechecks it dynamically after that point. */
   staticAnthemForControlledSubtype?: { subtype: string; power: number; toughness: number; grantKeywords?: string[] };
+  /** "Creature tokens you control get +X/+Y." (Hildibrand Manderville) - the
+   * isToken-filtered cousin of staticAnthemForControlledSubtype just above
+   * (matched against CardInstance.isToken instead of a subtype string).
+   * See engine/combat.ts: anthemBuffBonus for power/toughness,
+   * hasBoardGrantedKeyword for grantKeywords. Deliberately only this evergreen
+   * anthem clause is implemented for Hildibrand right now - its "dies, may
+   * cast as an Adventure" trigger and the Gentleman's Rise Adventure half are
+   * deferred until this engine's Adventure-card support is built. */
+  staticAnthemForControlledTokens?: { power: number; toughness: number; grantKeywords?: string[] };
   /** "Creatures you control with a [counterLabel] counter on them have
    * [grantKeywords]" (Sphere Grid's Unlock Ability) - the counter-based
    * sibling of staticAnthemForControlledSubtype above: same always-on (not
@@ -5135,6 +5746,15 @@ export interface CardDefinition {
    * 'returnSelfFromGraveyardTappedAndAttacking' }]) when at least one
    * declared attacker is legendary. */
   onAttackWithLegendaryReturnSelfFromGraveyardTappedAndAttacking?: { manaCost: string };
+  /** "Whenever this artifact becomes untapped, you may pay [manaCost]. If
+   * you do, [effects]." (Key to the City) - checked in engine/actions.ts:
+   * runUntapStep against every permanent that just transitioned from
+   * tapped to untapped during the controller's own untap step (the only
+   * "untap" path this is wired into - same scope limitation as other
+   * single-call-site triggers elsewhere). Arms the existing
+   * pendingOptionalPayMana (a single slot, not a queue - if more than one
+   * such permanent untaps in the same step, only the first is offered). */
+  onSelfUntapMayPayThenDraw?: { manaCost: string; effects: CardEffect[] };
   /** "When this permanent transforms into [this], ..." (Black Chocobo) -
    * checked against the BACK face's own definition, fired once right as the
    * transform completes (either a free FLIP_CARD or a paid transformSelf
@@ -5161,6 +5781,17 @@ export interface CardDefinition {
    * buffs are added on top). Toughness is unaffected - the card has a
    * normal printed toughness. See engine/combat.ts: effectivePower. */
   basePowerEqualsOpponentControlledArtifactCount?: boolean;
+  /** "[This creature]'s power is equal to the number of artifacts you
+   * control." (Bronze Guardian) - the "your OWN artifacts" cousin of
+   * basePowerEqualsOpponentControlledArtifactCount above, same base-
+   * override layer as basePowerEqualsControlledCreatureCount. Like every
+   * other artifact-count check in this engine (e.g. Puresteel Paladin's
+   * Metalcraft), this matches CardDefinition.type === 'artifact' only -
+   * Bronze Guardian's own type is 'creature' (its "Artifact Creature"
+   * status lives only in its printed subtype text), so it does NOT count
+   * itself, same known limitation as every other artifact-counting field
+   * here. See engine/combat.ts: effectivePower. */
+  basePowerEqualsControlledArtifactCount?: boolean;
   /** "Whenever an opponent activates an ability of an artifact they
    * control, [this] deals [amount] damage to that player." (Avalanche of
    * Sector 7) - checked in engine/actions.ts: activateAbility right after
@@ -5212,6 +5843,11 @@ export interface CardDefinition {
    * Summon: Leviathan, Raubahn's dynamic "pay life equal to Raubahn's
    * power"). See WardCost, engine/combat.ts: effectiveWardCost. */
   wardCost?: WardCost;
+  /** "Other artifacts you control have ward [cost]." (Bronze Guardian) -
+   * an always-on anthem grant, excluding the granting permanent itself
+   * ("other") since that one already has its own printed wardCost. See
+   * engine/combat.ts: effectiveWardCost. */
+  grantsWardToOtherControlledArtifacts?: WardCost;
   /** "Equipped creature has ward [cost]" (Paladin's Arms) - the
    * equipment-granted counterpart to wardCost, same pattern as
    * equipGrantsKeyword vs. a permanent's own printed keyword. */
@@ -5257,6 +5893,29 @@ export interface CardDefinition {
    * payAlternateLifeCost (no silent fallback to normal mana payment if the
    * land condition isn't met). See engine/actions.ts: castCard. */
   alternateCastCostPayLifeIfControlLandName?: { landName: string; lifeCost: number };
+  /** "Evoke—Exile a [color] card from your hand." (the Modern Horizons 2
+   * Elemental Incarnations - Subtlety's blue, and the others this engine
+   * will likely need too: Solitude/white, Grief/black, Fury/red,
+   * Endurance/green) - an alternate TOTAL cost (not a discount), requested
+   * explicitly via GameAction 'CAST_CARD's evokeExileInstanceId (the
+   * specific OTHER card in hand to exile; no silent fallback to normal
+   * mana payment if it doesn't match `color`). Deliberately does NOT
+   * implement the real template's "When this creature enters, if its
+   * evoke cost was paid, sacrifice it" - that clause isn't present in
+   * this card's own printed text (this engine's card data is the source
+   * of truth, not the real Magic card), so a card using this field keeps
+   * its evoked copy on the battlefield permanently unless some other
+   * printed clause says otherwise. See engine/actions.ts: castCard. */
+  evokeCost?: { exileColor: Exclude<ManaColor, 'C'> };
+  /** "As an additional cost to cast this spell, pay X life." (Toxic
+   * Deluge) - unlike useAlternateLifeCost/evokeCost (both REPLACE the
+   * mana cost), this is paid ON TOP OF it. X has no {X} in the printed
+   * mana cost at all (unlike parsed.hasX cards) - it's a free-choice
+   * amount tied only to this life payment, requested via the same
+   * GameAction 'CAST_CARD's chosenX slot every {X}-cost card already
+   * uses (reused here without ever feeding extraGeneric). See
+   * engine/actions.ts: castCard. */
+  additionalCostPayXLife?: boolean;
   /** See BlitzAbility - an alternate cast mode (from hand OR graveyard)
    * paying a different mana cost plus discarding a card, granting haste
    * and a death-trigger draw, then sacrificing itself at the next end
@@ -5324,6 +5983,17 @@ export interface CardDefinition {
   /** "...or block." (Observed Stasis, continuing attachedPreventsAttacking
    * above) - the blocking half, checked in engine/actions.ts: declareBlockers. */
   attachedPreventsBlocking?: boolean;
+  /** "[This] can't be blocked by creatures with greater power." (Locke,
+   * Treasure Hunter) - checked against effectivePower at the moment
+   * blockers are declared. See engine/actions.ts: declareBlockers. */
+  cantBeBlockedByCreaturesWithGreaterPower?: boolean;
+  /** "Equipped creature ... can't be blocked by creatures with power [N] or
+   * less." (Wrecking Ball Arm) - the equip-granted, inverse-threshold
+   * cousin of cantBeBlockedByCreaturesWithGreaterPower above (that one is a
+   * creature's own printed ability; this is granted by an attached
+   * Equipment instead). Checked the same way, in
+   * engine/actions.ts: declareBlockers. */
+  equipGrantsCantBeBlockedByCreaturesWithPowerAtMost?: number;
   /** "When [this] is put into a graveyard from the battlefield, return it
    * to its owner's hand." (Eye of Nidhogg) - checked at BOTH places a
    * non-creature permanent can reach the graveyard: engine/state.ts:
@@ -5334,6 +6004,15 @@ export interface CardDefinition {
    * destination from graveyard to hand; no "loses all abilities" is
    * stripped by this flag, that's a separate (deferred) clause. */
   returnsSelfToHandOnDeath?: boolean;
+  /** "When this creature dies, put it on the bottom of its owner's library."
+   * (Murderous Rider) - the bottom-of-library cousin of
+   * returnsSelfToHandOnDeath just above, same replacement-effect shape
+   * (never actually reaches the graveyard). Only checked in
+   * engine/combat.ts: moveCreaturesToGraveyard - no current card with this
+   * flag can be an Aura's enchanted permanent, so unlike
+   * returnsSelfToHandOnDeath it doesn't need an engine/state.ts:
+   * detachEverythingFrom branch too. */
+  onDeathPutOnBottomOfOwnersLibrary?: boolean;
   /** Combat keywords this card's OWN text mentions (as plain prose, e.g.
    * "Demons you control have menace") but that do NOT apply to the card
    * itself - only to something else the text is granting them to. Without
@@ -5353,6 +6032,13 @@ export interface CardDefinition {
    * more than one keyword at once (Samurai's Katana's trample AND haste).
    * See engine/combat.ts: hasEquipGrantedKeyword. */
   equipGrantsKeyword?: string | string[];
+  /** "As long as equipped creature is legendary, it has [keyword]."
+   * (Champion's Helm) - the conditional cousin of equipGrantsKeyword
+   * above (unconditional), checked live against the EQUIPPED creature's
+   * own printed subtype (same "legendary" substring match as
+   * checkLegendRule and every other legendary check in this engine). See
+   * engine/combat.ts: hasEquipGrantedKeyword. */
+  equipGrantsKeywordIfEquippedLegendary?: string | string[];
   /** "Equipped creature ... loses KEYWORD" (Colossus Hammer's "loses
    * flying") - the removal cousin of equipGrantsKeyword above. Scoped down
    * to the one call site where losing flying actually changes anything
@@ -5394,6 +6080,14 @@ export interface CardDefinition {
    * EQUIPMENT's own instanceId as source (the equipped creature is already
    * gone by the time this runs). */
   equipGrantsOnDeath?: CardEffect[];
+  /** "Whenever a legendary creature you control enters, you may attach this
+   * Equipment to it." (Hero's Blade) - checked in engine/effects.ts:
+   * triggerCreatureEnterWatchers for every OTHER creature (naturally
+   * excluded by the entered-permanent's own type check - an Equipment is
+   * never a creature) that enters under the SAME controller as this
+   * Equipment. See AttachSelfToFixedTargetEffect, wrapped in a
+   * MayEffectEffect for the "you may". */
+  mayAttachSelfToControlledLegendaryCreatureOnEnter?: boolean;
   /** "Equipped creature has '{T}: Add [color].'" (Summoning Materia) - grants
    * a tap-for-mana ability to whatever this Equipment is attached to, same
    * priority tier as CardDefinition.grantsManaAbilityToOthers (checked
@@ -5464,6 +6158,20 @@ export interface CardDefinition {
    * triggerCreatureEnterWatchers, called from the same castCard/
    * castFromGraveyard hook points as the other enter-watchers. */
   onAnyOtherControlledCreatureEnterTrigger?: CardEffect[];
+  /** "Whenever one or more other creatures you control enter, if one or
+   * more of them entered from a graveyard or was cast from a graveyard,
+   * put a +1/+1 counter on each creature you control." (Celes, Rune
+   * Knight) - checked against the `fromGraveyard` flag threaded into
+   * engine/effects.ts: triggerCreatureEnterWatchers, true only from its two
+   * explicit "cast FROM a graveyard" call sites (castFromGraveyard,
+   * castCreatureFromGraveyardViaGrant). "Entered from a graveyard" via
+   * reanimation effects is a known gap - those call sites don't call
+   * triggerCreatureEnterWatchers at all yet (a pre-existing limitation,
+   * not something this card's implementation introduces). Approximated as
+   * firing per individual entering creature (same collapsing-to-per-event
+   * convention as every other "whenever one or more..." trigger here)
+   * rather than batching multiple simultaneous entries into one trigger. */
+  onAnyOtherControlledCreatureEnterFromGraveyardPutCounterOnAllControlledCreatures?: boolean;
   /** "Creatures your opponents control enter tapped. Whenever a creature
    * an opponent controls enters, you gain [lifeGain] life." (Authority of
    * the Consuls) - bundled into one field since both clauses trigger off
@@ -5565,6 +6273,22 @@ export interface CardDefinition {
    * NoncreatureCastTrigger) - a creature spell of the right color counts
    * too. */
   onOwnCastColorSpellTrigger?: { color: Exclude<ManaColor, 'C'>; effects: CardEffect[] }[];
+  /** "Whenever you cast a historic spell, put a +1/+1 counter on Elena."
+   * (Elena, Turk Recruit) - the historic-filtered cousin of
+   * onOwnCastAnySpellTrigger above, checked against the actually-cast
+   * spell's own def.type === 'artifact' / !!def.saga / 'legendary' subtype
+   * substring (same "historic" test as
+   * ReturnTargetNonAssassinHistoricFromGraveyardToHandEffect), in the SAME
+   * traversal/call site as onOwnCastColorSpellTrigger. */
+  onOwnCastHistoricSpellTrigger?: CardEffect[];
+  /** "Whenever you cast an Aura, Equipment, or Vehicle spell, draw a card."
+   * (Sram, Senior Edificer) - the subtype-filtered cousin of
+   * onOwnCastHistoricSpellTrigger above: matches if the actually-cast
+   * spell's def.subtype contains ANY of `subtypes` (case-insensitive
+   * substring, same convention as every other subtype filter in this
+   * engine), checked in the SAME traversal/call site as
+   * onOwnCastColorSpellTrigger. */
+  onOwnCastSubtypeSpellTrigger?: { subtypes: string[]; effects: CardEffect[] };
   /** "Whenever a permanent you control leaves the battlefield, if it had
    * counters on it, put those counters on target permanent you control."
    * (Resourceful Defense) - see MoveDeadPermanentCountersToTargetEffect's own
@@ -5984,6 +6708,36 @@ export interface PlayerState {
    * CardDefinition.reducesCastCostForSecondSpellEachTurn in engine/mana.ts:
    * dynamicCostReduction. Reset at the untap step. */
   spellsCastThisTurn?: number;
+  /** "As long as you've cast two or more noncreature spells this turn, [this]
+   * has double strike." (Lyse Hext) - the noncreature-only cousin of
+   * spellsCastThisTurn just above (which counts every spell, creature
+   * included), incremented alongside it in engine/actions.ts: castCard
+   * whenever def.type !== 'creature'. Checked live (>= 2, not just
+   * incremented past a threshold once) against
+   * CardDefinition.hasDoubleStrikeIfControllerCastTwoOrMoreNoncreatureSpellsThisTurn
+   * in engine/combat.ts: hasBoardGrantedKeyword. Reset at the untap step. */
+  noncreatureSpellsCastThisTurn?: number;
+  /** "Sacrifice this creature: Your opponents can't cast noncreature spells
+   * this turn." (Ranger-Captain of Eos) - set on the RESTRICTED player's own
+   * record (not the one who activated the ability), checked in
+   * engine/actions.ts: castCard. Reset at the CLEANUP step (not untap,
+   * unlike most "ThisTurn" flags here) - it's set on whichever player was
+   * restricted, not whoever's turn it is, so it has to clear when the
+   * current turn ends regardless of whose untap comes next. */
+  cantCastNoncreatureSpellsThisTurn?: boolean;
+  /** "Revolt — ... if a permanent left the battlefield under your control
+   * this turn." (Fatal Push) - set whenever ANY permanent this player
+   * controlled dies/is sacrificed/is destroyed (engine/combat.ts:
+   * moveCreaturesToGraveyard, the single highest-value, most centralized
+   * "a permanent left the battlefield" call site). NOT a comprehensive
+   * "any permanent leaving by any means" tracker - a bounced or exiled
+   * permanent doesn't set this, same kind of narrow, documented
+   * approximation this engine already uses for similar broad conditions
+   * (e.g. PlayerState.counterPutOnOwnCreatureThisTurn). Reset at the
+   * CLEANUP step, same reasoning as cantCastNoncreatureSpellsThisTurn just
+   * above - it tracks "this turn" for whichever player it was set on, not
+   * whoever's turn it currently is. */
+  permanentLeftBattlefieldThisTurn?: boolean;
   /** "Once during each of your turns, you may cast a creature spell..."
    * (Banon, the Returners' Leader's Pray) - set once used this turn, reset at
    * the untap step like the discount flag above. A single player-level flag
@@ -6122,6 +6876,13 @@ export interface GameState {
    * and drained immediately by engine/effects.ts: resolveOnDeathTriggers,
    * which runs right after every moveCreaturesToGraveyard call site. */
   pendingEquipmentDeathEffects: { effects: CardEffect[]; sourceInstanceId: string; controllerId: string }[];
+  /** Same queue-and-drain shape as pendingEquipmentDeathEffects above, for
+   * CardDefinition.dealsDamageEqualToPowerWhenCreatureEntersFromGraveyard
+   * (Flayer of the Hatebound) - populated by engine/combat.ts:
+   * moveCreaturesToGraveyard whenever a creature returns to the battlefield
+   * via a death-replacement effect (hasUndying, onDeathReturnToBattlefieldTapped),
+   * drained by engine/effects.ts: resolveOnDeathTriggers right alongside it. */
+  pendingCreatureEnteredFromGraveyardEffects: { effects: CardEffect[]; sourceInstanceId: string; controllerId: string }[];
   /** Players who've pressed "Resolve Combat" during the combat_damage step -
    * damage only actually happens once both are in here, so there's always
    * a window to cast an instant in response. See engine/actions.ts. */
@@ -6134,6 +6895,7 @@ export interface GameState {
     controllerId: string;
     effect:
       | TapAndStunEffect
+      | TapTargetThenCounterSelfByPowerDifferenceIfGreaterEffect
       | TapStunAndGainLifeForNonbasicLandsEffect
       | ChooseCreatureDebuffOthersAndWatchLeaveEffect
       | GrantTemporaryBaseStatsAndDeathReturnEffect
@@ -6166,6 +6928,9 @@ export interface GameState {
       | GrantKeywordsToTargetPermanentEffect
       | GrantIndestructibleToTargetWhileSourceInPlayEffect
       | ExileTargetCreatureUntilMonarchChangesEffect
+      | ExileUpToOneOtherTargetCreatureThenControllerGainsLifeEqualToItsPowerEffect
+      | PumpTargetOwnCreatureByControlledSubtypeCountEffect
+      | GrantKeywordToAnotherTargetAttackingCreatureEffect
       | ExileTargetInstantOrSorceryFromOpponentGraveyardThenMayCastForFixedCostEffect
       | ReturnTargetCreatureFromGraveyardWithManaValueEqualToEffect
       | GainControlOfTargetCreatureEffect
@@ -6184,6 +6949,7 @@ export interface GameState {
       | PutCounterOnAnotherCreatureGrantsIndestructibleUntilNextTurnEffect
       | ExileThenReturnTargetOwnCreatureEffect
       | AttachAllControlledEquipmentToTargetCreatureEffect
+      | AttachTargetControlledEquipmentToTargetRebelEffect
       | DealDamageToAnyOtherTargetAndSelfEffect
       | PutCounterOnTargetLandEffect
       | PutCounterOnTargetCommanderEnteredThisTurnEffect
@@ -6337,8 +7103,10 @@ export interface GameState {
    * one permanent card is actually available (otherwise nothing to choose). */
   /** `filter: 'auraOrEquipment'` (Red XIII, Proud Warrior's Cosmo Memory)
    * narrows the choice from the default "any permanent card" down to just
-   * Aura/Equipment cards - see engine/actions.ts: returnFromGraveyard. */
-  pendingReturnFromGraveyard: { sourceInstanceId: string; controllerId: string; filter?: 'auraOrEquipment' } | null;
+   * Aura/Equipment cards; `filter: 'nonAssassinHistoric'` (Elena, Turk
+   * Recruit) narrows it to non-Assassin historic cards instead - see
+   * engine/actions.ts: returnFromGraveyard. */
+  pendingReturnFromGraveyard: { sourceInstanceId: string; controllerId: string; filter?: 'auraOrEquipment' | 'nonAssassinHistoric' } | null;
   /** Set while a LootEffect's discard step is outstanding - cleared by
    * DISCARD_CARD once `count` reaches 0 (or the hand runs out first). */
   pendingDiscard: {
@@ -6389,6 +7157,14 @@ export interface GameState {
    * Consumed (removed) when the card is actually played; expiresAtCleanup
    * grants are also swept at the cleanup step regardless. */
   exilePlayGrants: ExilePlayGrant[];
+  /** Every outstanding "may cast this card from a graveyard, for its
+   * normal printed cost, until end of turn" permission (Locke, Treasure
+   * Hunter's Mug) - the GRAVEYARD-residing cousin of exilePlayGrants
+   * (always expires at cleanup unconditionally; no overrideCostLabel/
+   * anyColorMana options since nothing using this yet needs them). See
+   * engine/actions.ts: castFromGraveyard (extended to accept a matching
+   * grant alongside its existing def.flashback path). */
+  graveyardPlayGrants: { instanceId: string; playerId: string }[];
   /** Set while an ExileTopOfTargetPlayerLibraryThenOptionalSacrificeToPlayEffect's
    * "you may sacrifice another creature or artifact" choice is outstanding -
    * cleared by RESOLVE_SACRIFICE_FOR_EXILE_PLAY (an instanceId to sacrifice,
@@ -6415,8 +7191,36 @@ export interface GameState {
   pendingPlayerTarget: {
     sourceInstanceId: string;
     controllerId: string;
-    effect: DrawCardsFromTargetPlayerEffect | PutCounterOnEachCreatureTargetPlayerControlsEffect | MayPutExactNamedCardFromLibraryToHandForTargetPlayerEffect;
+    effect:
+      | DrawCardsFromTargetPlayerEffect
+      | PutCounterOnEachCreatureTargetPlayerControlsEffect
+      | MayPutExactNamedCardFromLibraryToHandForTargetPlayerEffect
+      | GraveyardToBottomOfLibraryForTargetPlayerEffect;
   } | null;
+  /** Set while a RevealOpponentHandChooseNonlandCardThenDiscardEffect
+   * (Grief) is outstanding - `controllerId` makes the pick (not the
+   * `opponentId` whose hand it is, nor whose card gets discarded).
+   * Cleared by RESOLVE_CHOOSE_CARD_FROM_OPPONENT_HAND_TO_DISCARD. */
+  pendingChooseCardFromOpponentHandToDiscard: { sourceInstanceId: string; controllerId: string; opponentId: string } | null;
+  /** Set while a DivideDamageAmongChosenTargetsEffect (Fury) is being
+   * assigned - `remainingDamage` decreases with each pick,
+   * `chosenInstanceIds` excludes already-picked creatures from being
+   * picked again. Cleared (and the damage dealt) once remainingDamage
+   * reaches 0 or no further distinct targets remain. See
+   * engine/actions.ts: resolveDivideDamageAmongTargets. */
+  pendingDivideDamageAmongTargets: { sourceInstanceId: string; controllerId: string; remainingDamage: number; chosenInstanceIds: string[] } | null;
+  /** Set while an AnyPlayerMayPayHalfLifeToCounterThenExtraTurnEffect's
+   * choice is outstanding (Temporal Extortion) - `opponentId` is the
+   * DECIDER (see that effect's own doc comment for why "any player"
+   * simplifies to just the opponent). Cleared by
+   * RESOLVE_PAY_HALF_LIFE_TO_COUNTER_CHOICE. */
+  pendingPayHalfLifeToCounterChoice: { sourceInstanceId: string; controllerId: string; opponentId: string } | null;
+  /** Set while a SearchOpponentLibraryExileFaceDownThenMayPlayEffect
+   * (Praetor's Grasp) is outstanding - `controllerId` browses
+   * `opponentId`'s library (full information, same as every other library
+   * search in this engine). Cleared by
+   * RESOLVE_SEARCH_OPPONENT_LIBRARY_TO_EXILE. */
+  pendingSearchOpponentLibraryToExile: { sourceInstanceId: string; controllerId: string; opponentId: string } | null;
   /** Creature deaths processed this turn (incremented once per creature by
    * engine/combat.ts: moveCreaturesToGraveyard, regardless of cause - combat,
    * sacrifice, destroy, Saga completion, ...). Reset to 0 at the cleanup
@@ -6531,6 +7335,12 @@ export interface GameState {
    * the DECIDER, `controllerId` is whose graveyard the life-loss math
    * reads from if they decline. Cleared by RESOLVE_FANDANIEL_CHOICE. */
   pendingFandanielChoice: { sourceInstanceId: string; controllerId: string; opponentId: string; lifePerCard: number } | null;
+  /** Set while an OpponentMayHaveYouDrawElseMillAndDealDamageEffect's
+   * choice is outstanding (Combustible Gearhulk) - `opponentId` is the
+   * DECIDER, `controllerId` draws (if accepted) or deals the damage (if
+   * declined, to the decider). Cleared by
+   * RESOLVE_OPPONENT_MAY_HAVE_YOU_DRAW_ELSE_MILL_AND_DEAL_DAMAGE. */
+  pendingOpponentMayHaveYouDrawElseMillAndDealDamage: { sourceInstanceId: string; controllerId: string; opponentId: string; count: number } | null;
   /** Set at the start of `controllerId`'s upkeep for the first exiled card
    * still carrying CardInstance.pendingReboundNextUpkeep (Rebound) - see
    * ReboundAbility. Cleared by RESOLVE_REBOUND_CHOICE either way (accept
@@ -6552,6 +7362,13 @@ export interface GameState {
    * the moment monarchPlayerId changes away from `exilingControllerId`.
    * See engine/actions.ts: wherever monarchPlayerId is reassigned. */
   exileUntilMonarchChangesFrom: { exiledInstanceId: string; ownerPlayerId: string; exilingControllerId: string }[];
+  /** Set while an OpponentChoosesOneOfExiledCardsToBottomRestReturnsTappedThenBecomeMonarchEffect
+   * (Coin of Fate) is outstanding - `opponentId` (not `controllerId`) is
+   * who actually makes the pick, same "the other player decides" shape as
+   * pendingFandanielChoice. Cleared by RESOLVE_OPPONENT_CHOOSES_EXILED_CARD,
+   * mandatory (no decline - real rule forces a choice between exactly the
+   * two already-exiled cards). */
+  pendingOpponentChoosesExiledCard: { sourceInstanceId: string; controllerId: string; opponentId: string; exiledInstanceIds: [string, string] } | null;
   /** "For each player, you choose from among the permanents that player
    * controls an artifact, a creature, an enchantment, and a planeswalker.
    * Then each player sacrifices all other nonland permanents they
@@ -6809,7 +7626,7 @@ export interface GameState {
    * each DISCARD_UP_TO_THEN_DRAW pick, `maxCount` caps it; declining further
    * (instanceId: null) or hitting maxCount both move straight to drawing
    * discardedSoFar cards and clear this. */
-  pendingDiscardUpToThenDraw: { sourceInstanceId: string; controllerId: string; maxCount: number; discardedSoFar: number } | null;
+  pendingDiscardUpToThenDraw: { sourceInstanceId: string; controllerId: string; maxCount: number; discardedSoFar: number; plusOne?: boolean } | null;
   /** Set while a RevealTopThenLoseLifeByManaValueEffect (Dark Confidant) is
    * outstanding - the top card is revealed (publicly - both players can see
    * `revealedCard`, unlike a private SurveilEffect peek) and already off the
@@ -6884,6 +7701,10 @@ export type GameAction =
       chosenModeIndices?: number[];
       chosenTierIndex?: number;
       kickerPaymentInstanceId?: string;
+      /** CardDefinition.kicker's 'mana' variant payment choice (Rite of
+       * Replication's "Kicker {5}") - omitted/false declines; ignored
+       * unless the card's kicker.cost is actually 'mana'. */
+      payManaKicker?: boolean;
       /** CardDefinition.escalateCost's payment - one OTHER untapped creature
        * per mode chosen beyond the first (Collective Effort). Ignored unless
        * the card actually has escalateCost set. */
@@ -6905,6 +7726,20 @@ export type GameAction =
        * exile, each covering {1} of generic cost. Ignored unless the
        * card actually has delve set; must not exceed the generic cost. */
       delveInstanceIds?: string[];
+      /** "Improvise" (see CardDefinition.grantsImproviseToNonartifactSpells) -
+       * the controller's own untapped ARTIFACTS tapped to help pay this
+       * cast's GENERIC cost, same shape as convokeInstanceIds but for
+       * artifacts instead of creatures and no color-matching (always
+       * generic only, same as real Improvise). Ignored unless the
+       * controller actually has a permanent granting it AND this spell is
+       * itself nonartifact; must not exceed the generic cost. */
+      improviseInstanceIds?: string[];
+      /** "Evoke—Exile a [color] card from your hand." (see
+       * CardDefinition.evokeCost) - the specific OTHER card in hand to
+       * exile as an alternate TOTAL cost; requested explicitly, no silent
+       * fallback to normal mana payment if it doesn't match the required
+       * color. Ignored unless the card actually has evokeCost set. */
+      evokeExileInstanceId?: string;
     }
   | { type: 'ACTIVATE_ABILITY'; instanceId: string; abilityId: string; costTargetInstanceIds?: string[] }
   | { type: 'ADJUST_LIFE'; playerId: string; delta: number }
@@ -6927,7 +7762,14 @@ export type GameAction =
     }
   | { type: 'RESOLVE_OPTIONAL_DISCARD_HAND_FOR_DEVOTION'; accept: boolean }
   | { type: 'RESOLVE_CHOOSE_ONE_MODE'; modeIndex: number; alsoModeIndex?: number }
-  | { type: 'CHOOSE_PLAYER_TARGET'; targetPlayerId: string }
+  | {
+      type: 'CHOOSE_PLAYER_TARGET';
+      /** null declines - only legal for an "up to one target player" effect
+       * (GraveyardToBottomOfLibraryForTargetPlayerEffect); every other
+       * current pendingPlayerTarget effect is mandatory and rejects null.
+       * See engine/actions.ts: choosePlayerTarget. */
+      targetPlayerId: string | null;
+    }
   | { type: 'CYCLE_CARD'; instanceId: string }
   | { type: 'CHOOSE_REVEALED_CARD'; instanceId: string }
   | { type: 'CHOOSE_MANA_COLOR'; color: ManaColor }
@@ -6973,12 +7815,20 @@ export type GameAction =
   | { type: 'RESOLVE_FANDANIEL_CHOICE'; instanceId: string | null }
   | { type: 'RESOLVE_REBOUND_CHOICE'; accept: boolean }
   | { type: 'RESOLVE_LOOK_AT_TOP_N_PUT_M_TO_HAND_REST_TO_BOTTOM'; instanceId: string | null }
+  | { type: 'RESOLVE_OPPONENT_CHOOSES_EXILED_CARD'; instanceId: string }
+  | { type: 'RESOLVE_OPPONENT_MAY_HAVE_YOU_DRAW_ELSE_MILL_AND_DEAL_DAMAGE'; accept: boolean }
+  | { type: 'RESOLVE_CHOOSE_CARD_FROM_OPPONENT_HAND_TO_DISCARD'; instanceId: string }
+  | { type: 'RESOLVE_DIVIDE_DAMAGE_AMONG_TARGETS'; instanceId: string | null; amount?: number }
+  | { type: 'RESOLVE_PAY_HALF_LIFE_TO_COUNTER_CHOICE'; accept: boolean }
+  | { type: 'RESOLVE_SEARCH_OPPONENT_LIBRARY_TO_EXILE'; instanceId: string | null }
   | { type: 'RESOLVE_OPTIONAL_TRANSFORM'; accept: boolean }
   | { type: 'RESOLVE_OPTIONAL_BECOME_COPY'; accept: boolean }
   | { type: 'RESOLVE_LIBRARY_PLACEMENT_CHOICE'; toTop: boolean }
   | { type: 'RESOLVE_OPTIONAL_PAY_LIFE'; accept: boolean }
   | { type: 'RESOLVE_OPTIONAL_PAY_MANA'; accept: boolean }
   | { type: 'CAST_CREATURE_FROM_GRAVEYARD_VIA_GRANT'; instanceId: string }
+  | { type: 'CAST_ARTIFACT_FROM_GRAVEYARD_VIA_GRANT'; instanceId: string }
+  | { type: 'CAST_FROM_LIBRARY_TOP'; instanceId: string; chosenX?: number }
   | { type: 'FORETELL_CARD'; instanceId: string }
   | { type: 'ACTIVATE_NINJUTSU'; instanceId: string; returnInstanceId: string }
   | { type: 'RESOLVE_MAY_EFFECT'; accept: boolean }

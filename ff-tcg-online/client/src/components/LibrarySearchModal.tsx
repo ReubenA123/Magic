@@ -36,6 +36,8 @@ function filterLabel(filter: LibrarySearchFilter): string {
       return `a card named ${filter.name}`;
     case 'basicLandOrSubtype':
       return `a basic land or ${filter.subtype} card`;
+    case 'creatureWithManaValueAtMost':
+      return `a creature card with mana value ${filter.maxManaValue} or less`;
   }
 }
 

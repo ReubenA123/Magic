@@ -130,6 +130,11 @@ export function dynamicCostReduction(def: CardDefinition, player: PlayerState, o
   // affordability check can omit it; the real cast-time call sites always
   // pass it), so this simply contributes 0 when omitted rather than
   // erroring.
+  // "This spell costs {1} less to cast for each creature card in your
+  // graveyard." (Cyan, Vengeful Samurai) - the CREATURE-only cousin of
+  // graveyardPermanentCount above (which also counts artifacts/
+  // enchantments/lands).
+  const graveyardCreatureCount = def.costReductionPerGraveyardCreature ? player.zones.graveyard.filter((c) => getCardDefinition(c.defId).type === 'creature').length : 0;
   const opponentGraveyardDiscount =
     def.costReductionIfOpponentGraveyardAtLeast && opponent && opponent.zones.graveyard.length >= def.costReductionIfOpponentGraveyardAtLeast.minCount
       ? def.costReductionIfOpponentGraveyardAtLeast.amount
@@ -148,6 +153,9 @@ export function dynamicCostReduction(def: CardDefinition, player: PlayerState, o
     if (other.reducesCastCostForColor && (ownCost.colors[other.reducesCastCostForColor.color] ?? 0) > 0) {
       boardWideReduction += other.reducesCastCostForColor.amount;
     }
+    if (other.reducesCastCostForNoncreatureSpells && def.type !== 'creature') {
+      boardWideReduction += other.reducesCastCostForNoncreatureSpells;
+    }
     if (other.reducesCastCostForFirstLegendaryCreatureSpellEachTurn && isLegendaryCreature && !player.usedFirstLegendaryCreatureSpellDiscountThisTurn) {
       boardWideReduction += other.reducesCastCostForFirstLegendaryCreatureSpellEachTurn;
     }
@@ -161,6 +169,7 @@ export function dynamicCostReduction(def: CardDefinition, player: PlayerState, o
     (def.costReductionPerControlledSubtype ? def.costReductionPerControlledSubtype.amountPerUnit * controlledSubtypeCount : 0) +
     (def.costReductionPerControlledType ? def.costReductionPerControlledType.amountPerUnit * controlledTypeCount : 0) +
     (def.costReductionPerCreatureOnBattlefield ? def.costReductionPerCreatureOnBattlefield * creatureOnBattlefieldCount : 0) +
+    (def.costReductionPerGraveyardCreature ? def.costReductionPerGraveyardCreature * graveyardCreatureCount : 0) +
     opponentGraveyardDiscount +
     boardWideReduction
   );
