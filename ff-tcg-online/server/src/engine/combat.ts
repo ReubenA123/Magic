@@ -547,6 +547,15 @@ function anthemBuffBonus(state: GameState, controllerId: string, def: CardDefini
       if (subtypeAnthem && def.subtype!.toLowerCase().includes(subtypeAnthem.subtype.toLowerCase())) {
         next = { power: next.power + subtypeAnthem.power, toughness: next.toughness + subtypeAnthem.toughness };
       }
+      // "Legendary creatures you control get +X/+X, where X is the number
+      // of legendary creatures you control." (Warrior of Light) - X is a
+      // live count, re-summed from the controller's whole battlefield
+      // every time this runs (not cached).
+      const dynamicSubtypeAnthem = def.subtype ? getCardDefinition(c.defId).staticAnthemForControlledSubtypeEqualToOwnCount : null;
+      if (dynamicSubtypeAnthem && def.subtype!.toLowerCase().includes(dynamicSubtypeAnthem.subtype.toLowerCase())) {
+        const x = controller.zones.battlefield.filter((other) => getCardDefinition(other.defId).subtype?.toLowerCase().includes(dynamicSubtypeAnthem.subtype.toLowerCase())).length;
+        next = { power: next.power + x, toughness: next.toughness + x };
+      }
       const tokenAnthem = instance.isToken ? getCardDefinition(c.defId).staticAnthemForControlledTokens : null;
       if (tokenAnthem) {
         next = { power: next.power + tokenAnthem.power, toughness: next.toughness + tokenAnthem.toughness };
@@ -562,6 +571,33 @@ function anthemBuffBonus(state: GameState, controllerId: string, def: CardDefini
         isCommander && c.attachedToInstanceId && c.attachedToInstanceId !== instance.instanceId ? getCardDefinition(c.defId).equipGrantsAnthemForOtherCommandersYouControl : null;
       if (equipCommanderAnthem) {
         next = { power: next.power + equipCommanderAnthem.power, toughness: next.toughness + equipCommanderAnthem.toughness };
+      }
+      // "Creatures you control but don't own get +2/+2..." (Garland, Royal
+      // Kidnapper) - checked against THIS instance's own ownership vs. who
+      // currently controls it, not the watcher's.
+      const notOwnedAnthem = instance.ownerId !== controllerId ? getCardDefinition(c.defId).staticAnthemForControlledButNotOwnedCreatures : null;
+      if (notOwnedAnthem) {
+        next = { power: next.power + notOwnedAnthem.power, toughness: next.toughness + notOwnedAnthem.toughness };
+      }
+      // "Artifact creatures and Heroes you control get +1/+1 for each
+      // Artificer you control and each Artificer card in your graveyard."
+      // (Cid, Timeless Artificer) - unlike staticAnthemForControlledSubtypeEqualToOwnCount
+      // above, the buffed filter (artifact creature or Hero) and the
+      // counted subtype (Artificer) are different, and the count also
+      // includes the graveyard, so this needs its own dedicated field
+      // rather than reusing that generic one. Only applied once per
+      // qualifying watcher `c` (same reduce-over-battlefield shape as
+      // every other anthem here), with the live Artificer count computed
+      // fresh each time rather than cached.
+      if (getCardDefinition(c.defId).dynamicAnthemForArtifactCreaturesAndHeroesPerArtificer) {
+        const isArtifactCreature = def.type === 'creature' && !!def.subtype?.toLowerCase().includes('artifact');
+        const isHero = !!def.subtype?.toLowerCase().includes('hero');
+        if (isArtifactCreature || isHero) {
+          const controlledArtificers = controller.zones.battlefield.filter((o) => getCardDefinition(o.defId).subtype?.toLowerCase().includes('artificer')).length;
+          const graveyardArtificers = controller.zones.graveyard.filter((o) => getCardDefinition(o.defId).subtype?.toLowerCase().includes('artificer')).length;
+          const x = controlledArtificers + graveyardArtificers;
+          next = { power: next.power + x, toughness: next.toughness + x };
+        }
       }
       return next;
     },
@@ -694,7 +730,11 @@ export function isLegalPendingTarget(state: GameState, pendingTarget: NonNullabl
     return def.type === 'creature' && (!effect.restrictToOwnCreature || ownerId === pendingTarget.controllerId);
   }
   if (effect.type === 'grantKeywordsToTargetPermanent') {
-    return !effect.creatureOnly || def.type === 'creature';
+    if (effect.creatureOnly && def.type !== 'creature') return false;
+    if (effect.excludesSource && card.instanceId === pendingTarget.sourceInstanceId) return false;
+    if (effect.restrictToOwnCreature && ownerId !== pendingTarget.controllerId) return false;
+    if (effect.restrictToOpponentCreature && ownerId === pendingTarget.controllerId) return false;
+    return true;
   }
   if (effect.type === 'gainControlOfTargetCreature') {
     if (def.type !== 'creature') return false;
@@ -712,7 +752,14 @@ export function isLegalPendingTarget(state: GameState, pendingTarget: NonNullabl
     return !!def.subtype?.toLowerCase().includes('equipment');
   }
   if (effect.type === 'putCounterOnTarget') {
-    return def.type === 'creature';
+    return def.type === 'creature' && (!effect.restrictToOwnCreature || ownerId === pendingTarget.controllerId);
+  }
+  if (effect.type === 'goadTargetCreature' || effect.type === 'damageEqualToGreatestControlledPowerToUpToOneOpponentCreature') {
+    return def.type === 'creature' && ownerId !== pendingTarget.controllerId;
+  }
+  if (effect.type === 'grantIndestructibleToOwnAndOpponentCreatureThenDestroyAll') {
+    if (def.type !== 'creature') return false;
+    return !pendingTarget.firstInstanceId ? ownerId === pendingTarget.controllerId : ownerId !== pendingTarget.controllerId;
   }
   if (effect.type === 'jenovaCellsAttackTrigger') {
     return def.type === 'creature';
@@ -764,6 +811,7 @@ export function isLegalPendingTarget(state: GameState, pendingTarget: NonNullabl
     return matchesType && (effect.allowAnyController || ownerId === pendingTarget.controllerId);
   }
   if (effect.type === 'createTokenCopyOfTarget') {
+    if (effect.anyPermanent) return true;
     return def.type === 'artifact' || def.type === 'creature' || def.type === 'land';
   }
   if (effect.type === 'exileTargetCreatureUntilMonarchChanges') {
@@ -776,7 +824,8 @@ export function isLegalPendingTarget(state: GameState, pendingTarget: NonNullabl
     return def.type === 'creature' && ownerId === pendingTarget.controllerId;
   }
   if (effect.type === 'exileTargetInstantOrSorceryFromOpponentGraveyardThenMayCastForFixedCost') {
-    return (def.type === 'instant' || def.type === 'sorcery') && ownerId !== pendingTarget.controllerId;
+    if (def.type !== 'instant' && def.type !== 'sorcery') return false;
+    return effect.ownGraveyardOnly ? ownerId === pendingTarget.controllerId : ownerId !== pendingTarget.controllerId;
   }
   if (effect.type === 'returnTargetCreatureFromGraveyardWithManaValueEqualTo') {
     return def.type === 'creature' && ownerId === pendingTarget.controllerId && manaValue(parseCostLabel(def.costLabel)) === effect.manaValue;
@@ -928,7 +977,7 @@ export function isLegalPendingTarget(state: GameState, pendingTarget: NonNullabl
     if (!pendingTarget.firstInstanceId) {
       return def.type === 'artifact' && !!def.equipCost && ownerId === pendingTarget.controllerId;
     }
-    return def.type === 'creature' && ownerId === pendingTarget.controllerId && !!def.subtype?.toLowerCase().includes('rebel');
+    return def.type === 'creature' && ownerId === pendingTarget.controllerId && (!!effect.anyControlledCreatureInsteadOfRebel || !!def.subtype?.toLowerCase().includes('rebel'));
   }
   if (effect.type === 'shuffleTargetPermanentIntoLibraryThenRevealTop') {
     return true;
@@ -1099,6 +1148,9 @@ function dealDirectDamageToDefender(
   amount: number
 ): GameState {
   let next = loseLife(state, defenderId, amount);
+  if (amount > 0) {
+    next = updatePlayer(next, defenderId, (p) => ({ ...p, dealtCombatDamageThisTurn: true }));
+  }
   if (isCommanderAttack(next, attackerControllerId, attackerDefId)) {
     next = updatePlayer(next, defenderId, (p) => ({ ...p, commanderDamageTaken: p.commanderDamageTaken + amount }));
     next = { ...next, log: [...next.log, `${attackerName} deals ${amount} commander damage.`] };
@@ -1130,6 +1182,23 @@ function strikesInPass(state: GameState, def: CardDefinition, instance: CardInst
 
 function isPendingDeath(state: GameState, instanceId: string): boolean {
   return state.pendingDeaths.includes(instanceId);
+}
+
+/** "If you have a full party..." (the Zendikar Rising Party mechanic - The
+ * Destined Black/White/Thief/Warrior cycle) - true once the controller
+ * simultaneously controls at least one creature of each of the four class
+ * subtypes (Cleric, Rogue, Warrior, Wizard), matched the same
+ * case-insensitive substring way as every other subtype check in this
+ * engine (so e.g. a "Human Warrior" counts for Warrior). A single creature
+ * can satisfy more than one slot at once (e.g. a "Human Rogue Warrior"
+ * covers both), matching how the real mechanic only cares whether each
+ * class is represented somewhere on the board, not by which creature. */
+export function hasFullParty(state: GameState, playerId: string): boolean {
+  const classes = ['cleric', 'rogue', 'warrior', 'wizard'];
+  const subtypes = getPlayerBattlefield(state, playerId)
+    .filter((c) => getCardDefinition(c.defId).type === 'creature')
+    .map((c) => getCardDefinition(c.defId).subtype?.toLowerCase() ?? '');
+  return classes.every((cls) => subtypes.some((s) => s.includes(cls)));
 }
 
 /** Checks every permanent playerId controls for an onGainLifeTrigger and
@@ -1167,6 +1236,13 @@ export function applyGainLifeTriggers(state: GameState, playerId: string): GameS
     }));
     const targetNote = subtypeFilter ? `each ${subtypeFilter} you control` : def.name;
     next = { ...next, log: [...next.log, `${def.name} triggers: ${targetNote} gets a ${counterLabel} counter.`] };
+  }
+  for (const card of getPlayerBattlefield(next, playerId)) {
+    const def = getCardDefinition(card.defId);
+    if (!def.onGainLifeTriggerTargeted || next.pendingTarget) continue;
+    const { counterLabel, counterAmount, fullPartyCounterAmount } = def.onGainLifeTriggerTargeted;
+    const amount = hasFullParty(next, playerId) ? fullPartyCounterAmount : counterAmount;
+    next = { ...next, pendingTarget: { sourceInstanceId: card.instanceId, controllerId: playerId, effect: { type: 'putCounterOnTarget', counterLabel, counterAmount: amount, restrictToOwnCreature: true } } };
   }
   return next;
 }
@@ -1446,6 +1522,19 @@ export function moveCreaturesToGraveyard(state: GameState, deadIds: string[], ve
     // own doc comment for the "most centralized source only" scope.
     next = updatePlayer(next, player.id, (p) => ({ ...p, permanentLeftBattlefieldThisTurn: true }));
 
+    // "Whenever you sacrifice a [subtype], [effects]." (Vaan, Aspiring
+    // Pirate) - only when this batch of deaths was actually a sacrifice.
+    if (verb === 'is sacrificed') {
+      const sacWatchers = player.zones.battlefield.filter((c) => getCardDefinition(c.defId).onOwnSacrificeSubtypeTrigger);
+      for (const watcher of sacWatchers) {
+        const { subtype, effects } = getCardDefinition(watcher.defId).onOwnSacrificeSubtypeTrigger!;
+        const matchingCount = dead.filter((d) => getCardDefinition(d.defId).subtype?.toLowerCase().includes(subtype.toLowerCase())).length;
+        for (let i = 0; i < matchingCount; i++) {
+          next = { ...next, pendingOwnSacrificeSubtypeTriggerEffects: [...next.pendingOwnSacrificeSubtypeTriggerEffects, { effects, sourceInstanceId: watcher.instanceId, controllerId: player.id }] };
+        }
+      }
+    }
+
     // "When this creature dies, exile it and create N tokens" (e.g. Ancient
     // Adamantoise) redirects away from the graveyard entirely - checked
     // before the commander check, since exiling takes priority.
@@ -1465,6 +1554,20 @@ export function moveCreaturesToGraveyard(state: GameState, deadIds: string[], ve
     // just gets a fresh copy of itself (reverted to its front face) right
     // back on it, tapped.
     const toReturnToBattlefield = dead.filter((d) => !toExileWithTokens.includes(d) && !toExileFromFinality.includes(d) && getCardDefinition(d.defId).onDeathReturnToBattlefieldTapped);
+    // "Whenever a creature you control but don't own dies, return it to
+    // the battlefield under its owner's control and you draw a card."
+    // (Edea, Possessed Sorceress) - `player` here is the CONTROLLER (the
+    // battlefield array this dead card was sitting in), checked against
+    // `player`'s own permanents for the watcher field; `d.ownerId` is the
+    // TRUE owner, who gets the card back.
+    const toReturnToOwnerAndDraw = dead.filter(
+      (d) =>
+        !toExileWithTokens.includes(d) &&
+        !toExileFromFinality.includes(d) &&
+        !toReturnToBattlefield.includes(d) &&
+        d.ownerId !== player.id &&
+        player.zones.battlefield.some((c) => getCardDefinition(c.defId).onAnyControlledButNotOwnedCreatureDiesReturnToOwnerAndDraw)
+    );
     // Ownership-aware commander check: a permanent under a TEMPORARY control
     // change (Unexpected Request, Zidane, Stiltzkin's giveaway) is still
     // sitting in `player`'s battlefield array, but a real "is this someone's
@@ -1477,7 +1580,7 @@ export function moveCreaturesToGraveyard(state: GameState, deadIds: string[], ve
     const opponent = getOpponent(next, player.id);
     const ownerOf = (d: CardInstance) => (d.ownerId === player.id ? player : opponent);
     const toCommandZone = dead.filter((d) => {
-      if (toExileWithTokens.includes(d) || toExileFromFinality.includes(d) || toReturnToBattlefield.includes(d)) return false;
+      if (toExileWithTokens.includes(d) || toExileFromFinality.includes(d) || toReturnToBattlefield.includes(d) || toReturnToOwnerAndDraw.includes(d)) return false;
       const owner = ownerOf(d);
       return !!owner.commanderDefId && frontFaceDefId(d.defId) === owner.commanderDefId;
     });
@@ -1492,6 +1595,7 @@ export function moveCreaturesToGraveyard(state: GameState, deadIds: string[], ve
         !toExileWithTokens.includes(d) &&
         !toExileFromFinality.includes(d) &&
         !toReturnToBattlefield.includes(d) &&
+        !toReturnToOwnerAndDraw.includes(d) &&
         !toCommandZone.includes(d) &&
         getCardDefinition(d.defId).returnsSelfToHandOnDeath
     );
@@ -1503,6 +1607,7 @@ export function moveCreaturesToGraveyard(state: GameState, deadIds: string[], ve
         !toExileWithTokens.includes(d) &&
         !toExileFromFinality.includes(d) &&
         !toReturnToBattlefield.includes(d) &&
+        !toReturnToOwnerAndDraw.includes(d) &&
         !toCommandZone.includes(d) &&
         !toHandOnDeath.includes(d) &&
         getCardDefinition(d.defId).onDeathPutOnBottomOfOwnersLibrary
@@ -1516,6 +1621,7 @@ export function moveCreaturesToGraveyard(state: GameState, deadIds: string[], ve
         !toExileWithTokens.includes(d) &&
         !toExileFromFinality.includes(d) &&
         !toReturnToBattlefield.includes(d) &&
+        !toReturnToOwnerAndDraw.includes(d) &&
         !toCommandZone.includes(d) &&
         !toHandOnDeath.includes(d) &&
         !toBottomOfLibraryOnDeath.includes(d) &&
@@ -1527,6 +1633,7 @@ export function moveCreaturesToGraveyard(state: GameState, deadIds: string[], ve
         !toExileWithTokens.includes(d) &&
         !toExileFromFinality.includes(d) &&
         !toReturnToBattlefield.includes(d) &&
+        !toReturnToOwnerAndDraw.includes(d) &&
         !toCommandZone.includes(d) &&
         !toHandOnDeath.includes(d) &&
         !toBottomOfLibraryOnDeath.includes(d) &&
@@ -1572,6 +1679,28 @@ export function moveCreaturesToGraveyard(state: GameState, deadIds: string[], ve
         ownerId: d.ownerId,
         tapped: false,
         counters: [{ label: '+1/+1', amount: 1 }],
+        damageMarked: 0,
+        summoningSick: !hasKeyword(frontDef, 'haste'),
+      };
+    });
+
+    // "...return it to the battlefield under its owner's control and you
+    // draw a card." (Edea, Possessed Sorceress) - unlike Galian Beast/
+    // Undying above (owner === controller there), this specifically
+    // returns to the OWNER's battlefield, which in a 2-player engine is
+    // always `opponent` relative to `player` (the controller) whenever
+    // this tier is non-empty - see the foreign battlefield write below.
+    // Untapped, fresh summoning sickness check, same "genuinely new
+    // object" convention as the other death-return tiers.
+    const returnedToOwner: CardInstance[] = toReturnToOwnerAndDraw.map((d) => {
+      const frontDefId = frontFaceDefId(d.defId);
+      const frontDef = getCardDefinition(frontDefId);
+      return {
+        instanceId: nextInstanceId(),
+        defId: frontDefId,
+        ownerId: d.ownerId,
+        tapped: false,
+        counters: [],
         damageMarked: 0,
         summoningSick: !hasKeyword(frontDef, 'haste'),
       };
@@ -1642,17 +1771,34 @@ export function moveCreaturesToGraveyard(state: GameState, deadIds: string[], ve
         library: [...p.zones.library, ...ownBottomOfLibrary],
       },
     }));
-    if (foreignGraveyard.length > 0 || foreignExile.length > 0 || foreignHandOnDeath.length > 0 || foreignBottomOfLibrary.length > 0) {
+    if (foreignGraveyard.length > 0 || foreignExile.length > 0 || foreignHandOnDeath.length > 0 || foreignBottomOfLibrary.length > 0 || returnedToOwner.length > 0) {
       next = updatePlayer(next, opponent.id, (p) => ({
         ...p,
         zones: {
           ...p.zones,
+          battlefield: [...p.zones.battlefield, ...returnedToOwner],
           graveyard: [...p.zones.graveyard, ...foreignGraveyard],
           exile: [...p.zones.exile, ...foreignExile],
           hand: [...p.zones.hand, ...foreignHandOnDeath],
           library: [...p.zones.library, ...foreignBottomOfLibrary],
         },
       }));
+    }
+    if (returnedToOwner.length > 0) {
+      for (let i = 0; i < returnedToOwner.length; i++) {
+        const drawn = getPlayer(next, player.id).zones.library[0];
+        next = updatePlayer(next, player.id, (p) => ({
+          ...p,
+          zones: { ...p.zones, library: p.zones.library.slice(1), hand: drawn ? [...p.zones.hand, drawn] : p.zones.hand },
+        }));
+      }
+      next = {
+        ...next,
+        log: [
+          ...next.log,
+          `${toReturnToOwnerAndDraw.map((d) => getCardDefinition(d.defId).name).join(', ')} returns to ${opponent.name}'s battlefield under their control; ${player.name} draws ${returnedToOwner.length > 1 ? returnedToOwner.length : 'a'} card(s).`,
+        ],
+      };
     }
     for (const d of toGraveyard) {
       const def = getCardDefinition(d.defId);

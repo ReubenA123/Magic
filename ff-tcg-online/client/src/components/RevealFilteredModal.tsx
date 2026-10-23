@@ -8,9 +8,11 @@ interface RevealFilteredModalProps {
   cards: { definition: CardDefinition; instance: CardInstance }[];
   onChoose: (instanceId: string) => void;
   onSkip: () => void;
-  /** Defaults to 'hand'. 'battlefieldTapped' (Ignis Scientia) adjusts the
-   * copy below to match RevealFilteredEffect.takenDestination. */
-  takenDestination?: 'hand' | 'battlefieldTapped';
+  /** Defaults to 'hand'. 'battlefieldTapped' (Ignis Scientia),
+   * 'battlefieldTappedAttacking' (Bartz Klauser), and 'battlefieldUntapped'
+   * (Seymour Guado) adjust the copy below to match
+   * RevealFilteredEffect.takenDestination. */
+  takenDestination?: 'hand' | 'battlefieldTapped' | 'battlefieldTappedAttacking' | 'battlefieldUntapped';
 }
 
 /**
@@ -24,7 +26,14 @@ interface RevealFilteredModalProps {
  */
 export default function RevealFilteredModal({ sourceName, filterType, cards, onChoose, onSkip, takenDestination = 'hand' }: RevealFilteredModalProps) {
   const filterTypes = Array.isArray(filterType) ? filterType : [filterType];
-  const destinationNote = takenDestination === 'battlefieldTapped' ? 'put it onto the battlefield tapped' : 'take it into your hand';
+  const destinationNote =
+    takenDestination === 'battlefieldTappedAttacking'
+      ? 'put it onto the battlefield tapped and attacking'
+      : takenDestination === 'battlefieldTapped'
+        ? 'put it onto the battlefield tapped'
+        : takenDestination === 'battlefieldUntapped'
+          ? 'put it onto the battlefield'
+          : 'take it into your hand';
   return (
     <div className="card-actions-overlay">
       <div className="zone-modal">

@@ -2481,6 +2481,7 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
             {player.life} life
           </span>
           {player.commanderDamageTaken > 0 && <span className="commander-damage-badge">Commander dmg: {player.commanderDamageTaken}</span>}
+          {player.poisonCounters > 0 && <span className="commander-damage-badge">Poison: {player.poisonCounters}</span>}
           {mutualActive && (
             <div className="life-buttons">
               {[-5, -1, 1, 5].map((delta) => (
@@ -3071,8 +3072,18 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                                   ? `Choose a creature card in your graveyard with mana value ${effect.manaValue} to return to your hand - or Skip.`
                                   : effect.type === 'attachTargetControlledEquipmentToTargetRebel'
                                   ? pendingTargetForYou.firstInstanceId
-                                    ? `Choose a Rebel you control for ${pendingTargetSourceName} to attach that Equipment to - or Skip.`
-                                    : `Choose up to one Equipment you control for ${pendingTargetSourceName} to attach to a Rebel you control - or Skip.`
+                                    ? effect.anyControlledCreatureInsteadOfRebel
+                                      ? `Choose a creature you control for ${pendingTargetSourceName} to attach that Equipment to - or Skip.`
+                                      : `Choose a Rebel you control for ${pendingTargetSourceName} to attach that Equipment to - or Skip.`
+                                    : `Choose up to one Equipment you control for ${pendingTargetSourceName} to attach to a creature you control - or Skip.`
+                                  : effect.type === 'goadTargetCreature'
+                                  ? `Choose a creature an opponent controls for ${pendingTargetSourceName} to goad.`
+                                  : effect.type === 'grantIndestructibleToOwnAndOpponentCreatureThenDestroyAll'
+                                  ? pendingTargetForYou.firstInstanceId
+                                    ? `Choose a creature an opponent controls to gain indestructible, then destroy all creatures.`
+                                    : `Choose a creature you control to gain indestructible until end of turn.`
+                                  : effect.type === 'damageEqualToGreatestControlledPowerToUpToOneOpponentCreature'
+                                  ? `Choose up to one creature an opponent controls for ${pendingTargetSourceName} to damage equal to your greatest power - or Skip.`
                                   : effect.targetFilter === 'artifactOrEnchantment'
                                   ? `Choose an artifact or enchantment for ${pendingTargetSourceName}'s ability (either player's).`
                                   : effect.targetFilter === 'enchantment'
@@ -3337,6 +3348,28 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
               </button>
               <button className="opponent-view-exit-button" onClick={() => onAction({ type: 'RESOLVE_ATTACK_TAX_PAYMENT', pay: false }, pending.controllerId)}>
                 Decline (No Attackers)
+              </button>
+            </div>
+          );
+        })()}
+
+      {state.pendingRhysticDrawPayment &&
+        (state.pendingRhysticDrawPayment.payerId === yourPlayerId || soloControl) &&
+        (() => {
+          const pending = state.pendingRhysticDrawPayment;
+          const sourceFound = findCard(state, pending.sourceInstanceId);
+          const sourceName = sourceFound ? getCardDefinition(sourceFound.card.defId).name : 'That permanent';
+          const controllerName = state.players.find((p) => p.id === pending.controllerId)?.name ?? 'Its controller';
+          return (
+            <div className="pending-target-banner">
+              <span>
+                {sourceName}: {controllerName} draws a card unless you pay {`{${pending.cost}}`}.
+              </span>
+              <button className="opponent-view-exit-button" onClick={() => onAction({ type: 'RESOLVE_RHYSTIC_DRAW_PAYMENT', pay: true }, pending.payerId)}>
+                Pay {`{${pending.cost}}`}
+              </button>
+              <button className="opponent-view-exit-button" onClick={() => onAction({ type: 'RESOLVE_RHYSTIC_DRAW_PAYMENT', pay: false }, pending.payerId)}>
+                Decline (They Draw)
               </button>
             </div>
           );
@@ -3784,10 +3817,24 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
         // graveyard/...) never has this split, so it's always just
         // openCard.player there.
         const exilePlayActingPlayer = openCardExilePlayGrant ? state.players.find((p) => p.id === yourPlayerId)! : openCard.player;
+        // "...cast a permanent spell of each permanent type from your
+        // graveyard" (Orphan, Cocoon fal'Cie) - mirrors castFromGraveyard's
+        // own useMuldrothaGrant eligibility check: the card's own graveyard,
+        // not flashback, a creature/artifact/enchantment, that TYPE not
+        // already used this turn, and a Muldrotha-style permanent on the
+        // controller's battlefield.
+        const openCardDef = getCardDefinition(openCard.card.defId);
+        const canCastFromGraveyardHere =
+          openCard.zone === 'graveyard' &&
+          !openCardDef.flashback &&
+          (openCardDef.type === 'creature' || openCardDef.type === 'artifact' || openCardDef.type === 'enchantment') &&
+          !(openCard.player.graveyardCastTypesUsedThisTurn ?? []).includes(openCardDef.type) &&
+          openCard.player.zones.battlefield.some((c) => getCardDefinition(c.defId).grantsCastPermanentFromOwnGraveyardOncePerTypeEachTurn);
         return (
         <CardActionsPanel
           definition={getCardDefinition(openCard.card.defId)}
           instance={openCard.card}
+          canCastFromGraveyardHere={canCastFromGraveyardHere}
           currentZone={openCard.zone}
           readOnly={openCardIsReadOnly}
           ownerManaPool={exilePlayActingPlayer.manaPool}
@@ -4671,6 +4718,12 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
                       ? `Target player may put ${pending.effect.name} into their hand from their library, then shuffle.`
                       : pending.effect.type === 'graveyardToBottomOfLibraryForTargetPlayer'
                       ? 'Choose up to one target player to put all the cards from their graveyard on the bottom of their library in a random order - or Skip.'
+                      : pending.effect.type === 'gainLifeForTargetPlayer'
+                      ? `Target player gains ${pending.effect.amount} life.`
+                      : pending.effect.type === 'loseLifeForTargetPlayer'
+                      ? `Target player loses ${pending.effect.amount} life.`
+                      : pending.effect.type === 'searchLibraryForAnyCardToTopForTargetPlayer'
+                      ? 'Target player searches their library for a card, then shuffles and puts that card on top.'
                       : `Put a ${pending.effect.counterLabel} counter on each creature target player controls.`}
                   </span>
                 </div>

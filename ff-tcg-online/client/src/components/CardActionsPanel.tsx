@@ -188,6 +188,14 @@ interface CardActionsPanelProps {
   onStartCrew: () => void;
   onCycle: () => void;
   onFlashback: () => void;
+  /** "...cast a permanent spell of each permanent type from your
+   * graveyard" (Orphan, Cocoon fal'Cie) - precomputed by GameBoard.tsx
+   * (needs the controller's whole battlefield + per-turn tracker, neither
+   * of which this panel otherwise sees). Shows a second, separate button
+   * from Flashback's (this card has no flashback cost to pay - its normal
+   * printed cost applies), but dispatches the same CAST_FROM_GRAVEYARD
+   * action via onFlashback. */
+  canCastFromGraveyardHere?: boolean;
   onPlayFromExile: () => void;
   onPlayFromLibraryTop: () => void;
   onClose: () => void;
@@ -245,6 +253,7 @@ export default function CardActionsPanel({
   onStartCrew,
   onCycle,
   onFlashback,
+  canCastFromGraveyardHere,
   onPlayFromExile,
   onPlayFromLibraryTop,
   onClose,
@@ -275,6 +284,7 @@ export default function CardActionsPanel({
   const canCycle = canCycleHere && (mutualActive || canPay(ownerManaPool, parseCostLabel(definition.cycling!.cost), 0));
   const canFlashbackHere = currentZone === 'graveyard' && !!definition.flashback;
   const canFlashback = canFlashbackHere && (mutualActive || canPay(ownerManaPool, parseCostLabel(definition.flashback!.cost), 0));
+  const canGraveyardCast = !!canCastFromGraveyardHere && (mutualActive || canPay(ownerManaPool, printedCost, 0));
   const canPlayFromExileHere = currentZone === 'exile' && !!exilePlayGrant;
   // Reno and Rude's grant lets any mana pay any pip (engine/actions.ts:
   // castFromExile pays it as pure generic mana value) - approximated here
@@ -657,6 +667,12 @@ export default function CardActionsPanel({
         {!readOnly && canFlashbackHere && (
           <button className="card-action-button card-action-button-play" disabled={!canFlashback} onClick={onFlashback} title={canFlashback ? '' : 'Not enough mana'}>
             {`Flashback (${definition.flashback!.cost})`}
+          </button>
+        )}
+
+        {!readOnly && canCastFromGraveyardHere && (
+          <button className="card-action-button card-action-button-play" disabled={!canGraveyardCast} onClick={onFlashback} title={canGraveyardCast ? '' : 'Not enough mana'}>
+            {`Cast from Graveyard (${definition.costLabel})`}
           </button>
         )}
 

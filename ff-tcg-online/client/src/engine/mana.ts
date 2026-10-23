@@ -17,6 +17,19 @@ export interface ParsedCost {
   generic: number;
   colors: Partial<Record<Exclude<ManaColor, 'C'>, number>>;
   hasX: boolean;
+  /** Phyrexian mana symbols ('{B/P}', spoken "pay 1 black mana or 2 life") -
+   * kept SEPARATE from `colors` since each pip can be paid either way,
+   * unlike an ordinary colored pip. Only ever populated by
+   * engine/actions.ts: castCard's main hand/commander-casting path (via
+   * GameAction 'CAST_CARD's own phyrexianLifePayments), which folds the
+   * player's chosen mana/life split into `colors` + a separate life
+   * payment before this reaches canPay/payCost - every OTHER casting path
+   * (flashback, overload, exile, graveyard, ninjutsu, blitz, equip, ...)
+   * doesn't look at this field at all, so a Phyrexian-cost card cast
+   * through one of those paths would currently treat its Phyrexian pips as
+   * free (a known, narrow gap - no current card needs those paths for a
+   * Phyrexian cost). */
+  phyrexian?: Partial<Record<Exclude<ManaColor, 'C'>, number>>;
 }
 
 /** '-' or '' = free (used by lands and back faces with no cast cost).
@@ -40,6 +53,7 @@ export function parseCostLabel(costLabel: string): ParsedCost {
   let generic = 0;
   let hasX = false;
   const colors: Partial<Record<Exclude<ManaColor, 'C'>, number>> = {};
+  const phyrexian: Partial<Record<Exclude<ManaColor, 'C'>, number>> = {};
   for (const symbol of symbols) {
     if (/^\d+$/.test(symbol)) {
       generic += parseInt(symbol, 10);
@@ -47,9 +61,18 @@ export function parseCostLabel(costLabel: string): ParsedCost {
       hasX = true;
     } else if (symbol === 'W' || symbol === 'U' || symbol === 'B' || symbol === 'R' || symbol === 'G') {
       colors[symbol] = (colors[symbol] ?? 0) + 1;
+    } else {
+      // "{B/P}" ("pay one black mana or 2 life") - K'rrik, Son of
+      // Yawgmoth's own cast cost. See ParsedCost.phyrexian's own doc
+      // comment for which casting paths actually honor this.
+      const phyrexianMatch = /^([WUBRG])\/P$/i.exec(symbol);
+      if (phyrexianMatch) {
+        const color = phyrexianMatch[1].toUpperCase() as Exclude<ManaColor, 'C'>;
+        phyrexian[color] = (phyrexian[color] ?? 0) + 1;
+      }
     }
   }
-  return { generic, colors, hasX };
+  return Object.keys(phyrexian).length > 0 ? { generic, colors, hasX, phyrexian } : { generic, colors, hasX };
 }
 
 export function canPay(pool: ManaPool, cost: ParsedCost, extraGeneric: number): boolean {
@@ -86,7 +109,10 @@ export function payCost(pool: ManaPool, cost: ParsedCost, extraGeneric: number):
  * (X's value isn't fixed until cast). "Mana value 5" style checks. */
 export function manaValue(cost: ParsedCost): number {
   const colourTotal = Object.values(cost.colors).reduce((a, b) => a + (b ?? 0), 0);
-  return cost.generic + colourTotal;
+  // A Phyrexian mana symbol still counts as 1 toward mana value, same as
+  // any other colored pip, regardless of how it's ultimately paid.
+  const phyrexianTotal = cost.phyrexian ? Object.values(cost.phyrexian).reduce((a, b) => a + (b ?? 0), 0) : 0;
+  return cost.generic + colourTotal + phyrexianTotal;
 }
 
 /** How much `def`'s GENERIC cost is reduced right now for `player`, from its
@@ -156,11 +182,25 @@ export function dynamicCostReduction(def: CardDefinition, player: PlayerState, o
     if (other.reducesCastCostForNoncreatureSpells && def.type !== 'creature') {
       boardWideReduction += other.reducesCastCostForNoncreatureSpells;
     }
+    if (other.reducesCastCostForAuraOrEquipmentSpells && (def.subtype?.toLowerCase().includes('aura') || def.subtype?.toLowerCase().includes('equipment'))) {
+      boardWideReduction += other.reducesCastCostForAuraOrEquipmentSpells;
+    }
     if (other.reducesCastCostForFirstLegendaryCreatureSpellEachTurn && isLegendaryCreature && !player.usedFirstLegendaryCreatureSpellDiscountThisTurn) {
       boardWideReduction += other.reducesCastCostForFirstLegendaryCreatureSpellEachTurn;
     }
     if (other.reducesCastCostForSecondSpellEachTurn && (player.spellsCastThisTurn ?? 0) === 1) {
       boardWideReduction += other.reducesCastCostForSecondSpellEachTurn;
+    }
+    // "Creature spells you cast of the chosen type cost {1} less to cast."
+    // (Herald's Horn) - reads the CHOSEN type off this specific permanent's
+    // own instance (c), not def.
+    if (other.reducesCastCostForOwnChosenCreatureType && def.type === 'creature' && c.chosenCreatureType && def.subtype?.toLowerCase().includes(c.chosenCreatureType.toLowerCase())) {
+      boardWideReduction += 1;
+    }
+    // "Cleric, Rogue, Warrior, and Wizard spells you cast cost {1} less to
+    // cast." (The Destined Warrior) - any of the four listed subtypes.
+    if (other.reducesCastCostForSubtypes && def.subtype && other.reducesCastCostForSubtypes.some((st) => def.subtype!.toLowerCase().includes(st.toLowerCase()))) {
+      boardWideReduction += 1;
     }
   }
 
