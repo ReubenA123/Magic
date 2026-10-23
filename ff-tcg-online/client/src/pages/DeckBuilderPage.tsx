@@ -2,8 +2,10 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { CARD_POOL, getCardDefinition } from '../data/cards';
 import { CardType } from '../types';
 import Card from '../components/Card';
+import CardArtStack from '../components/CardArtStack';
 import DeckViewModal from '../components/DeckViewModal';
 import { isLegalCommander, canAddCopy, isTransformBackFace } from '../utils/commander';
+import { groupByArtVariants } from '../utils/artVariants';
 import { loadDecks, saveDeck, deleteDeck, newDeckId, hasLocalDecksToImport, importLocalDecksToAccount, SavedDeck } from '../utils/deckStorage';
 import { getColourIdentity, isWithinColourIdentity, ManaLetter } from '../utils/colourIdentity';
 import { useAuth } from '../context/AuthContext';
@@ -103,6 +105,7 @@ export default function DeckBuilderPage() {
   }, [filter, query, manaFilter, commanderColours]);
 
   const deckGroups = useMemo(() => groupCardIds(cardIds), [cardIds]);
+  const displayGroups = useMemo(() => groupByArtVariants(filteredPool), [filteredPool]);
 
   // --- Actions --------------------------------------------------------------
   function setAsCommander(defId: string) {
@@ -225,7 +228,18 @@ export default function DeckBuilderPage() {
         )}
 
         <div className="deckbuilder-pool-grid">
-          {filteredPool.map((def) => {
+          {displayGroups.map((group) => {
+            if (group.length > 1) {
+              return (
+                <div key={group[0].name} className="deckbuilder-pool-item">
+                  <CardArtStack
+                    variants={group}
+                    deckBuilder={{ commanderId, cardIds, canAddCopy, isLegalCommander, onAdd: addToDeck, onSetCommander: setAsCommander }}
+                  />
+                </div>
+              );
+            }
+            const def = group[0];
             const legal = isLegalCommander(def);
             const isCommander = def.id === commanderId;
             const canAdd = !isCommander && canAddCopy(def, cardIds);

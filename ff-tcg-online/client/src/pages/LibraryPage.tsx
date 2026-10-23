@@ -3,7 +3,9 @@ import { CARD_POOL, getCardDefinition } from '../data/cards';
 import { CardType, ManaColor } from '../types';
 import { getColourIdentity, ManaLetter } from '../utils/colourIdentity';
 import Card from '../components/Card';
+import CardArtStack from '../components/CardArtStack';
 import { isTransformBackFace } from '../utils/commander';
+import { groupByArtVariants } from '../utils/artVariants';
 
 const TYPE_FILTERS: (CardType | 'all')[] = ['all', 'creature', 'instant', 'sorcery', 'artifact', 'enchantment', 'land'];
 const MANA_FILTERS: { id: ManaColor | 'all' | 'multicolor' | 'colorless'; label: string }[] = [
@@ -40,6 +42,8 @@ export default function LibraryPage() {
     });
   }, [filter, query, manaFilter]);
 
+  const displayGroups = useMemo(() => groupByArtVariants(filtered), [filtered]);
+
   function toggleFlip(id: string) {
     setFlippedIds((prev) => {
       const next = new Set(prev);
@@ -70,7 +74,11 @@ export default function LibraryPage() {
       </div>
       <p className="library-count">{filtered.length} card(s)</p>
       <div className="library-grid">
-        {filtered.map((def) => {
+        {displayGroups.map((group) => {
+          if (group.length > 1) {
+            return <CardArtStack key={group[0].name} variants={group} />;
+          }
+          const def = group[0];
           const isFlippable = !!def.transformsInto;
           const shownDef = isFlippable && flippedIds.has(def.id) ? getCardDefinition(def.transformsInto!) : def;
           return (
