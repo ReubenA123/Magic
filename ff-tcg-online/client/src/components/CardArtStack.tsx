@@ -45,7 +45,7 @@ export default function CardArtStack({ variants, deckBuilder }: CardArtStackProp
           {'‹'}
         </button>
         <div className="card-art-stack-card" onClick={() => setOpen(true)} title={`Art ${index + 1} of ${variants.length} - click to choose from all`}>
-          <Card definition={current} eagerImage />
+          <Card definition={current} />
         </div>
         <button className="card-art-stack-arrow card-art-stack-arrow-right" onClick={showNext} title="Next art">
           {'›'}

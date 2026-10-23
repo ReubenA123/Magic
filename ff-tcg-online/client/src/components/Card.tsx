@@ -46,12 +46,6 @@ interface CardProps {
    * about the REVEALED CARD itself, in hand, not a source permanent's own
    * running history. */
   revealedInHand?: boolean;
-  /** Skip native lazy-loading for this one image. Card images are lazy by
-   * default (big grids/modals full of them shouldn't all fetch at once),
-   * but that same deferral makes a single always-visible image (e.g.
-   * CardArtStack's current art, swapped on every arrow click) visibly lag
-   * behind its new src - there's nothing to defer when it's never offscreen. */
-  eagerImage?: boolean;
 }
 
 export default function Card({
@@ -68,7 +62,6 @@ export default function Card({
   awaitingOptionalChoice,
   actionable,
   revealedInHand,
-  eagerImage,
 }: CardProps) {
   const [imageFailed, setImageFailed] = useState(false);
   const [backImageFailed, setBackImageFailed] = useState(false);
@@ -111,7 +104,6 @@ export default function Card({
         <img
           src={definition.imagePath}
           alt={definition.name}
-          loading={eagerImage ? 'eager' : 'lazy'}
           decoding="async"
           onError={() => setImageFailed(true)}
           className="card-art"

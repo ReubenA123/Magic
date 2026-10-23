@@ -228,7 +228,7 @@ export const CARD_POOL: CardDefinition[] = [
     text: 'This spell can\u2019t be countered.\n' +
       'You may have this creature enter as a copy of any creature on the battlefield, ' +
       'except it enters with X additional +1/+1 counters on it',
-    imagePath: '/assets/cards/alter-ego.webp',
+    imagePath: '/assets/cards/altered-ego.webp',
     onEnter: [{ type: 'becomeCopyOfAnyCreatureThenAddCounters' }],
   },
   {
