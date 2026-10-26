@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { deckTotalCardCount, deleteDeck, loadDecks, SavedDeck } from '../utils/deckStorage';
-import { getCardDefinition } from '../data/cards';
+import { tryGetCardDefinition } from '../data/cards';
 import Card from './Card';
 
 /**
@@ -33,14 +33,16 @@ export default function AccountDecksTab() {
 
   if (error) return <p className="account-tab-error">{error}</p>;
   if (!decks) return <p className="account-tab-hint">Loading decks…</p>;
-  if (decks.length === 0) return <p className="account-tab-hint">No decks saved to your account yet - build one in the Deck Builder.</p>;
+  if (decks.length === 0) return <p className="account-tab-hint">No decks saved to your account yet - build one in the Library.</p>;
 
   return (
     <div className="account-deck-list">
-      {decks.map((deck) => (
+      {decks.map((deck) => {
+        const commander = tryGetCardDefinition(deck.commanderId);
+        return (
         <div key={deck.id} className="account-deck-row">
           <div className="account-deck-row-commander">
-            <Card definition={getCardDefinition(deck.commanderId)} />
+            {commander ? <Card definition={commander} /> : <span className="account-tab-hint">Commander no longer exists</span>}
           </div>
           <div className="account-deck-row-info">
             <strong>{deck.name}</strong>
@@ -54,7 +56,8 @@ export default function AccountDecksTab() {
             {'✕'}
           </button>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Page } from '../components/NavBar';
-import { getCardDefinition } from '../data/cards';
+import { getCardDefinition, tryGetCardDefinition } from '../data/cards';
 import { CardDefinition } from '../types';
 import { Archetype, ARCHETYPE_LABELS, ARCHETYPES, CommunityDeck } from '../api/accountTypes';
 import { deleteCommunityDeck, listCommunityDecks, publishCommunityDeck, removeVoteForCommunityDeck, voteForCommunityDeck } from '../api/communityDecks';
 import { ApiError } from '../api/rest';
-import { loadDecks, deckTotalCardCount, SavedDeck } from '../utils/deckStorage';
+import { loadDecks, deleteDeck, deckTotalCardCount, SavedDeck } from '../utils/deckStorage';
 import { useAuth } from '../context/AuthContext';
 import Card from '../components/Card';
 import DeckViewModal from '../components/DeckViewModal';
@@ -19,10 +19,38 @@ const MANA_FILTERS: { id: string; label: string }[] = [
   { id: 'G', label: 'G' },
 ];
 
+// A community deck's cards can reference an id that's since been renamed or
+// removed from the pool - skip those instead of crashing the whole page.
 function groupCardIds(cardIds: string[]) {
   const counts = new Map<string, number>();
   for (const id of cardIds) counts.set(id, (counts.get(id) ?? 0) + 1);
-  return Array.from(counts.entries()).map(([id, count]) => ({ def: getCardDefinition(id), count }));
+  return Array.from(counts.entries())
+    .map(([id, count]) => ({ def: tryGetCardDefinition(id), count }))
+    .filter((g): g is { def: CardDefinition; count: number } => g.def !== null);
+}
+
+function MyDeckRow({ deck, onView, onDelete }: { deck: SavedDeck; onView: () => void; onDelete: () => void }) {
+  const commander = tryGetCardDefinition(deck.commanderId);
+  return (
+    <div className="community-deck-row">
+      <div className="community-deck-commander-thumb">{commander && <Card definition={commander} />}</div>
+      <div className="community-deck-info">
+        <button className="deckbuilder-deck-name-link" onClick={onView}>
+          {deck.name}
+        </button>
+        <div className="community-deck-meta">
+          <span className="account-tab-hint">
+            {commander ? commander.name : 'Commander no longer exists'} · {deckTotalCardCount(deck)} cards
+          </span>
+        </div>
+      </div>
+      <div className="community-deck-actions">
+        <button className="deckbuilder-delete-button" title="Delete this deck" onClick={onDelete}>
+          {'✕'}
+        </button>
+      </div>
+    </div>
+  );
 }
 
 interface DeckRowProps {
@@ -80,6 +108,27 @@ export default function DecksPage({ onNavigate: _onNavigate }: { onNavigate: (pa
   const [error, setError] = useState<string | null>(null);
   const [viewingDeck, setViewingDeck] = useState<CommunityDeck | null>(null);
 
+  // --- Your own decks, shown at the top of the page -------------------------
+  const [myDecks, setMyDecks] = useState<SavedDeck[]>([]);
+  const [viewingMyDeck, setViewingMyDeck] = useState<SavedDeck | null>(null);
+
+  function refreshMyDecks() {
+    loadDecks()
+      .then(setMyDecks)
+      .catch(() => setMyDecks([]));
+  }
+
+  useEffect(refreshMyDecks, [user]);
+
+  async function handleDeleteMyDeck(id: string) {
+    try {
+      await deleteDeck(id);
+      refreshMyDecks();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not delete that deck.');
+    }
+  }
+
   // --- Filters -------------------------------------------------------------
   const [commanderQuery, setCommanderQuery] = useState('');
   const [colour, setColour] = useState('');
@@ -88,11 +137,12 @@ export default function DecksPage({ onNavigate: _onNavigate }: { onNavigate: (pa
 
   // --- Publish flow ----------------------------------------------------------
   const [showPublish, setShowPublish] = useState(false);
-  const [myDecks, setMyDecks] = useState<SavedDeck[]>([]);
   const [publishDeckId, setPublishDeckId] = useState('');
   const [publishArchetype, setPublishArchetype] = useState<Archetype>('other');
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
+
+  const publishableDecks = useMemo(() => myDecks.filter((d) => deckTotalCardCount(d) === 100), [myDecks]);
 
   function refresh() {
     listCommunityDecks({ archetype: archetype || undefined, colours: colour || undefined, sort })
@@ -101,13 +151,6 @@ export default function DecksPage({ onNavigate: _onNavigate }: { onNavigate: (pa
   }
 
   useEffect(refresh, [archetype, colour, sort]);
-
-  useEffect(() => {
-    if (!showPublish) return;
-    loadDecks()
-      .then((all) => setMyDecks(all.filter((d) => deckTotalCardCount(d) === 100)))
-      .catch(() => setMyDecks([]));
-  }, [showPublish]);
 
   const filteredDecks = useMemo(() => {
     if (!decks) return [];
@@ -153,7 +196,7 @@ export default function DecksPage({ onNavigate: _onNavigate }: { onNavigate: (pa
   }
 
   async function handlePublish() {
-    const deck = myDecks.find((d) => d.id === publishDeckId);
+    const deck = publishableDecks.find((d) => d.id === publishDeckId);
     if (!deck) return;
     setPublishing(true);
     setPublishError(null);
@@ -173,47 +216,64 @@ export default function DecksPage({ onNavigate: _onNavigate }: { onNavigate: (pa
     <div className="decks-page">
       <div className="decks-page-header">
         <h1>Decks</h1>
-        <p className="home-subtitle">Browse, filter, and vote on decks the community has built - the top-voted ones show on the home page.</p>
-        {user ? (
-          <button className="card-action-button" onClick={() => setShowPublish((v) => !v)}>
-            {showPublish ? 'Cancel' : 'Publish a deck'}
-          </button>
-        ) : (
-          <p className="account-tab-hint">Log in to publish one of your own decks or to vote.</p>
-        )}
       </div>
 
-      {showPublish && (
-        <div className="decks-publish-panel">
-          {myDecks.length === 0 ? (
-            <p className="account-tab-hint">
-              None of your saved decks are complete yet (100 cards including the commander) - finish one in the Deck Builder first.
-            </p>
-          ) : (
-            <>
-              <select value={publishDeckId} onChange={(e) => setPublishDeckId(e.target.value)}>
-                <option value="">Choose one of your decks…</option>
-                {myDecks.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name}
-                  </option>
-                ))}
-              </select>
-              <select value={publishArchetype} onChange={(e) => setPublishArchetype(e.target.value as Archetype)}>
-                {ARCHETYPES.map((a) => (
-                  <option key={a} value={a}>
-                    {ARCHETYPE_LABELS[a]}
-                  </option>
-                ))}
-              </select>
-              <button className="card-action-button" disabled={!publishDeckId || publishing} onClick={handlePublish}>
-                {publishing ? 'Publishing…' : 'Publish'}
-              </button>
-            </>
+      <div className="decks-section">
+        <h2>Your Decks</h2>
+        {myDecks.length === 0 ? (
+          <p className="account-tab-hint">You haven't built any decks yet - head to the Library to start one.</p>
+        ) : (
+          <div className="community-deck-list">
+            {myDecks.map((d) => (
+              <MyDeckRow key={d.id} deck={d} onView={() => setViewingMyDeck(d)} onDelete={() => handleDeleteMyDeck(d.id)} />
+            ))}
+          </div>
+        )}
+        {!user && <p className="account-tab-hint">Not logged in - these decks are saved to this browser only. Log in to publish one, or to vote on others'.</p>}
+      </div>
+
+      <div className="decks-section decks-section-lower">
+        <div className="decks-page-header">
+          <h2>Publish &amp; Browse</h2>
+          <p className="home-subtitle">Publish one of your decks for the community, or browse and vote on what everyone else has built - the top-voted ones show on the home page.</p>
+          {user && (
+            <button className="card-action-button" onClick={() => setShowPublish((v) => !v)}>
+              {showPublish ? 'Cancel' : 'Publish a deck'}
+            </button>
           )}
-          {publishError && <p className="account-tab-error">{publishError}</p>}
         </div>
-      )}
+
+        {showPublish && (
+          <div className="decks-publish-panel">
+            {publishableDecks.length === 0 ? (
+              <p className="account-tab-hint">
+                None of your saved decks are complete yet (100 cards including the commander) - finish one in the Library first.
+              </p>
+            ) : (
+              <>
+                <select value={publishDeckId} onChange={(e) => setPublishDeckId(e.target.value)}>
+                  <option value="">Choose one of your decks…</option>
+                  {publishableDecks.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name}
+                    </option>
+                  ))}
+                </select>
+                <select value={publishArchetype} onChange={(e) => setPublishArchetype(e.target.value as Archetype)}>
+                  {ARCHETYPES.map((a) => (
+                    <option key={a} value={a}>
+                      {ARCHETYPE_LABELS[a]}
+                    </option>
+                  ))}
+                </select>
+                <button className="card-action-button" disabled={!publishDeckId || publishing} onClick={handlePublish}>
+                  {publishing ? 'Publishing…' : 'Publish'}
+                </button>
+              </>
+            )}
+            {publishError && <p className="account-tab-error">{publishError}</p>}
+          </div>
+        )}
 
       <div className="decks-filter-bar">
         <input className="library-search" placeholder="Filter by commander name…" value={commanderQuery} onChange={(e) => setCommanderQuery(e.target.value)} />
@@ -280,6 +340,7 @@ export default function DecksPage({ onNavigate: _onNavigate }: { onNavigate: (pa
           );
         })}
       </div>
+      </div>
 
       {viewingDeck &&
         (() => {
@@ -293,6 +354,15 @@ export default function DecksPage({ onNavigate: _onNavigate }: { onNavigate: (pa
             <DeckViewModal title={viewingDeck.name} commander={commander} cardGroups={groupCardIds(viewingDeck.cardIds)} onClose={() => setViewingDeck(null)} />
           );
         })()}
+
+      {viewingMyDeck && (
+        <DeckViewModal
+          title={viewingMyDeck.name}
+          commander={tryGetCardDefinition(viewingMyDeck.commanderId)}
+          cardGroups={groupCardIds(viewingMyDeck.cardIds)}
+          onClose={() => setViewingMyDeck(null)}
+        />
+      )}
     </div>
   );
 }

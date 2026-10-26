@@ -819,6 +819,13 @@ button {
   max-width: 640px;
 }
 
+/* A saved deck's contents, shown "library style" - much roomier than the
+   default zone-modal so the grid of (up to 100) cards actually breathes. */
+.deck-view-modal {
+  max-width: 1100px;
+  width: 95vw;
+}
+
 .card-actions-header {
   display: flex;
   align-items: center;
@@ -1527,6 +1534,14 @@ button {
   margin: 8px 0 32px;
 }
 
+/* Tutorial/Arcade - empty for now, same centered layout as Home. */
+.placeholder-page {
+  max-width: 640px;
+  margin: 60px auto;
+  text-align: center;
+  padding: 0 24px;
+}
+
 .home-cards {
   display: flex;
   gap: 16px;
@@ -1555,12 +1570,6 @@ button {
   margin: 0;
 }
 
-.library-page {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 20px;
-}
-
 .library-controls {
   display: flex;
   gap: 12px;
@@ -1569,10 +1578,9 @@ button {
   margin-bottom: 12px;
 }
 
-/* Library and Deck Builder both scroll a long card grid under this bar - keep
-   it in view the whole time instead of losing it above the fold. Scoped to
-   these two pages only (not the shared class inside ZoneModal's own scroll area). */
-.library-page .library-controls,
+/* The merged Library/Deck Builder page scrolls a long card grid under this
+   bar - keep it in view the whole time instead of losing it above the fold.
+   (Not the shared class name inside ZoneModal's own scroll area.) */
 .deckbuilder-main .library-controls {
   position: sticky;
   top: 56px;
@@ -1617,75 +1625,34 @@ button {
   margin: 0 0 12px;
 }
 
-.library-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
-}
-
-.library-grid .card {
-  width: 100%;
-  height: 420px;
-}
-
-.library-grid .card-art-stack {
-  width: 100%;
-  height: 420px;
-}
-
-.library-grid .card-art {
-  object-fit: contain;
-  background: var(--bg);
-}
-
-.library-grid .card-name-strip {
-  display: none;
-  font-size: 13px;
-  padding: 4px 6px;
-}
-
-.library-grid .card-placeholder-name {
-  font-size: 15px;
-}
-
-.library-grid .card-placeholder-type {
-  font-size: 12px;
-}
-
-.library-grid .card-placeholder-text {
-  font-size: 11px;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 6;
-  line-clamp: 6;
-  overflow: hidden;
-}
-
-.library-grid .card-placeholder-cost {
-  font-size: 12px;
-}
+/* No longer a flex row - the sidebar is position: fixed (its own window,
+   not a column that scrolls with the page), so the pool side just reserves
+   room for it with a right margin instead of sharing a flex track. */
 .deckbuilder-page {
-  display: flex;
-  gap: 16px;
-  padding: 20px;
-  max-width: 1400px;
-  margin: 0 auto;
+  width: 100%;
 }
 
+/* Hugs the left edge (a little padding, not a centred column with empty
+   space on both sides) and reserves exactly the sidebar's width on the
+   right so pool cards never render underneath it. */
 .deckbuilder-main {
-  flex: 3;
+  margin-right: 420px;
+  padding: 20px 20px 20px 24px;
 }
 
+/* A fixed window down the right edge of the screen, not a box that scrolls
+   away with the page - it's pinned under the nav bar for the full
+   remaining viewport height and scrolls its own contents independently. */
 .deckbuilder-sidebar {
-  flex: 1;
-  min-width: 280px;
+  position: fixed;
+  top: 56px;
+  right: 0;
+  width: 420px;
+  height: calc(100vh - 56px);
+  overflow-y: auto;
   background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 16px;
-  height: fit-content;
-  position: sticky;
-  top: 16px;
+  border-left: 1px solid var(--border);
+  padding: 20px;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -1701,9 +1668,31 @@ button {
   font-size: 16px;
 }
 
+.deckbuilder-back-button {
+  align-self: flex-start;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 13px;
+  padding: 0;
+}
+
+.deckbuilder-create-button {
+  padding: 14px;
+  border-radius: 8px;
+  border: none;
+  background: var(--accent);
+  color: #14151d;
+  font-weight: 700;
+  font-size: 15px;
+}
+
+/* 4 cards per row at a normal desktop width - naturally fewer on a
+   narrower window, more on a very wide one, instead of a fixed column
+   count that either crowds or leaves the row half-empty. */
 .deckbuilder-pool-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 20px;
 }
 
@@ -1806,6 +1795,27 @@ button {
 
 .deckbuilder-pool-item .card-name-strip {
   display: none;
+}
+
+.deckbuilder-pool-item .card-placeholder-name {
+  font-size: 15px;
+}
+
+.deckbuilder-pool-item .card-placeholder-type {
+  font-size: 12px;
+}
+
+.deckbuilder-pool-item .card-placeholder-text {
+  font-size: 11px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 6;
+  line-clamp: 6;
+  overflow: hidden;
+}
+
+.deckbuilder-pool-item .card-placeholder-cost {
+  font-size: 12px;
 }
 
 .mana-filter-button {
@@ -1911,6 +1921,26 @@ button {
   font-size: 20px;
   font-weight: 700;
   z-index: 5;
+}
+
+/* Wraps any <Card> that opens CardFullScreenModal on click (pool tiles, the
+   chosen commander, saved-deck previews, art-variant picks). */
+.card-clickable-wrapper {
+  cursor: pointer;
+}
+
+.card-fullscreen-overlay {
+  z-index: 60;
+}
+
+.card-fullscreen-frame {
+  position: relative;
+}
+
+.card-fullscreen-frame .card {
+  width: min(85vw, 460px);
+  height: auto;
+  aspect-ratio: 5 / 7;
 }
 
 .deckbuilder-deck-name-link {
@@ -3699,6 +3729,22 @@ button {
 
 .decks-page-header {
   margin-bottom: 16px;
+}
+
+.decks-section {
+  margin-bottom: 28px;
+}
+
+.decks-section h2 {
+  color: var(--accent);
+  font-family: 'Cinzel', serif;
+  font-size: 18px;
+  margin: 0 0 12px;
+}
+
+.decks-section-lower {
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
 }
 
 .decks-publish-panel {

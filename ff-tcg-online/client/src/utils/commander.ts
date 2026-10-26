@@ -8,7 +8,7 @@
 // ============================================================================
 
 import { CardDefinition } from '../types';
-import { CARD_POOL, getCardDefinition } from '../data/cards';
+import { CARD_POOL, tryGetCardDefinition } from '../data/cards';
 
 /** True if some other card in the pool transforms into this one - i.e. this
  * card is a "back face" and was never meant to be chosen or added on its
@@ -44,6 +44,10 @@ export function canAddCopy(def: CardDefinition, currentCardIds: string[]): boole
   if (isTransformBackFace(def.id)) return false;
   if (def.type === 'land') return true;
   if (UNLIMITED_NAME_EXCEPTIONS.includes(def.name)) return true;
-  const existingNames = currentCardIds.map((id) => getCardDefinition(id).name);
+  // currentCardIds can come from a loaded deck that's not as trustworthy as
+  // the live pool - a stale id (its card since renamed or removed) can't
+  // possibly match def.name anyway, so it's just skipped rather than
+  // crashing the whole page.
+  const existingNames = currentCardIds.map((id) => tryGetCardDefinition(id)?.name).filter((name): name is string => name !== undefined);
   return !existingNames.includes(def.name);
 }

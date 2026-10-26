@@ -12014,6 +12014,15 @@ export function getCardDefinition(defId: string): CardDefinition {
   return def;
 }
 
+/** Like getCardDefinition, but returns null instead of throwing when the id
+ * matches nothing in the pool - for data that didn't come from the live
+ * CARD_POOL/TOKEN_POOL itself (a saved deck, a community deck) where one
+ * stale id, left behind by a card that's since been renamed or removed,
+ * shouldn't crash the whole page. */
+export function tryGetCardDefinition(defId: string): CardDefinition | null {
+  return CARD_POOL.find((c) => c.id === defId) ?? TOKEN_POOL.find((c) => c.id === defId) ?? null;
+}
+
 /** A transformed back face (Braska's Final Aeon, Clive, Ifrit's Warden of
  * Inferno's back side, ...) only ever exists ON THE BATTLEFIELD - the front
  * face and back face are the same physical card, so the moment it leaves

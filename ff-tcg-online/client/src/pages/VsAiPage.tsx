@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { deckTotalCardCount, loadDecks, markDeckPlayed, SavedDeck } from '../utils/deckStorage';
-import { getCardDefinition } from '../data/cards';
+import { tryGetCardDefinition } from '../data/cards';
 import { createStateFromDeck } from '../engine/state';
 import { useLocalGame } from '../hooks/useLocalGame';
 import GameBoard from '../components/GameBoard';
@@ -26,7 +26,7 @@ export default function VsAiPage() {
         <h2>Choose a deck to practice with</h2>
         <p className="pregame-hint">
           The AI doesn't make real decisions yet - you'll control both sides of the board yourself. It plays a
-          copy of whichever deck you pick here. Build one in the Deck Builder tab first if none show up below.
+          copy of whichever deck you pick here. Build one in the Library tab first if none show up below.
         </p>
         {decks === null ? (
           <p className="card-actions-hint">Loading decks…</p>
@@ -37,7 +37,7 @@ export default function VsAiPage() {
             {decks.map((d) => (
               <button key={d.id} className="vsai-deck-option" onClick={() => startWithDeck(d)}>
                 <strong>{d.name}</strong>
-                <span>{getCardDefinition(d.commanderId).name}</span>
+                <span>{tryGetCardDefinition(d.commanderId)?.name ?? 'Unknown commander'}</span>
                 <span>{deckTotalCardCount(d)} cards</span>
               </button>
             ))}

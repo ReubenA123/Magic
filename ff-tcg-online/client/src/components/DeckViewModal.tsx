@@ -1,6 +1,7 @@
 import React from 'react';
 import { CardDefinition } from '../types';
 import Card from './Card';
+import { useCardFullScreen } from '../hooks/useCardFullScreen';
 
 interface DeckViewModalProps {
   title: string;
@@ -10,39 +11,47 @@ interface DeckViewModalProps {
 }
 
 export default function DeckViewModal({ title, commander, cardGroups, onClose }: DeckViewModalProps) {
+  const { cardClickProps, fullScreenModal } = useCardFullScreen();
+
   return (
-    <div className="card-actions-overlay" onClick={onClose}>
-      <div className="zone-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="card-actions-header">
-          <strong>{title}</strong>
-          <button className="close-button" onClick={onClose}>
-            {'\u2715'}
-          </button>
-        </div>
-
-        {commander && (
-          <div className="deckview-commander-row">
-            <Card definition={commander} />
-            <div>
-              <div className="card-actions-label">Commander</div>
-              <div>{commander.name}</div>
-            </div>
+    <>
+      <div className="card-actions-overlay" onClick={onClose}>
+        <div className="zone-modal deck-view-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="card-actions-header">
+            <strong>{title}</strong>
+            <button className="close-button" onClick={onClose}>
+              {'\u2715'}
+            </button>
           </div>
-        )}
 
-        {cardGroups.length === 0 ? (
-          <p className="card-actions-hint">No other cards in this deck.</p>
-        ) : (
-          <div className="zone-modal-grid">
-            {cardGroups.map(({ def, count }) => (
-              <div key={def.id} className="deckview-card-item">
-                <Card definition={def} />
-                <span className="deckview-card-count">x{count}</span>
+          {commander && (
+            <div className="deckview-commander-row">
+              <div className="card-clickable-wrapper" {...cardClickProps(commander)}>
+                <Card definition={commander} />
               </div>
-            ))}
-          </div>
-        )}
+              <div>
+                <div className="card-actions-label">Commander</div>
+                <div>{commander.name}</div>
+              </div>
+            </div>
+          )}
+
+          {cardGroups.length === 0 ? (
+            <p className="card-actions-hint">No other cards in this deck.</p>
+          ) : (
+            <div className="zone-modal-grid">
+              {cardGroups.map(({ def, count }) => (
+                <div key={def.id} className="deckview-card-item card-clickable-wrapper" {...cardClickProps(def)}>
+                  <Card definition={def} />
+                  <span className="deckview-card-count">x{count}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+
+      {fullScreenModal}
+    </>
   );
 }
