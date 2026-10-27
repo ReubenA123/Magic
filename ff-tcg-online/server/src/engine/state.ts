@@ -45,6 +45,10 @@ function buildPlayer(id: string, name: string): PlayerState {
     hasDrawnThisTurn: false,
     commanderDamageTaken: 0,
     poisonCounters: 0,
+    // This path (createInitialState) always uses buildDefaultDecklist, not
+    // a real SavedDeck - no cosmetic back to read yet (see client/src/
+    // engine/state.ts's createStateFromDeck for where one actually is).
+    libraryCardBackId: null,
     lifeGainedThisTurn: 0,
     lifeLostThisTurn: 0,
   };

@@ -5,7 +5,7 @@ import { CardDefinition } from '../types';
 import { Archetype, ARCHETYPE_LABELS, ARCHETYPES, CommunityDeck } from '../api/accountTypes';
 import { deleteCommunityDeck, listCommunityDecks, publishCommunityDeck, removeVoteForCommunityDeck, voteForCommunityDeck } from '../api/communityDecks';
 import { ApiError } from '../api/rest';
-import { loadDecks, deleteDeck, deckTotalCardCount, SavedDeck } from '../utils/deckStorage';
+import { loadDecks, saveDeck, deleteDeck, deckTotalCardCount, sortDecksFavouritesFirst, SavedDeck } from '../utils/deckStorage';
 import { useAuth } from '../context/AuthContext';
 import Card from '../components/Card';
 import DeckViewModal from '../components/DeckViewModal';
@@ -36,6 +36,7 @@ function MyDeckRow({ deck, onView, onDelete }: { deck: SavedDeck; onView: () => 
       <div className="community-deck-commander-thumb">{commander && <Card definition={commander} />}</div>
       <div className="community-deck-info">
         <button className="deckbuilder-deck-name-link" onClick={onView}>
+          {deck.favourite && <span className="deckview-favourite-star deckview-favourite-star-active deckview-favourite-star-inline">{'★'}</span>}
           {deck.name}
         </button>
         <div className="community-deck-meta">
@@ -126,6 +127,39 @@ export default function DecksPage({ onNavigate: _onNavigate }: { onNavigate: (pa
       refreshMyDecks();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not delete that deck.');
+    }
+  }
+
+  async function handleRenameMyDeck(deck: SavedDeck, name: string) {
+    const updated = { ...deck, name };
+    try {
+      await saveDeck(updated);
+      refreshMyDecks();
+      setViewingMyDeck((prev) => (prev?.id === deck.id ? updated : prev));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not rename that deck.');
+    }
+  }
+
+  async function handleToggleFavouriteMyDeck(deck: SavedDeck) {
+    const updated = { ...deck, favourite: !deck.favourite };
+    try {
+      await saveDeck(updated);
+      refreshMyDecks();
+      setViewingMyDeck((prev) => (prev?.id === deck.id ? updated : prev));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update that deck.');
+    }
+  }
+
+  async function handleChangeCardBackMyDeck(deck: SavedDeck, cardBackId: string) {
+    const updated = { ...deck, cardBackId };
+    try {
+      await saveDeck(updated);
+      refreshMyDecks();
+      setViewingMyDeck((prev) => (prev?.id === deck.id ? updated : prev));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update that deck.');
     }
   }
 
@@ -224,7 +258,7 @@ export default function DecksPage({ onNavigate: _onNavigate }: { onNavigate: (pa
           <p className="account-tab-hint">You haven't built any decks yet - head to the Library to start one.</p>
         ) : (
           <div className="community-deck-list">
-            {myDecks.map((d) => (
+            {sortDecksFavouritesFirst(myDecks).map((d) => (
               <MyDeckRow key={d.id} deck={d} onView={() => setViewingMyDeck(d)} onDelete={() => handleDeleteMyDeck(d.id)} />
             ))}
           </div>
@@ -361,6 +395,13 @@ export default function DecksPage({ onNavigate: _onNavigate }: { onNavigate: (pa
           commander={tryGetCardDefinition(viewingMyDeck.commanderId)}
           cardGroups={groupCardIds(viewingMyDeck.cardIds)}
           onClose={() => setViewingMyDeck(null)}
+          editable={{
+            favourite: !!viewingMyDeck.favourite,
+            onRename: (name) => handleRenameMyDeck(viewingMyDeck, name),
+            onToggleFavourite: () => handleToggleFavouriteMyDeck(viewingMyDeck),
+            cardBackId: viewingMyDeck.cardBackId ?? null,
+            onChangeCardBack: (id) => handleChangeCardBackMyDeck(viewingMyDeck, id),
+          }}
         />
       )}
     </div>

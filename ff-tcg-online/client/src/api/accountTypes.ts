@@ -31,6 +31,8 @@ export interface SavedDeck {
   /** Null until the deck has actually started a game at least once - just
    * this one timestamp, not real match history (see server/src/db/decks.ts). */
   lastPlayedAt: string | null;
+  favourite?: boolean;
+  cardBackId?: string | null;
 }
 
 /** One relationship row from the viewer's side, whatever its status -

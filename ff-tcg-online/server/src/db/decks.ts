@@ -20,6 +20,13 @@ export interface SavedDeck {
    * timestamp, not real match history (see routes/decks.ts's played route
    * and the project notes on why full game history is out of scope for now). */
   lastPlayedAt: string | null;
+  /** Optional on the way in (an older client, or a rename-only payload,
+   * might not send it) - always present (never undefined) on the way out,
+   * via rowToDeck below. */
+  favourite?: boolean;
+  /** Cosmetic only - which client/src/data/cardBacks.ts CARD_BACKS id this
+   * deck's library pile is skinned with. Null/undefined = the default back. */
+  cardBackId?: string | null;
 }
 
 interface DeckRow {
@@ -30,6 +37,8 @@ interface DeckRow {
   created_at: string;
   updated_at: string;
   last_played_at: string | null;
+  favourite: number;
+  card_back_id: string | null;
 }
 
 function rowToDeck(row: DeckRow): SavedDeck {
@@ -41,6 +50,8 @@ function rowToDeck(row: DeckRow): SavedDeck {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     lastPlayedAt: row.last_played_at,
+    favourite: !!row.favourite,
+    cardBackId: row.card_back_id,
   };
 }
 
@@ -69,14 +80,16 @@ export function findDeck(userId: string, deckId: string): SavedDeck | null {
 export function upsertDeck(userId: string, deck: SavedDeck): SavedDeck {
   const now = new Date().toISOString();
   db.prepare(
-    `INSERT INTO decks (id, user_id, name, commander_id, card_ids, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO decks (id, user_id, name, commander_id, card_ids, created_at, updated_at, favourite, card_back_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (user_id, id) DO UPDATE SET
        name = excluded.name,
        commander_id = excluded.commander_id,
        card_ids = excluded.card_ids,
-       updated_at = excluded.updated_at`,
-  ).run(deck.id, userId, deck.name, deck.commanderId, JSON.stringify(deck.cardIds), now, now);
+       updated_at = excluded.updated_at,
+       favourite = excluded.favourite,
+       card_back_id = excluded.card_back_id`,
+  ).run(deck.id, userId, deck.name, deck.commanderId, JSON.stringify(deck.cardIds), now, now, deck.favourite ? 1 : 0, deck.cardBackId ?? null);
   return findDeck(userId, deck.id)!;
 }
 

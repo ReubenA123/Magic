@@ -46,6 +46,10 @@ interface CardProps {
    * about the REVEALED CARD itself, in hand, not a source permanent's own
    * running history. */
   revealedInHand?: boolean;
+  /** Only read when faceDown is true - the chosen card back's image (see
+   * data/cardBacks.ts), defaulting to the plain back when omitted so every
+   * other faceDown call site keeps its existing look unchanged. */
+  cardBackImagePath?: string;
 }
 
 export default function Card({
@@ -62,6 +66,7 @@ export default function Card({
   awaitingOptionalChoice,
   actionable,
   revealedInHand,
+  cardBackImagePath,
 }: CardProps) {
   const [imageFailed, setImageFailed] = useState(false);
   const [backImageFailed, setBackImageFailed] = useState(false);
@@ -69,7 +74,9 @@ export default function Card({
   if (faceDown) {
     return (
       <div className="card card-back">
-        {!backImageFailed && <img src="/assets/cards/card-back.jpg" alt="Card back" className="card-art" onError={() => setBackImageFailed(true)} />}
+        {!backImageFailed && (
+          <img src={cardBackImagePath ?? '/assets/cards/card-back.jpg'} alt="Card back" className="card-art" onError={() => setBackImageFailed(true)} />
+        )}
       </div>
     );
   }

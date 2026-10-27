@@ -11939,6 +11939,24 @@ export const TOKEN_POOL: CardDefinition[] = [
     imagePath: '/assets/cards/token-the-blackjack.webp',
     crew: 2,
   },
+  // Not a token (and not an Emblem - this engine has no emblem concept at
+  // all) - it's a reference/display card for the Monarch designation
+  // itself (see GameState.monarchPlayerId, already fully implemented: the
+  // end-step draw and the "dealt combat damage to the monarch" steal both
+  // live in engine/actions.ts, independent of any card or instance). It's
+  // never created as a real CardInstance and never sits in a zone - real
+  // Magic's Monarch is a status on a player, not a permanent, so there's
+  // nothing to destroy/exile/bounce here even though it LOOKS like a card.
+  // The client's GameBoard.tsx renders this definition next to whichever
+  // player's monarchPlayerId matches, purely derived from that state field.
+  {
+    id: 'the-monarch',
+    name: 'The Monarch',
+    type: 'enchantment',
+    costLabel: '-',
+    text: 'At the beginning of your end step, draw a card.\n' + 'Whenever a creature deals combat damage to you, its controller becomes the monarch.',
+    imagePath: '/assets/cards/the-monarch.webp',
+  },
 ];
 
 export function getCardDefinition(defId: string): CardDefinition {

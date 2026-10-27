@@ -822,8 +822,20 @@ button {
 /* A saved deck's contents, shown "library style" - much roomier than the
    default zone-modal so the grid of (up to 100) cards actually breathes. */
 .deck-view-modal {
-  max-width: 1100px;
+  max-width: 1500px;
   width: 95vw;
+  max-height: calc(100vh - 56px - 32px);
+}
+
+/* The default .card-actions-overlay vertically CENTERS its content, which
+   for a modal this tall pushes its top edge up underneath the nav bar
+   (position: sticky, z-index: 100 - above the overlay's own 50, so it
+   visibly cuts the modal off instead of just overlapping behind it).
+   Anchoring to the top instead, just below the nav bar, means the modal
+   never goes there in the first place. */
+.deck-view-overlay {
+  align-items: flex-start;
+  padding-top: 72px;
 }
 
 .card-actions-header {
@@ -1732,9 +1744,18 @@ button {
   cursor: not-allowed;
 }
 
-.deckbuilder-commander-slot {
+/* Commander on the left, Card Back opposite it on the right - two columns
+   sharing one row instead of each being its own full-width block. */
+.deckbuilder-top-row {
+  display: flex;
+  gap: 12px;
   border-bottom: 1px solid var(--border);
   padding-bottom: 12px;
+}
+
+.deckbuilder-commander-slot {
+  flex: 1;
+  min-width: 0;
 }
 
 .deckbuilder-commander-card {
@@ -1746,6 +1767,82 @@ button {
 .deckbuilder-commander-card .card {
   width: 60px;
   height: 80px;
+}
+
+.deckbuilder-cardback-slot {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
+  gap: 6px;
+}
+
+.deckbuilder-cardback-preview {
+  width: 60px;
+  height: 80px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.deckbuilder-cardback-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.deckbuilder-cardback-change-button {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--panel-raised);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.cardback-picker-modal {
+  max-width: 480px;
+}
+
+.cardback-picker-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.cardback-picker-option {
+  width: 100px;
+  padding: 0;
+  border-radius: 8px;
+  border: 2px solid var(--border);
+  overflow: hidden;
+  background: var(--panel-raised);
+  display: flex;
+  flex-direction: column;
+}
+
+.cardback-picker-option img {
+  width: 100%;
+  height: 134px;
+  object-fit: cover;
+  display: block;
+}
+
+.cardback-picker-option span {
+  padding: 4px 6px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.cardback-picker-option-active {
+  border-color: var(--accent);
+}
+
+.cardback-picker-option-active span {
+  color: var(--accent);
 }
 
 .deckbuilder-count {
@@ -1974,16 +2071,22 @@ button {
 
 .deckview-commander-row {
   display: flex;
-  gap: 12px;
+  justify-content: space-between;
   align-items: center;
-  margin-bottom: 14px;
-  padding-bottom: 14px;
+  margin-bottom: 16px;
+  padding-bottom: 16px;
   border-bottom: 1px solid var(--border);
 }
 
+.deckview-commander-main {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
 .deckview-commander-row .card {
-  width: 80px;
-  height: 106px;
+  width: 180px;
+  height: 239px;
 }
 
 .deckview-card-item {
@@ -2000,6 +2103,55 @@ button {
   font-weight: 700;
   padding: 1px 5px;
   border-radius: 4px;
+}
+
+.deckview-type-section {
+  margin-bottom: 18px;
+}
+
+.deckview-type-section:last-child {
+  margin-bottom: 0;
+}
+
+.deckview-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.deckview-favourite-star {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 22px;
+  line-height: 1;
+  padding: 0;
+}
+
+.deckview-favourite-star-active {
+  color: var(--accent);
+}
+
+/* Reused as a plain (non-button) indicator next to a deck's name in a list
+   row, not just inside the DeckViewModal header - smaller, inline. */
+.deckview-favourite-star-inline {
+  font-size: 13px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+.deckview-name-input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: 'Cinzel', serif;
+  font-size: 16px;
 }
 .vs-ai-button {
   margin-top: 12px;
@@ -3065,6 +3217,23 @@ button {
   border: 1px solid var(--fire);
   padding: 2px 6px;
   border-radius: 4px;
+}
+
+/* The Monarch (see GameState.monarchPlayerId) - not a real permanent, so
+   this is purely a derived display next to whoever currently holds it,
+   not a zone/instance of its own. */
+.monarch-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--accent);
+}
+
+.monarch-indicator .card {
+  width: 36px;
+  height: 48px;
+  flex-shrink: 0;
 }
 
 .selection-box {

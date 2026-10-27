@@ -80,6 +80,8 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     last_played_at TEXT,
+    favourite INTEGER NOT NULL DEFAULT 0, -- 0/1, SQLite has no real boolean
+    card_back_id TEXT, -- cosmetic only, NULL = the plain default back
     PRIMARY KEY (user_id, id)
   );
 
@@ -146,4 +148,12 @@ if (!deckColumns.includes('created_at')) {
 }
 if (!deckColumns.includes('last_played_at')) {
   db.exec('ALTER TABLE decks ADD COLUMN last_played_at TEXT');
+}
+if (!deckColumns.includes('favourite')) {
+  // A literal constant default (unlike created_at's datetime('now') above)
+  // is fine to add directly, even with existing rows.
+  db.exec('ALTER TABLE decks ADD COLUMN favourite INTEGER NOT NULL DEFAULT 0');
+}
+if (!deckColumns.includes('card_back_id')) {
+  db.exec('ALTER TABLE decks ADD COLUMN card_back_id TEXT');
 }

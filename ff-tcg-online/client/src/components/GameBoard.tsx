@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { CardDefinition, CardInstance, GameAction, GameState, ManaColor, PlayerState, ZoneName } from '../types';
 import { getCardDefinition } from '../data/cards';
+import { getCardBackImagePath } from '../data/cardBacks';
 import { parseCostLabel, canPay, effectiveCastCost, dynamicCostReduction, manaValue } from '../engine/mana';
 import { CombatKeyword, hasKeyword, hasKeywordEffective } from '../engine/keywords';
 import { effectivePower, effectiveToughness, equipmentContributions, hasBoardGrantedKeyword, isLegalPendingTarget as isLegalPendingTargetShared } from '../engine/combat';
@@ -2309,7 +2310,11 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           ) : libraryTopVisible ? (
             <Card definition={getCardDefinition(libraryTopVisible.defId)} instance={libraryTopVisible} />
           ) : (
-            <Card definition={{ id: '', name: '', type: 'creature', costLabel: '', text: '', imagePath: '' }} faceDown />
+            <Card
+              definition={{ id: '', name: '', type: 'creature', costLabel: '', text: '', imagePath: '' }}
+              faceDown
+              cardBackImagePath={getCardBackImagePath(player.libraryCardBackId)}
+            />
           )}
           <span className="library-stack-count">{player.zones.library.length}</span>
         </div>
@@ -2482,6 +2487,12 @@ export default function GameBoard({ state, yourPlayerId, actionError, onAction, 
           </span>
           {player.commanderDamageTaken > 0 && <span className="commander-damage-badge">Commander dmg: {player.commanderDamageTaken}</span>}
           {player.poisonCounters > 0 && <span className="commander-damage-badge">Poison: {player.poisonCounters}</span>}
+          {state.monarchPlayerId === player.id && (
+            <div className="monarch-indicator" title={getCardDefinition('the-monarch').text}>
+              <Card definition={getCardDefinition('the-monarch')} />
+              <span>Monarch</span>
+            </div>
+          )}
           {mutualActive && (
             <div className="life-buttons">
               {[-5, -1, 1, 5].map((delta) => (

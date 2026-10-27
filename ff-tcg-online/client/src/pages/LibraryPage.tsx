@@ -1,12 +1,23 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { CARD_POOL, getCardDefinition, tryGetCardDefinition } from '../data/cards';
+import { getCardBackImagePath } from '../data/cardBacks';
 import { CardDefinition, CardType } from '../types';
 import Card from '../components/Card';
 import CardArtStack from '../components/CardArtStack';
 import DeckViewModal from '../components/DeckViewModal';
+import CardBackPickerModal from '../components/CardBackPickerModal';
 import { isLegalCommander, canAddCopy, isTransformBackFace } from '../utils/commander';
 import { groupByArtVariants } from '../utils/artVariants';
-import { loadDecks, saveDeck, deleteDeck, newDeckId, hasLocalDecksToImport, importLocalDecksToAccount, SavedDeck } from '../utils/deckStorage';
+import {
+  loadDecks,
+  saveDeck,
+  deleteDeck,
+  newDeckId,
+  hasLocalDecksToImport,
+  importLocalDecksToAccount,
+  sortDecksFavouritesFirst,
+  SavedDeck,
+} from '../utils/deckStorage';
 import { getColourIdentity, isWithinColourIdentity, ManaLetter } from '../utils/colourIdentity';
 import { useAuth } from '../context/AuthContext';
 import { useCardFullScreen } from '../hooks/useCardFullScreen';
@@ -59,6 +70,18 @@ export default function LibraryPage() {
   const [deckName, setDeckName] = useState('New Deck');
   const [commanderId, setCommanderId] = useState<string | null>(null);
   const [cardIds, setCardIds] = useState<string[]>([]);
+  // Cosmetic only - which library pile skin this deck uses (see
+  // data/cardBacks.ts). Null = the plain default back.
+  const [cardBackId, setCardBackId] = useState<string | null>(null);
+  const [showCardBackPicker, setShowCardBackPicker] = useState(false);
+  // The saved deck currently loaded into the editor above, if any - so
+  // "Save deck" updates THAT deck in place (same id, and its createdAt/
+  // favourite/lastPlayedAt carried over) instead of always minting a new
+  // one. Null while building a brand new deck from scratch; set the moment
+  // an existing deck is loaded OR the first time a new one is saved (so a
+  // second "Save deck" click on the same session updates it too, rather
+  // than creating a duplicate every time).
+  const [editingDeck, setEditingDeck] = useState<SavedDeck | null>(null);
 
   // --- Card pool browsing/filtering state -------------------------------
   const [filter, setFilter] = useState<PoolFilter>('all');
@@ -137,6 +160,8 @@ export default function LibraryPage() {
     setDeckName('New Deck');
     setCommanderId(null);
     setCardIds([]);
+    setCardBackId(null);
+    setEditingDeck(null);
     setBuildingDeck(true);
   }
 
@@ -180,19 +205,25 @@ export default function LibraryPage() {
       return;
     }
     const now = new Date().toISOString();
+    // Reuse the loaded deck's id (and whatever it already had for these
+    // fields) so this updates it in place instead of saving a duplicate -
+    // only a genuinely new deck (editingDeck still null) mints a fresh id.
     const deck: SavedDeck = {
-      id: newDeckId(),
+      id: editingDeck?.id ?? newDeckId(),
       name: deckName || 'Untitled Deck',
       commanderId,
       cardIds,
-      createdAt: now,
+      createdAt: editingDeck?.createdAt ?? now,
       updatedAt: now,
-      lastPlayedAt: null,
+      lastPlayedAt: editingDeck?.lastPlayedAt ?? null,
+      favourite: editingDeck?.favourite ?? false,
+      cardBackId,
     };
     setSaveError(null);
     try {
       await saveDeck(deck);
       refreshSavedDecks();
+      setEditingDeck(deck); // further saves this session keep updating it too
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Could not save that deck.');
     }
@@ -201,7 +232,9 @@ export default function LibraryPage() {
   function handleLoad(deck: SavedDeck) {
     setDeckName(deck.name);
     setCommanderId(deck.commanderId);
+    setCardBackId(deck.cardBackId ?? null);
     setCardIds(deck.cardIds);
+    setEditingDeck(deck);
     setBuildingDeck(true);
   }
 
@@ -212,6 +245,56 @@ export default function LibraryPage() {
       refreshSavedDecks();
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Could not delete that deck.');
+    }
+  }
+
+  // If the deck being renamed/favourited/re-skinned here is ALSO the one
+  // currently loaded into the builder (same id), keep that in sync too -
+  // otherwise a later "Save deck" click there would silently overwrite the
+  // change with the builder's own stale copy of it.
+  function syncEditingDeck(updated: SavedDeck) {
+    setEditingDeck((prev) => (prev?.id === updated.id ? updated : prev));
+  }
+
+  async function handleRenameSavedDeck(deck: SavedDeck, name: string) {
+    const updated = { ...deck, name };
+    setSaveError(null);
+    try {
+      await saveDeck(updated);
+      refreshSavedDecks();
+      setViewingDeck((prev) => (prev?.id === deck.id ? updated : prev));
+      syncEditingDeck(updated);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Could not rename that deck.');
+    }
+  }
+
+  async function handleToggleFavourite(deck: SavedDeck) {
+    const updated = { ...deck, favourite: !deck.favourite };
+    setSaveError(null);
+    try {
+      await saveDeck(updated);
+      refreshSavedDecks();
+      setViewingDeck((prev) => (prev?.id === deck.id ? updated : prev));
+      syncEditingDeck(updated);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Could not update that deck.');
+    }
+  }
+
+  async function handleChangeCardBackSavedDeck(deck: SavedDeck, newCardBackId: string) {
+    const updated = { ...deck, cardBackId: newCardBackId };
+    setSaveError(null);
+    try {
+      await saveDeck(updated);
+      refreshSavedDecks();
+      setViewingDeck((prev) => (prev?.id === deck.id ? updated : prev));
+      syncEditingDeck(updated);
+      // Also reflect it live if this exact deck happens to be open in the
+      // builder right now, so the two views never disagree.
+      if (editingDeck?.id === deck.id) setCardBackId(newCardBackId);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Could not update that deck.');
     }
   }
 
@@ -233,9 +316,10 @@ export default function LibraryPage() {
   const savedDecksList = savedDecks.length > 0 && (
     <div className="deckbuilder-saved-list">
       <div className="card-actions-label">Your decks</div>
-      {savedDecks.map((d) => (
+      {sortDecksFavouritesFirst(savedDecks).map((d) => (
         <div key={d.id} className="deckbuilder-list-row">
           <button className="deckbuilder-deck-name-link" onClick={() => setViewingDeck(d)}>
+            {d.favourite && <span className="deckview-favourite-star deckview-favourite-star-active deckview-favourite-star-inline">{'★'}</span>}
             {d.name}
           </button>
           <div className="deckbuilder-saved-actions">
@@ -344,18 +428,32 @@ export default function LibraryPage() {
 
             <input className="deckbuilder-name-input" value={deckName} onChange={(e) => setDeckName(e.target.value)} />
 
-            <div className="deckbuilder-commander-slot">
-              <div className="card-actions-label">Commander</div>
-              {commander ? (
-                <div className="deckbuilder-commander-card card-clickable-wrapper" {...cardClickProps(commander)}>
-                  <Card definition={commander} />
-                  <span>{commander.name}</span>
-                </div>
-              ) : commanderId ? (
-                <p className="card-actions-hint">This deck's commander no longer exists in the card pool - pick a new one.</p>
-              ) : (
-                <p className="card-actions-hint">No commander chosen yet.</p>
-              )}
+            <div className="deckbuilder-top-row">
+              <div className="deckbuilder-commander-slot">
+                <div className="card-actions-label">Commander</div>
+                {commander ? (
+                  <div className="deckbuilder-commander-card card-clickable-wrapper" {...cardClickProps(commander)}>
+                    <Card definition={commander} />
+                    <span>{commander.name}</span>
+                  </div>
+                ) : commanderId ? (
+                  <p className="card-actions-hint">This deck's commander no longer exists in the card pool - pick a new one.</p>
+                ) : (
+                  <p className="card-actions-hint">No commander chosen yet.</p>
+                )}
+              </div>
+
+              <div className="deckbuilder-cardback-slot">
+                <div className="card-actions-label">Card Back</div>
+                {cardBackId && (
+                  <div className="deckbuilder-cardback-preview">
+                    <img src={getCardBackImagePath(cardBackId)} alt="" />
+                  </div>
+                )}
+                <button className="deckbuilder-cardback-change-button" onClick={() => setShowCardBackPicker(true)}>
+                  Change Card Back
+                </button>
+              </div>
             </div>
 
             <div className="deckbuilder-count">
@@ -420,8 +518,17 @@ export default function LibraryPage() {
           commander={tryGetCardDefinition(viewingDeck.commanderId)}
           cardGroups={groupCardIds(viewingDeck.cardIds)}
           onClose={() => setViewingDeck(null)}
+          editable={{
+            favourite: !!viewingDeck.favourite,
+            onRename: (name) => handleRenameSavedDeck(viewingDeck, name),
+            onToggleFavourite: () => handleToggleFavourite(viewingDeck),
+            cardBackId: viewingDeck.cardBackId ?? null,
+            onChangeCardBack: (id) => handleChangeCardBackSavedDeck(viewingDeck, id),
+          }}
         />
       )}
+
+      {showCardBackPicker && <CardBackPickerModal selectedId={cardBackId} onSelect={setCardBackId} onClose={() => setShowCardBackPicker(false)} />}
 
       {fullScreenModal}
     </div>

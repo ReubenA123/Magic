@@ -7593,6 +7593,12 @@ export interface PlayerState {
    * to the players/client). See engine/actions.ts:
    * applyCombatDamageToPlayerTriggers. */
   poisonCounters: number;
+  /** Which of client/src/data/cardBacks.ts's CARD_BACKS this player chose
+   * for their deck (null = the plain default back) - purely cosmetic, read
+   * only by the client when rendering their library pile face down (see
+   * GameBoard.tsx). Set once at game start from SavedDeck.cardBackId (see
+   * engine/state.ts: createStateFromDeck) and never changes mid-game. */
+  libraryCardBackId: string | null;
   /** "...cast a permanent spell of each permanent type from your
    * graveyard" (Orphan, Cocoon fal'Cie) - which permanent TYPES this
    * player has already cast from their own graveyard this way this turn,

@@ -146,6 +146,7 @@ export function createStateFromDeck(deck: SavedDeck, humanName: string): GameSta
       commanderDefId: deck.commanderId,
       commanderDamageTaken: 0,
       poisonCounters: 0,
+      libraryCardBackId: deck.cardBackId ?? null,
       lifeGainedThisTurn: 0,
       lifeLostThisTurn: 0,
     };

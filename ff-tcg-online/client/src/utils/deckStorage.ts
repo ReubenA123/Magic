@@ -22,6 +22,22 @@ export interface SavedDeck {
   /** Null until the deck has actually started a game at least once - just
    * this one timestamp, not real match history (see markDeckPlayed below). */
   lastPlayedAt: string | null;
+  /** Optional (missing on anything saved before this existed - treat that
+   * as false, never undefined, when sorting/displaying). Favourited decks
+   * are pinned to the top of every "your decks" list. */
+  favourite?: boolean;
+  /** Which of data/cardBacks.ts's CARD_BACKS this deck is cosmetically
+   * skinned with - null/undefined means the plain default back. Picked in
+   * the Library's deck editor, read once at game start (see
+   * engine/state.ts: createStateFromDeck) into PlayerState.libraryCardBackId. */
+  cardBackId?: string | null;
+}
+
+/** Favourites first, otherwise stable (keeps whatever order the caller's
+ * list was already in - most-recently-updated first from the server/local
+ * storage, both of which already sort that way). */
+export function sortDecksFavouritesFirst(decks: SavedDeck[]): SavedDeck[] {
+  return [...decks].sort((a, b) => Number(!!b.favourite) - Number(!!a.favourite));
 }
 
 const STORAGE_KEY = 'magic-decks';
